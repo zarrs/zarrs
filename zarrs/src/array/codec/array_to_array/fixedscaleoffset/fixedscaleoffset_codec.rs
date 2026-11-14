@@ -1,3 +1,4 @@
+use std::mem::MaybeUninit;
 use std::sync::Arc;
 
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
@@ -238,8 +239,13 @@ macro_rules! transform {
             let ($o, $s) = ($offset as F, $scale as F);
             let elements = bytes.as_chunks::<{ size_of::<T>() }>().0;
             with_element_type!($to, U, {
-                let mut out = Vec::with_capacity(elements.len() * size_of::<U>());
-                for element in elements {
+                let len = elements.len() * size_of::<U>();
+                let mut out: Vec<u8> = Vec::with_capacity(len);
+                // Writing through a pre-sized slice (rather than pushing each element) lets the loop vectorise
+                let transformed = out.spare_capacity_mut()[..len]
+                    .as_chunks_mut::<{ size_of::<U>() }>()
+                    .0;
+                for (transformed, element) in std::iter::zip(transformed, elements) {
                     let $x = <T>::from_ne_bytes(*element) as F;
                     let value = $transform;
                     let value = if to_integer {
@@ -247,8 +253,10 @@ macro_rules! transform {
                     } else {
                         value
                     };
-                    out.extend_from_slice(&(value as U).to_ne_bytes());
+                    *transformed = (value as U).to_ne_bytes().map(MaybeUninit::new);
                 }
+                // SAFETY: an element was written for each of the `elements`, which initialises the first `len <= capacity` bytes.
+                unsafe { out.set_len(len) };
                 out
             })
         })

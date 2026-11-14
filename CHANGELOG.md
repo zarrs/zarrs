@@ -247,6 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `crc32c`/`adler32`/`fletcher32`: Reuse the input allocation (if possible) when appending/stripping the checksum
 - `crc32c`/`adler32`/`fletcher32`: Fix partial decoders returning incorrect bytes for a `ByteRange::Suffix` request with the checksum at the end
 - `numcodecs.fletcher32`: Fix checksums of data with an odd length, which omitted the last byte, and read those written by `zarrs` 0.19 to 0.23 for backwards compatibility
+- `numcodecs.fixedscaleoffset`: Decode twice as fast, and encode faster, by transforming elements into a pre-sized output
 - `numcodecs.fixedscaleoffset`: Fix encoding to match `numcodecs`
   - Compute in `f32` for `float32` data and otherwise `f64`, rounding encoded values with ties to even and decoded integers to the nearest integer
   - Values are no longer saturated to the range of the data type (or `astype`) before the transform when their ranges differ
