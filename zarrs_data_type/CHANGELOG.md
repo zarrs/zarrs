@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `BytesDataTypeTraits::decode_in_place()` for optional allocation-free in-place decoding, with built-in implementations
+- Add `{Codec}DataTypeTraitsArc` for retained codec support, and `DataType::downcast_arc()`
 - Add the `codec_traits::cast_value` module for data types supported by the `cast_value` codec
   - Add `codec_traits::impl_cast_value_data_type_traits_{float,signed_integer,unsigned_integer}` macros
   - `CastValueKernel::cast_into` casts into a (possibly uninitialised) output slice, which it writes in full on success, and `CastValueKernel::{source_size,target_size}` return the element sizes
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - This matches `ArrayToBytesCodecTraits::{encode,decode}` and lets shared bytes pass through the `bytes` codec without a copy
 - **Breaking**: `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- **Breaking**: Require `{Codec}DataTypePlugin::arc_caster` and `{Codec}DataTypeExt::codec_{codec}_arc()`; `register_data_type_extension_codec!` supplies `arc_caster`
 - **Breaking**: `DataTypeTraits` requires `Any`, and `{Codec}DataTypeTraits` require `Debug`
 - Document that `DataTypeTraits::metadata_fill_value` must reject invalid fill values, including those whose length differs from a fixed data type size
   - `OptionalDataType::metadata_fill_value` relies on this to check inner fill values
