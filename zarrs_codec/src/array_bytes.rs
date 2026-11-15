@@ -72,6 +72,9 @@ pub use array_bytes_variable_length::ArrayBytesVariableLength;
 mod array_bytes_optional;
 pub use array_bytes_optional::ArrayBytesOptional;
 
+mod array_bytes_mask;
+pub use array_bytes_mask::{ArrayBytesMask, ArrayBytesMaskCreateError};
+
 /// Fixed or variable length array bytes.
 #[derive(Clone, Debug, PartialEq, Eq, derive_more::From)]
 // #[non_exhaustive]
@@ -82,10 +85,7 @@ pub enum ArrayBytes<'a> {
     Fixed(CowBytes<'a>),
     /// Bytes and element byte offsets for a variable length array.
     Variable(ArrayBytesVariableLength<'a>),
-    /// Bytes for an optional array (data with a validity mask).
-    ///
-    /// The data can be either Fixed or Variable length.
-    /// The mask is validated at construction to have 1 byte per element.
+    /// Bytes for an optional array (data with an [`ArrayBytesMask`]).
     Optional(ArrayBytesOptional<'a>),
 }
 
@@ -150,11 +150,9 @@ impl<'a> ArrayBytes<'a> {
         Self::Variable(unsafe { ArrayBytesVariableLength::new_unchecked(bytes, offsets) })
     }
 
-    /// Wrap the array bytes with an optional validity mask.
-    ///
-    /// This creates an `Optional` variant that contains the current array bytes and the provided mask.
+    /// Wrap the array bytes with an [`ArrayBytesMask`].
     #[must_use]
-    pub fn with_optional_mask(self, mask: impl Into<CowBytes<'a>>) -> Self {
+    pub fn with_optional_mask(self, mask: impl Into<ArrayBytesMask<'a>>) -> Self {
         Self::Optional(ArrayBytesOptional::new(self, mask))
     }
 
@@ -165,7 +163,7 @@ impl<'a> ArrayBytes<'a> {
     pub fn with_optional_masks<I>(self, masks: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<CowBytes<'a>>,
+        I::Item: Into<ArrayBytesMask<'a>>,
         I::IntoIter: DoubleEndedIterator,
     {
         masks
@@ -197,7 +195,9 @@ impl<'a> ArrayBytes<'a> {
         if let Some(opt) = data_type.as_optional() {
             let num_elements_usize = usize::try_from(num_elements).unwrap();
             let (inner_bytes, mask_value) = optional_fill_value_parts(opt, fill_value_bytes);
-            let mask = vec![mask_value; num_elements_usize];
+            // SAFETY: optional_fill_value_parts returns a valid mask byte
+            let mask =
+                unsafe { ArrayBytesMask::new_unchecked(vec![mask_value; num_elements_usize]) };
             return Ok(
                 Self::new_fill_value_bytes(opt.data_type(), num_elements, &inner_bytes)?
                     .with_optional_mask(mask),
@@ -306,7 +306,7 @@ impl<'a> ArrayBytes<'a> {
     /// For a fixed-length array, check it matches the expected size.
     /// For a variable-length array, check that there is one more offset than elements and the last offset is equal to the length of the bytes.
     /// The offsets are monotonically increasing by construction, so this does not iterate over them.
-    /// For an optional array, check that the mask has one byte per element, each 0 or 1, and validate the inner array.
+    /// For an optional array, check that the mask has one byte per element and validate the inner array.
     ///
     /// # Errors
     /// Returns an error if the array is not valid.
@@ -317,7 +317,6 @@ impl<'a> ArrayBytes<'a> {
     /// Returns [`true`] if the array is empty for the given fill value.
     ///
     /// The array bytes are expected to be [validated](Self::validate).
-    /// An optional array with a mask value other than 0 or 1 is not the fill value.
     ///
     /// For variable-length arrays, every element must exactly equal the fill value,
     /// respecting element boundaries and ignoring bytes outside the element ranges.
@@ -407,6 +406,8 @@ impl<'a> ArrayBytes<'a> {
 
                 // Extract subset of the mask (1 byte per element)
                 let subset_mask = extract_elements(optional_bytes.mask(), indexer, array_shape, 1)?;
+                // SAFETY: extraction preserves the source mask's values
+                let subset_mask = unsafe { ArrayBytesMask::new_unchecked(subset_mask) };
 
                 Ok(subset_data.with_optional_mask(subset_mask))
             }
@@ -526,7 +527,6 @@ fn validate_bytes(
                     "Used optional array bytes with a non-optional data type.".to_string(),
                 ));
             };
-            // The mask has one byte per element, strictly 0 (null) or 1 (present)
             let mask = optional_bytes.mask();
             if mask.len() as u64 != num_elements {
                 return Err(InvalidBytesLengthError::new(
@@ -534,11 +534,6 @@ fn validate_bytes(
                     usize::try_from(num_elements).unwrap(),
                 )
                 .into());
-            }
-            if !optional_bytes.is_mask_binary() {
-                return Err(CodecError::Other(
-                    "optional mask values must be 0 (null) or 1 (present)".to_string(),
-                ));
             }
             // Inner layers are dense, so they are validated with the same number of elements
             validate_bytes(optional_bytes.data(), num_elements, opt.data_type())
@@ -725,7 +720,7 @@ fn update_array_bytes_array_subset<'a>(
             )?;
 
             // Update the mask (it's a fixed-size bool array, 1 byte per element)
-            let mut mask = mask.into_vec();
+            let mut mask = mask.into_bytes().into_vec();
             let mut mask_view: ArrayBytesFixedDisjointView<'_> = unsafe {
                 // SAFETY: Only one view is created, so it is disjoint
                 ArrayBytesFixedDisjointView::new(
@@ -737,6 +732,8 @@ fn update_array_bytes_array_subset<'a>(
             }
             .map_err(CodecError::from)?;
             mask_view.copy_from_slice(update_optional_bytes.mask())?;
+            // SAFETY: the update copies entries from another valid mask
+            let mask = unsafe { ArrayBytesMask::new_unchecked(mask) };
 
             Ok(ArrayBytes::Optional(ArrayBytesOptional::new(
                 data_after_update,
@@ -813,7 +810,7 @@ fn update_array_bytes_indexer<'a>(
             )?;
 
             // Update the mask (it's a fixed-size bool array, 1 byte per element)
-            let mut mask = mask.into_vec();
+            let mut mask = mask.into_bytes().into_vec();
             let byte_ranges = update_indexer.iter_contiguous_byte_ranges(shape, 1)?; // 1 byte per bool
             let mut offset: usize = 0;
             for byte_range in byte_ranges {
@@ -825,6 +822,8 @@ fn update_array_bytes_indexer<'a>(
                 );
                 offset += byte_range_len;
             }
+            // SAFETY: the update copies entries from another valid mask
+            let mask = unsafe { ArrayBytesMask::new_unchecked(mask) };
 
             Ok(ArrayBytes::Optional(ArrayBytesOptional::new(
                 data_after_update,
@@ -1108,7 +1107,7 @@ mod tests {
                 ArrayBytesOffsets::new(offsets.iter().copied().map(u64::from).collect::<Vec<_>>())
                     .unwrap(),
             ] {
-                let mask = vec![1; offsets.num_elements()];
+                let mask = vec![true; offsets.num_elements()];
                 let array_bytes = ArrayBytes::new_vlen(bytes, offsets).unwrap();
                 assert_eq!(
                     array_bytes.is_fill_value(&FillValue::from(fill)),
@@ -1131,26 +1130,27 @@ mod tests {
             let mut fill_value = FillValue::from(0x1234u16);
             let mut bytes = ArrayBytes::new_flen(0x1234u16.to_ne_bytes().repeat(3));
             let mut different_bytes = ArrayBytes::new_flen(0x1235u16.to_ne_bytes().repeat(3));
-            let mut inner_null = ArrayBytes::new_flen(vec![0xff; 6]).with_optional_mask(vec![0; 3]);
+            let mut inner_null =
+                ArrayBytes::new_flen(vec![0xff; 6]).with_optional_mask(vec![false; 3]);
             let mut inner_null_fill = FillValue::new_optional_null();
             for level in 0..depth {
                 fill_value = fill_value.into_optional();
-                different_bytes = different_bytes.with_optional_mask(vec![1; 3]);
+                different_bytes = different_bytes.with_optional_mask(vec![true; 3]);
                 if level != 0 {
-                    bytes = bytes.with_optional_mask(vec![1; 3]);
-                    inner_null = inner_null.with_optional_mask(vec![1; 3]);
+                    bytes = bytes.with_optional_mask(vec![true; 3]);
+                    inner_null = inner_null.with_optional_mask(vec![true; 3]);
                     inner_null_fill = inner_null_fill.into_optional();
                 }
             }
             assert!(
                 bytes
                     .clone()
-                    .with_optional_mask(vec![1; 3])
+                    .with_optional_mask(vec![true; 3])
                     .is_fill_value(&fill_value)
             );
             assert!(
                 !bytes
-                    .with_optional_mask(vec![1, 0, 1])
+                    .with_optional_mask(vec![true, false, true])
                     .is_fill_value(&fill_value)
             );
             assert!(!different_bytes.is_fill_value(&fill_value));
@@ -1160,15 +1160,15 @@ mod tests {
         let null_fill = FillValue::new_optional_null();
         assert!(
             ArrayBytes::new_flen(vec![0xff; 6])
-                .with_optional_mask(vec![0; 3])
+                .with_optional_mask(vec![false; 3])
                 .is_fill_value(&null_fill)
         );
         assert!(
             !ArrayBytes::new_flen(vec![0xff; 6])
-                .with_optional_mask(vec![0, 1, 0])
+                .with_optional_mask(vec![false, true, false])
                 .is_fill_value(&null_fill)
         );
-        let empty = ArrayBytes::new_flen(vec![]).with_optional_mask(vec![]);
+        let empty = ArrayBytes::new_flen(vec![]).with_optional_mask(Vec::<bool>::new());
         assert!(empty.is_fill_value(&null_fill));
         assert!(!empty.is_fill_value(&FillValue::from(Some(1u16))));
         assert!(empty.is_fill_value(&FillValue::from(Some(""))));
@@ -1177,7 +1177,7 @@ mod tests {
             ArrayBytesOffsets::new(vec![0u32, 3, 6]).unwrap(),
         )
         .unwrap()
-        .with_optional_mask(vec![1; 2]);
+        .with_optional_mask(vec![true; 2]);
         assert!(strings.is_fill_value(&FillValue::from(Some("abc"))));
         assert!(!strings.is_fill_value(&FillValue::from(Some("abd"))));
     }
@@ -1240,7 +1240,8 @@ mod tests {
         // where N = None
         let initial_data = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
         let initial_mask = vec![1u8, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1]; // 0 = None
-        let initial_bytes = ArrayBytes::new_flen(initial_data).with_optional_mask(initial_mask);
+        let initial_bytes = ArrayBytes::new_flen(initial_data)
+            .with_optional_mask(ArrayBytesMask::new(initial_mask)?);
 
         // Create 2x2 update for subset [1..3, 1..3]
         // This will update positions:
@@ -1250,7 +1251,8 @@ mod tests {
         // [97 96]
         let update_data = vec![99u8, 98, 97, 96];
         let update_mask = vec![1u8, 0, 1, 1]; // Second element is None
-        let update_bytes = ArrayBytes::new_flen(update_data).with_optional_mask(update_mask);
+        let update_bytes =
+            ArrayBytes::new_flen(update_data).with_optional_mask(ArrayBytesMask::new(update_mask)?);
 
         // Update using ArraySubset
         let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
@@ -1265,7 +1267,7 @@ mod tests {
         // Update using indexer
         let indexer = vec![vec![3, 2], vec![3, 3]];
         let update_bytes =
-            ArrayBytes::new_flen(vec![0u8, 255u8]).with_optional_mask(vec![0u8, 1u8]);
+            ArrayBytes::new_flen(vec![0u8, 255u8]).with_optional_mask(vec![false, true]);
         let result = update_array_bytes(
             result,
             &[4, 4],
@@ -1326,8 +1328,8 @@ mod tests {
         let initial_outer_mask = vec![1u8, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1]; // outer Some/None
 
         let initial_bytes = ArrayBytes::new_flen(initial_data)
-            .with_optional_mask(initial_inner_mask)
-            .with_optional_mask(initial_outer_mask);
+            .with_optional_mask(ArrayBytesMask::new(initial_inner_mask)?)
+            .with_optional_mask(ArrayBytesMask::new(initial_outer_mask)?);
 
         // Create 2x2 update for subset [1..3, 1..3]
         // Update positions [1,1], [1,2], [2,1], [2,2]
@@ -1339,8 +1341,8 @@ mod tests {
         let update_outer_mask = vec![1u8, 1, 0, 1]; // [outer valid, outer valid, outer None, outer valid]
 
         let update_bytes = ArrayBytes::new_flen(update_data)
-            .with_optional_mask(update_inner_mask)
-            .with_optional_mask(update_outer_mask);
+            .with_optional_mask(ArrayBytesMask::new(update_inner_mask)?)
+            .with_optional_mask(ArrayBytesMask::new(update_outer_mask)?);
 
         // Update using ArraySubset
         let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);

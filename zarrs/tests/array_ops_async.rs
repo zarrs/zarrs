@@ -472,12 +472,11 @@ async fn partial_encode_fill_value() -> TestResult {
     Ok(())
 }
 
-/// Optional bytes of `len` elements with a short all-zero mask, and with a mask containing `2`.
+/// Optional bytes of `len` elements with a short and a long all-null mask.
 fn malformed_optional_bytes(len: usize) -> [ArrayBytes<'static>; 2] {
-    let mut nonbinary = vec![0; len];
-    nonbinary[1] = 2;
-    [vec![0; len - 1], nonbinary]
-        .map(|mask| ArrayBytes::new_flen(vec![0; len]).with_optional_mask(mask))
+    [len - 1, len + 1].map(|mask_len| {
+        ArrayBytes::new_flen(vec![0; len]).with_optional_mask(vec![false; mask_len])
+    })
 }
 
 #[tokio::test]

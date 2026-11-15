@@ -1,14 +1,11 @@
 use std::ops::Range;
 
-use crate::{ArrayBytes, ArrayBytesOffsetsElement, ArrayBytesOffsetsSlice, CowBytes};
+use crate::{ArrayBytes, ArrayBytesMask, ArrayBytesOffsetsElement, ArrayBytesOffsetsSlice};
 
-/// Optional array bytes composed of data and a validity mask.
+/// Optional array bytes composed of data and an [`ArrayBytesMask`].
 ///
-/// The mask is 1 byte per element where 0 = null/missing and 1 = present.
-/// Other mask values are invalid.
-///
-/// The mask is not checked at construction.
-/// [`ArrayBytes::validate`] checks that every mask has one byte per element and contains only 0 or 1.
+/// The mask length is not checked at construction.
+/// [`ArrayBytes::validate`] checks that every mask has one byte per element.
 ///
 /// # Equality Semantics
 ///
@@ -28,14 +25,14 @@ use crate::{ArrayBytes, ArrayBytesOffsetsElement, ArrayBytesOffsetsSlice, CowByt
 #[derive(Clone, Debug)]
 pub struct ArrayBytesOptional<'a> {
     data: Box<ArrayBytes<'a>>,
-    mask: CowBytes<'a>,
+    mask: ArrayBytesMask<'a>,
 }
 
 impl<'a> ArrayBytesOptional<'a> {
     /// Create a new `ArrayBytesOptional`.
     ///
-    /// The mask is not validated, see [`ArrayBytes::validate`].
-    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<CowBytes<'a>>) -> Self {
+    /// The mask length is not validated, see [`ArrayBytes::validate`].
+    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<ArrayBytesMask<'a>>) -> Self {
         let data = data.into();
         let mask = mask.into();
 
@@ -50,7 +47,7 @@ impl<'a> ArrayBytesOptional<'a> {
 
     /// Get the validity mask.
     #[must_use]
-    pub fn mask(&self) -> &CowBytes<'a> {
+    pub fn mask(&self) -> &ArrayBytesMask<'a> {
         &self.mask
     }
 
@@ -62,7 +59,7 @@ impl<'a> ArrayBytesOptional<'a> {
 
     /// Consume self and return the data and mask.
     #[must_use]
-    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, CowBytes<'a>) {
+    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, ArrayBytesMask<'a>) {
         (self.data, self.mask)
     }
 
@@ -77,15 +74,9 @@ impl<'a> ArrayBytesOptional<'a> {
 }
 
 impl ArrayBytesOptional<'_> {
-    /// Returns true if the mask contains only 0 (null) or 1 (present).
-    pub(crate) fn is_mask_binary(&self) -> bool {
-        self.mask.iter().fold(0u8, |acc, &b| acc | b) <= 1
-    }
-
-    /// Returns true if every layer has `num_elements` elements and a mask of only 0 or 1.
+    /// Returns true if every layer has `num_elements` elements.
     fn is_well_formed(&self, num_elements: usize) -> bool {
         self.mask.len() == num_elements
-            && self.is_mask_binary()
             && match self.data.as_ref() {
                 // `is_multiple_of(0)` is only true for 0, so empty arrays must have empty bytes
                 ArrayBytes::Fixed(bytes) => bytes.len().is_multiple_of(num_elements),
@@ -325,7 +316,7 @@ impl Eq for ArrayBytesOptional<'_> {}
 
 #[cfg(test)]
 mod tests {
-    use crate::{ArrayBytes, ArrayBytesOffsets};
+    use crate::{ArrayBytes, ArrayBytesMask, ArrayBytesOffsets};
 
     fn fixed(bytes: &[u8]) -> ArrayBytes<'static> {
         ArrayBytes::new_flen(bytes.to_vec())
@@ -340,9 +331,9 @@ mod tests {
 
     /// Wrap `data` in optional layers, innermost mask first.
     fn masked(data: ArrayBytes<'static>, masks: &[&[u8]]) -> ArrayBytes<'static> {
-        masks
-            .iter()
-            .fold(data, |data, mask| data.with_optional_mask(mask.to_vec()))
+        masks.iter().fold(data, |data, mask| {
+            data.with_optional_mask(ArrayBytesMask::new(mask.to_vec()).unwrap())
+        })
     }
 
     #[test]
@@ -458,8 +449,6 @@ mod tests {
         let malformed = [
             // Short mask, with a fixed length not divisible by the element count
             masked(fixed(&[1, 2, 3]), &[&[1, 1]]),
-            // Nonbinary mask
-            masked(fixed(&[1, 2]), &[&[1, 2]]),
             // Elements without a mask
             masked(fixed(&[1, 2]), &[&[]]),
             // Variable length with fewer elements than the mask
@@ -473,8 +462,9 @@ mod tests {
             assert_eq!(value, &value.clone());
         }
         // A malformed value never equals a well-formed value
-        assert_ne!(malformed[1], masked(fixed(&[1, 2]), &[&[1, 1]]));
-        assert_ne!(masked(fixed(&[1, 2]), &[&[1, 1]]), malformed[1]);
+        let well_formed = masked(fixed(&[1, 2]), &[&[1, 1]]);
+        assert_ne!(malformed[0], well_formed);
+        assert_ne!(well_formed, malformed[0]);
     }
 
     #[test]
@@ -492,7 +482,7 @@ mod tests {
             masked(vlen(b"abcd", vec![0u32, 2, 2, 4]), &[&[1, 0, 1]]),
             masked(vlen(b"abzzcd", vec![0u64, 2, 4, 6]), &[&[1, 0, 1]]),
             masked(fixed(&[1, 2, 3]), &[&[1, 1]]),
-            masked(fixed(&[5, 6]), &[&[1, 2]]),
+            masked(fixed(&[5, 6, 7]), &[&[1, 0]]),
             masked(fixed(&[5, 6]), &[&[1, 0], &[1, 1, 0]]),
             masked(fixed(&[]), &[&[]]),
         ];

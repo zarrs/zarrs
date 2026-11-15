@@ -494,7 +494,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
                 options,
                 resources,
             )?;
-            // SAFETY: every element of the output (and masks) is written by `decode_into`
+            // SAFETY: decode_into satisfies the target's output requirements
             return Ok(unsafe { buffers.into_array_bytes() });
         }
 

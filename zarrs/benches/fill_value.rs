@@ -84,9 +84,9 @@ fn optional_fill_value(c: &mut Criterion) {
                 let mut bytes =
                     ArrayBytes::new_flen(0x1234_5678u32.to_ne_bytes().repeat(num_elements));
                 for level in 0..depth {
-                    let mut mask = vec![1u8; num_elements];
+                    let mut mask = vec![true; num_elements];
                     if mismatch && level == depth - 1 {
-                        mask[0] = 0;
+                        mask[0] = false;
                     }
                     bytes = bytes.with_optional_mask(mask);
                 }

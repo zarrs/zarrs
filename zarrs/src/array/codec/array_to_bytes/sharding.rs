@@ -95,7 +95,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs_chunk_grid::{ChunkGridTraits, IndexerIterator};
-use zarrs_codec::{ComputeResources, CowBytes};
+use zarrs_codec::{ArrayBytesMask, ComputeResources, CowBytes};
 
 use crate::array::array_bytes_internal::split_optional;
 use crate::array::chunk_grid::RegularBoundedChunkGrid;
@@ -470,7 +470,9 @@ fn merge_validated_indexer_subchunks(
             num_elements,
             &crate::array::data_type::uint8(),
         )?;
-        return Ok(data.with_optional_mask(mask.into_fixed()?));
+        // SAFETY: the output is zero-initialised and receives only source mask values
+        let mask = unsafe { ArrayBytesMask::new_unchecked(mask.into_fixed()?) };
+        return Ok(data.with_optional_mask(mask));
     }
     if let Some(element_size) = data_type.fixed_size() {
         let mut output = vec![0; num_elements * element_size];

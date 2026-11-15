@@ -3,7 +3,7 @@
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::ArraySubset;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
     IncompatibleOptionalMaskError, decode_into_array_bytes_target,
 };
 
@@ -42,7 +42,8 @@ fn target<'a>(
 
 /// Build optional array bytes with `masks` ordered from outermost to innermost.
 fn source<'a>(data: &'a [u8], masks: &'a [[u8; 4]]) -> ArrayBytes<'a> {
-    ArrayBytes::new_flen(data).with_optional_masks(masks.iter().map(<[u8; 4]>::as_slice))
+    ArrayBytes::new_flen(data)
+        .with_optional_masks(masks.iter().map(|mask| ArrayBytesMask::new(mask).unwrap()))
 }
 
 fn depth(target: &ArrayBytesDecodeIntoTarget) -> usize {

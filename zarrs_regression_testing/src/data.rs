@@ -1,6 +1,6 @@
 //! Conversion of array data (see [`Data`]) to and from the current `zarrs`.
 
-use zarrs::array::{ArrayBytes, ArrayBytesOffsets};
+use zarrs::array::{ArrayBytes, ArrayBytesMask, ArrayBytesOffsets};
 pub(crate) use zarrs_regression_testing::schema::Data;
 
 /// Convert to current `zarrs` array bytes.
@@ -19,7 +19,8 @@ pub(crate) fn to_array_bytes(data: &Data) -> Result<ArrayBytes<'static>, String>
         }
     };
     for mask in data.masks.iter().rev() {
-        bytes = bytes.with_optional_mask(mask.clone());
+        let mask = ArrayBytesMask::new(mask.clone()).map_err(|err| format!("mask: {err}"))?;
+        bytes = bytes.with_optional_mask(mask);
     }
     Ok(bytes)
 }
@@ -42,7 +43,7 @@ pub(crate) fn from_array_bytes(bytes: ArrayBytes<'_>) -> Data {
         ArrayBytes::Optional(bytes) => {
             let (data, mask) = bytes.into_parts();
             let mut data = from_array_bytes(*data);
-            data.masks.insert(0, mask.into_vec());
+            data.masks.insert(0, mask.into_bytes().into_vec());
             data
         }
     }

@@ -157,7 +157,7 @@ pub(crate) fn partial_decode(
             resources,
             &mut buffers.target()?,
         )?;
-        // SAFETY: every element of the output (and masks) is written by `partial_decode_fixed_array_subset_into`
+        // SAFETY: partial_decode_fixed_array_subset_into satisfies the target's output requirements
         Ok(unsafe { buffers.into_array_bytes() })
     } else {
         partial_decode_merged_array_subset(

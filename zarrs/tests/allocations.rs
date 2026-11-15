@@ -678,10 +678,10 @@ fn optional_fill_value_checks() {
         let mut bytes = ArrayBytes::new_flen(0x1234u16.to_ne_bytes().repeat(32));
         for _ in 0..depth {
             fill_value = fill_value.into_optional();
-            bytes = bytes.with_optional_mask(vec![1; 32]);
+            bytes = bytes.with_optional_mask(vec![true; 32]);
         }
         let (inner, _) = bytes.clone().into_optional().unwrap().into_parts();
-        let mismatched = (*inner).with_optional_mask(vec![0; 32]);
+        let mismatched = (*inner).with_optional_mask(vec![false; 32]);
         for (name, bytes, expected) in [
             ("optional_fill_matches", bytes, true),
             ("optional_fill_mask_mismatch", mismatched, false),
@@ -702,10 +702,10 @@ fn optional_equality() {
         let (mut present, mut visible) = (payload(0x1234), payload(0x4321));
         let (mut null, mut hidden) = (payload(0x1234), payload(0x4321));
         for level in 0..depth {
-            present = present.with_optional_mask(vec![1; 32]);
-            visible = visible.with_optional_mask(vec![1; 32]);
+            present = present.with_optional_mask(vec![true; 32]);
+            visible = visible.with_optional_mask(vec![true; 32]);
             // Only the outermost mask is null, hiding the differing payload and inner masks
-            let mask = vec![u8::from(level + 1 != depth); 32];
+            let mask = vec![level + 1 != depth; 32];
             null = null.with_optional_mask(mask.clone());
             hidden = hidden.with_optional_mask(mask);
         }

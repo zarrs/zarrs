@@ -13,8 +13,8 @@ use zarrs::array::{
 };
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
-    CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
+    CodecOptions, CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
 };
 
 const ARRAY_SHAPE: [u64; 2] = [8, 8];
@@ -110,7 +110,11 @@ impl LayoutBuffers {
             }
             linearised.iter().map(|&index| buffer[index]).collect()
         };
-        let masks: Vec<_> = self.masks.iter().map(|mask| extract(mask)).collect();
+        let masks: Vec<_> = self
+            .masks
+            .iter()
+            .map(|mask| ArrayBytesMask::new(extract(mask)).unwrap())
+            .collect();
         ArrayBytes::new_flen(extract(&self.data)).with_optional_masks(masks)
     }
 }
@@ -133,9 +137,7 @@ fn elements(data_type: &DataType, num_elements: u64) -> ArrayBytes<'static> {
         .map(|i| u8::try_from(i).unwrap())
         .collect();
     if data_type.is_optional() {
-        let mask = (0..num_elements)
-            .map(|i| u8::from(i % 3 != 0))
-            .collect::<Vec<_>>();
+        let mask = (0..num_elements).map(|i| i % 3 != 0).collect::<Vec<_>>();
         ArrayBytes::new_flen(data).with_optional_mask(mask)
     } else {
         ArrayBytes::new_flen(data)

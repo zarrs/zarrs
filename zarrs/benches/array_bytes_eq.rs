@@ -19,10 +19,10 @@ impl Rng {
     }
 
     /// A mask with each element present with probability `1 - null_fraction`.
-    fn mask(&mut self, null_fraction: f64) -> Vec<u8> {
+    fn mask(&mut self, null_fraction: f64) -> Vec<bool> {
         #[allow(clippy::cast_precision_loss)]
         (0..N)
-            .map(|_| u8::from((self.next() as f64 / u64::MAX as f64) >= null_fraction))
+            .map(|_| (self.next() as f64 / u64::MAX as f64) >= null_fraction)
             .collect()
     }
 }
@@ -75,7 +75,7 @@ fn array_bytes_eq(c: &mut Criterion) {
         ("fixed8_null50", 8, 0.5),
     ] {
         let mask = rng.mask(null_fraction);
-        let hidden: Vec<bool> = mask.iter().map(|&m| m == 0).collect();
+        let hidden: Vec<bool> = mask.iter().map(|&m| !m).collect();
         let (a, b) = fixed_pair(width, &hidden);
         let a = ArrayBytes::new_flen(a).with_optional_mask(mask.clone());
         let b = ArrayBytes::new_flen(b).with_optional_mask(mask.clone());
@@ -93,7 +93,7 @@ fn array_bytes_eq(c: &mut Criterion) {
             let (mut data_c, data_d) = fixed_pair(width, &hidden_d);
             data_c[(N - 1) * width] ^= 0xff;
             let mut mask_cd = mask.clone();
-            mask_cd[N - 1] = 1;
+            mask_cd[N - 1] = true;
             let c_ = ArrayBytes::new_flen(data_c).with_optional_mask(mask_cd.clone());
             let d = ArrayBytes::new_flen(data_d).with_optional_mask(mask_cd);
             assert_ne!(c_, d);
@@ -109,13 +109,13 @@ fn array_bytes_eq(c: &mut Criterion) {
     let hidden: Vec<bool> = inner_mask
         .iter()
         .zip(&outer_mask)
-        .map(|(&i, &o)| i == 0 || o == 0)
+        .map(|(&i, &o)| !i || !o)
         .collect();
     let (a, b) = fixed_pair(4, &hidden);
     let mut inner_mask_b = inner_mask.clone();
     for (m, &o) in inner_mask_b.iter_mut().zip(&outer_mask) {
-        if o == 0 {
-            *m ^= 1;
+        if !o {
+            *m = !*m;
         }
     }
     let a = ArrayBytes::new_flen(a)
@@ -131,7 +131,7 @@ fn array_bytes_eq(c: &mut Criterion) {
 
     // Variable length
     let mask = rng.mask(0.5);
-    let hidden: Vec<bool> = mask.iter().map(|&m| m == 0).collect();
+    let hidden: Vec<bool> = mask.iter().map(|&m| !m).collect();
     let (a, b) = vlen_pair(&hidden);
     let a = a.with_optional_mask(mask.clone());
     let b = b.with_optional_mask(mask);

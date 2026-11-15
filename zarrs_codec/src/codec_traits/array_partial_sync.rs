@@ -113,6 +113,8 @@ pub trait ArrayPartialDecoderTraits:
     /// Extracted elements from the `indexer` are written as ordered by the indexer.
     /// For an [`ArraySubset`](zarrs_chunk_grid::ArraySubset), that is C order.
     ///
+    /// Implementations must satisfy the target's [output requirements](ArrayBytesDecodeIntoTarget#output-requirements).
+    ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the number of elements in `indexer` does not match the number of elements in `output_target`.
     fn partial_decode_into(

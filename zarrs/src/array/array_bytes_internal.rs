@@ -8,8 +8,8 @@ use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::{ArraySubset, DataType, Indexer};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesOffsets,
-    ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
+    ArrayBytesOffsets, ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
 };
 
 pub(crate) fn offsets_from_usize(
@@ -118,14 +118,19 @@ impl FixedDecodeBuffers {
     /// Convert the buffers into array bytes.
     ///
     /// # Safety
-    /// Every element of the target returned by [`target`](Self::target) must have been written.
+    /// Every element of the target returned by [`target`](Self::target) must have been written,
+    /// following the [output requirements](ArrayBytesDecodeIntoTarget#output-requirements).
     pub(crate) unsafe fn into_array_bytes(mut self) -> ArrayBytes<'static> {
         let num_elements = usize::try_from(self.shape.iter().product::<u64>()).unwrap();
         unsafe { self.data.set_len(num_elements * self.data_type_size) };
-        for mask in &mut self.masks {
-            unsafe { mask.set_len(num_elements) };
-        }
-        ArrayBytes::new_flen(self.data).with_optional_masks(self.masks)
+        let masks = self.masks.into_iter().map(|mut mask| {
+            // SAFETY: the caller guarantees initialized masks satisfying the target's output requirements
+            unsafe {
+                mask.set_len(num_elements);
+                ArrayBytesMask::new_unchecked(mask)
+            }
+        });
+        ArrayBytes::new_flen(self.data).with_optional_masks(masks)
     }
 }
 
@@ -142,7 +147,7 @@ pub(crate) fn split_optional<K: Clone>(
     for (bytes, key) in bytes_and_keys {
         let (data, mask) = bytes.into_optional()?.into_parts();
         data_and_keys.push((*data, key.clone()));
-        masks_and_keys.push((ArrayBytes::new_flen(mask), key));
+        masks_and_keys.push((ArrayBytes::new_flen(mask.into_bytes()), key));
     }
     Ok((data_and_keys, masks_and_keys))
 }
@@ -165,7 +170,9 @@ pub(crate) fn merge_chunks<'a>(
         let (data_and_subsets, masks_and_subsets) = split_optional(chunk_bytes_and_subsets)?;
         let data = merge_chunks(data_and_subsets, array_shape, inner_data_type)?;
         let mask = merge_chunks(masks_and_subsets, array_shape, &super::data_type::uint8())?;
-        Ok(data.with_optional_mask(mask.into_fixed()?))
+        // SAFETY: the output is zero-initialised and receives only source mask values
+        let mask = unsafe { ArrayBytesMask::new_unchecked(mask.into_fixed()?) };
+        Ok(data.with_optional_mask(mask))
     } else if let Some(data_type_size) = data_type.fixed_size() {
         let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
         let mut output = vec![0; num_elements * data_type_size];
@@ -558,19 +565,19 @@ mod tests {
             let depth2 = depth1.to_optional();
             assert!(
                 payload()
-                    .with_optional_mask(vec![1, 0, 1])
+                    .with_optional_mask(vec![true, false, true])
                     .validate(3, &depth1)
                     .is_ok()
             );
             assert!(
                 payload()
-                    .with_optional_mask(vec![1, 0, 1])
-                    .with_optional_mask(vec![0, 1, 1])
+                    .with_optional_mask(vec![true, false, true])
+                    .with_optional_mask(vec![false, true, true])
                     .validate(3, &depth2)
                     .is_ok()
             );
-            // Short, long, empty and nonbinary masks
-            for mask in [vec![0u8; 2], vec![0; 4], vec![], vec![1, 2, 1]] {
+            // Short, long and empty masks
+            for mask in [vec![false; 2], vec![false; 4], vec![]] {
                 assert!(
                     payload()
                         .with_optional_mask(mask.clone())
@@ -581,13 +588,13 @@ mod tests {
                 // At the outer layer
                 assert!(
                     payload()
-                        .with_optional_mask(vec![1, 0, 1])
+                        .with_optional_mask(vec![true, false, true])
                         .with_optional_mask(mask.clone())
                         .validate(3, &depth2)
                         .is_err()
                 );
                 // At the inner layer, including beneath null outer elements
-                for outer_mask in [[1, 1, 1], [1, 0, 1], [0, 0, 0]] {
+                for outer_mask in [[true; 3], [true, false, true], [false; 3]] {
                     assert!(
                         payload()
                             .with_optional_mask(mask.clone())
@@ -598,7 +605,7 @@ mod tests {
                 }
             }
         }
-        let empty = ArrayBytes::new_flen(vec![]).with_optional_mask(vec![]);
+        let empty = ArrayBytes::new_flen(vec![]).with_optional_mask(Vec::<bool>::new());
         assert!(empty.validate(0, &data_type::uint8().to_optional()).is_ok());
     }
 }
