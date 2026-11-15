@@ -25,6 +25,10 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for CacheChunkLimit<CT> {
         self.get().len()
     }
 
+    fn size(&self) -> usize {
+        self.get().iter().map(|(_, value)| value.size()).sum()
+    }
+
     fn remove(&self, chunk_indices: &[u64]) -> bool {
         self.get().pop(chunk_indices).is_some()
     }
@@ -84,6 +88,10 @@ impl<CT: ChunkCacheType> CacheSizeLimit<CT> {
 impl<CT: ChunkCacheType> CacheTraits<CT> for CacheSizeLimit<CT> {
     fn len(&self) -> usize {
         self.get().len()
+    }
+
+    fn size(&self) -> usize {
+        self.get().iter().map(|(_, value)| value.size()).sum()
     }
 
     fn remove(&self, chunk_indices: &[u64]) -> bool {

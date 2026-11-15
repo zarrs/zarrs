@@ -360,6 +360,12 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     #[must_use]
     fn len(&self) -> usize;
 
+    /// Return the size of the cached chunks in bytes, the sum of their [`ChunkCacheType::size`].
+    ///
+    /// For a thread-local cache, returns the size of the chunks cached on the current thread.
+    #[must_use]
+    fn size(&self) -> usize;
+
     /// Returns true if the cache is empty. For a thread-local cache, returns if the cache is empty on the current thread.
     #[must_use]
     fn is_empty(&self) -> bool {
@@ -424,6 +430,9 @@ pub trait AsyncChunkCache: MaybeSend + MaybeSync {
 
     /// Return the number of chunks in the cache.
     fn len(&self) -> impl Future<Output = usize> + MaybeSend;
+
+    /// Return the size of the cached chunks in bytes, the sum of their [`ChunkCacheType::size`].
+    fn size(&self) -> impl Future<Output = usize> + MaybeSend;
 
     /// Returns true if the cache is empty.
     fn is_empty(&self) -> impl Future<Output = bool> + MaybeSend {

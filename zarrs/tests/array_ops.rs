@@ -6,8 +6,10 @@ use std::sync::Arc;
 use zarrs::array::Resources;
 
 use zarrs::array::chunk_cache::{
-    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-    ChunkCachePartialDecoderLruChunkLimit, SubchunkCached,
+    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruChunkLimitThreadLocal,
+    ChunkCacheDecodedLruSizeLimit, ChunkCacheDecodedLruSizeLimitThreadLocal,
+    ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, ChunkCacheTypeDecoded,
+    SubchunkCached,
 };
 use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::{
@@ -1252,6 +1254,35 @@ fn array_cached_cache_hits_and_invalidation_cover_all_value_types() -> TestResul
     assert_cache_hits_and_invalidation(ChunkCachePartialDecoderLruChunkLimit::new(16), false)
 }
 
+/// Check that the size of a decoded chunk `cache` is the size of its cached chunks.
+fn assert_decoded_cache_size<C>(cache: C) -> TestResult
+where
+    C: ChunkCache<Value = ChunkCacheTypeDecoded> + 'static,
+{
+    let (array, _store) = fixture();
+    array.store_chunk(&[0, 0], &[1u8; 9], &Resources::default())?;
+    let cached = ArrayCached::new(array, cache);
+    assert_eq!(cached.cache().size(), 0);
+
+    // A missing chunk is held as `None`, which has no size
+    cached.retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())?;
+    cached.retrieve_chunk::<Vec<u8>>(&[1, 1], &Resources::default())?;
+    assert_eq!(cached.cache().len(), 2);
+    assert_eq!(cached.cache().size(), 9);
+
+    cached.store_chunk(&[0, 0], &[2u8; 9], &Resources::default())?;
+    assert_eq!(cached.cache().size(), 0);
+    Ok(())
+}
+
+#[test]
+fn array_cached_cache_size_sums_cached_chunks() -> TestResult {
+    assert_decoded_cache_size(ChunkCacheDecodedLruChunkLimit::new(16))?;
+    assert_decoded_cache_size(ChunkCacheDecodedLruChunkLimitThreadLocal::new(16))?;
+    assert_decoded_cache_size(ChunkCacheDecodedLruSizeLimit::new(1024))?;
+    assert_decoded_cache_size(ChunkCacheDecodedLruSizeLimitThreadLocal::new(1024))
+}
+
 fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
 where
     C: ChunkCache + 'static,
@@ -1499,8 +1530,9 @@ mod async_cached {
     use zarrs::array::Resources;
 
     use zarrs::array::chunk_cache::{
-        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit,
+        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
+        AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
+        ChunkCacheTypeDecoded,
     };
     use zarrs::array::{
         Array, ArrayBuilder, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
@@ -1710,6 +1742,40 @@ mod async_cached {
             false,
         )
         .await
+    }
+
+    /// The asynchronous counterpart of `assert_decoded_cache_size`.
+    async fn assert_decoded_cache_size<C>(cache: C) -> TestResult
+    where
+        C: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + 'static,
+    {
+        let (array, _store) = fixture();
+        array
+            .async_store_chunk(&[0, 0], &[1u8; 9], &Resources::default())
+            .await?;
+        let cached = ArrayCached::new(array, cache);
+        assert_eq!(cached.cache().size().await, 0);
+
+        cached
+            .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+            .await?;
+        cached
+            .async_retrieve_chunk::<Vec<u8>>(&[1, 1], &Resources::default())
+            .await?;
+        assert_eq!(cached.cache().len().await, 2);
+        assert_eq!(cached.cache().size().await, 9);
+
+        cached
+            .async_store_chunk(&[0, 0], &[2u8; 9], &Resources::default())
+            .await?;
+        assert_eq!(cached.cache().size().await, 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn array_cached_async_cache_size_sums_cached_chunks() -> TestResult {
+        assert_decoded_cache_size(AsyncChunkCacheDecodedLruChunkLimit::new(16)).await?;
+        assert_decoded_cache_size(AsyncChunkCacheDecodedLruSizeLimit::new(1024)).await
     }
 
     #[tokio::test]
