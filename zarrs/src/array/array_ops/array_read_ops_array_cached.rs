@@ -511,7 +511,7 @@ mod tests {
         ChunkCacheEncodedLruSizeLimit, ChunkCacheEncodedLruSizeLimitThreadLocal,
         ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruChunkLimitThreadLocal,
         ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
-        ChunkCacheTypeDecoded,
+        ChunkCacheType, ChunkCacheTypeDecoded,
     };
     use crate::array::{ArrayBuilder, ArrayError, ArrayIndices, ArraySubset, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
@@ -816,6 +816,15 @@ mod tests {
 
         fn len(&self) -> usize {
             self.values.lock().unwrap().len()
+        }
+
+        fn size(&self) -> usize {
+            self.values
+                .lock()
+                .unwrap()
+                .values()
+                .map(ChunkCacheType::size)
+                .sum()
         }
     }
 

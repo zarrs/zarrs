@@ -29,6 +29,10 @@ impl<CT: ChunkCacheType> AsyncCacheTraits<CT> for CacheChunkLimit<CT> {
         self.lock().len()
     }
 
+    async fn size(&self) -> usize {
+        self.lock().iter().map(|(_, value)| value.size()).sum()
+    }
+
     async fn remove(&self, chunk_indices: &[u64]) -> bool {
         self.lock().pop(chunk_indices).is_some()
     }
@@ -84,6 +88,10 @@ impl<CT: ChunkCacheType> CacheSizeLimit<CT> {
 impl<CT: ChunkCacheType> AsyncCacheTraits<CT> for CacheSizeLimit<CT> {
     async fn len(&self) -> usize {
         self.lock().len()
+    }
+
+    async fn size(&self) -> usize {
+        self.lock().iter().map(|(_, value)| value.size()).sum()
     }
 
     async fn remove(&self, chunk_indices: &[u64]) -> bool {

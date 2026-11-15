@@ -18,6 +18,9 @@ type ChunkIndices = ArrayIndices;
 trait CacheTraits<CT: ChunkCacheType> {
     fn len(&self) -> usize;
 
+    /// Return the sum of the sizes of the cached values.
+    fn size(&self) -> usize;
+
     fn remove(&self, chunk_indices: &[u64]) -> bool;
 
     /// Remove the entries at the indices of `indexer`, returning the number removed.
@@ -50,6 +53,9 @@ trait CacheSizeLimitTraits {
 #[cfg(feature = "async")]
 trait AsyncCacheTraits<CT: ChunkCacheType> {
     fn len(&self) -> impl Future<Output = usize>;
+
+    /// Return the sum of the sizes of the cached values.
+    fn size(&self) -> impl Future<Output = usize>;
 
     fn remove(&self, chunk_indices: &[u64]) -> impl Future<Output = bool>;
 
@@ -175,6 +181,10 @@ macro_rules! impl_ChunkCacheLruCommon {
             self.cache.len()
         }
 
+        fn size(&self) -> usize {
+            CacheTraits::size(&self.cache)
+        }
+
         fn invalidate(&self) -> usize {
             CacheTraits::clear(&self.cache)
         }
@@ -256,6 +266,10 @@ macro_rules! impl_AsyncChunkCacheLruCommon {
 
         async fn len(&self) -> usize {
             AsyncCacheTraits::len(&self.cache).await
+        }
+
+        async fn size(&self) -> usize {
+            AsyncCacheTraits::size(&self.cache).await
         }
 
         async fn invalidate(&self) -> usize {

@@ -14,6 +14,11 @@ impl<CT: ChunkCacheType> AsyncCacheTraits<CT> for Cache<CT> {
         usize::try_from(self.entry_count()).unwrap()
     }
 
+    async fn size(&self) -> usize {
+        self.run_pending_tasks().await;
+        self.iter().map(|(_, value)| value.size()).sum()
+    }
+
     async fn remove(&self, chunk_indices: &[u64]) -> bool {
         let removed = moka::future::Cache::remove(self, chunk_indices)
             .await
