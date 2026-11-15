@@ -146,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fix codec-specific options to propagate to all nested codecs, such as those in `sharding_indexed`, `optional`, and `vlen` codecs, and `CodecChain`s used as an array-to-bytes codec
   - Fix `ArrayBuilder` to apply codec-specific options before validating the codec chain
   - Fix `Array::with_codec_specific_options()` to refresh decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
+- Cache data type support when binding `bytes`, `packbits`, `bitround`, and `cast_value`, and re-export their `{Codec}DataTypeTraitsArc` aliases
 - Copy small contiguous regions and elements directly when extracting array subsets and writing or filling output views
 - Map ascending element positions in output views by stepping through their contiguous regions, rather than unravelling each position
 - Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
@@ -257,7 +258,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Data types
 
-`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): cached codec support; `Any`/`Debug` trait bounds; in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 - Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification

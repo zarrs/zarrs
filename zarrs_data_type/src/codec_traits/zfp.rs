@@ -59,7 +59,7 @@ impl ZfpEncoding {
 /// Traits for a data type supporting the `zfp` codec.
 ///
 /// The zfp codec provides lossy and lossless compression for floating point and integer data.
-pub trait ZfpDataTypeTraits {
+pub trait ZfpDataTypeTraits: std::fmt::Debug {
     /// Returns the zfp encoding strategy for this data type.
     fn zfp_encoding(&self) -> ZfpEncoding;
 }

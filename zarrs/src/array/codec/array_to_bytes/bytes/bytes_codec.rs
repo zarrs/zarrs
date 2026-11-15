@@ -14,8 +14,8 @@ use zarrs_codec::{
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
-    bytes_codec_partial,
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, BytesDataTypeTraitsArc,
+    Endianness, bytes_codec_partial,
 };
 use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use std::num::NonZeroU64;
@@ -34,11 +34,13 @@ pub struct BytesCodec {
 }
 
 /// A `bytes` codec implementation bound to a data type and fill value.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct BytesCodecBound {
     endian: Option<Endianness>,
     mode: DecodeMode,
     data_type: DataType,
+    /// The `bytes` codec support of `data_type`.
+    bytes: BytesDataTypeTraitsArc,
     fill_value: Option<FillValue>,
 }
 
@@ -133,13 +135,13 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
                 Self::aliases_v3().default_name.to_string(),
             ));
         }
-        let codec = data_type.codec_bytes()?;
-        let mode = if codec.is_decode_passthrough(self.endian) {
+        let bytes = data_type.codec_bytes_arc()?;
+        let mode = if bytes.is_decode_passthrough(self.endian) {
             DecodeMode::Passthrough
         } else if data_type.fixed_size().is_some_and(|size| {
             // Decode one element to check the endianness before a decoder writes to an output.
             matches!(
-                codec.decode_in_place(&mut vec![0; size], self.endian),
+                bytes.decode_in_place(&mut vec![0; size], self.endian),
                 Some(Ok(()))
             )
         }) {
@@ -151,6 +153,7 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
             endian: self.endian,
             mode,
             data_type,
+            bytes,
             fill_value,
         }))
     }
@@ -208,8 +211,7 @@ impl BytesCodecBound {
     /// Decode the encoded elements `bytes` in place.
     fn decode_in_place(&self, bytes: &mut [u8]) -> Result<(), CodecError> {
         Ok(self
-            .data_type
-            .codec_bytes()?
+            .bytes
             .decode_in_place(bytes, self.endian)
             .ok_or("the data type does not support decoding in place")??)
     }
@@ -277,7 +279,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
 
-        Ok(self.data_type.codec_bytes()?.encode(bytes, self.endian)?)
+        Ok(self.bytes.encode(bytes, self.endian)?)
     }
 
     fn decode<'a>(
@@ -291,7 +293,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         let bytes = if self.mode == DecodeMode::Passthrough {
             bytes
         } else {
-            self.data_type.codec_bytes()?.decode(bytes, self.endian)?
+            self.bytes.decode(bytes, self.endian)?
         };
         let bytes_decoded = ArrayBytes::Fixed(bytes);
 
@@ -311,6 +313,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -327,6 +330,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -344,6 +348,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -361,6 +366,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
+            self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
         )))
@@ -434,20 +440,19 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                     // Otherwise, decoding requires a copy. Decode each region once it is copied
                     // into the output, unless the regions are too small for that to be faster.
                     if output.contiguous_bytes_len() >= FUSED_DECODE_MIN_REGION_LEN {
-                        let codec = self.data_type.codec_bytes()?;
                         let mut result = Some(Ok(()));
                         output.copy_from_slice_with(&bytes, |region| {
                             if matches!(result, Some(Ok(()))) {
-                                result = codec.decode_in_place(region, self.endian);
+                                result = self.bytes.decode_in_place(region, self.endian);
                             }
                         })?;
                         return Ok(
                             result.ok_or("the data type does not support decoding in place")??
                         );
                     }
-                    self.data_type.codec_bytes()?.decode(bytes, self.endian)?
+                    self.bytes.decode(bytes, self.endian)?
                 }
-                DecodeMode::Decode => self.data_type.codec_bytes()?.decode(bytes, self.endian)?,
+                DecodeMode::Decode => self.bytes.decode(bytes, self.endian)?,
             };
             return Ok(output.copy_from_slice(&bytes)?);
         }

@@ -12,7 +12,7 @@ use zarrs_codec::{
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_data_type::codec_traits::cast_value::{
-    CastValueDataTypeExt, CastValueDataTypeTraits, CastValueKernel,
+    CastValueDataTypeExt, CastValueDataTypeTraits, CastValueDataTypeTraitsArc, CastValueKernel,
     CastValueOutOfRangeMode as DataTypeCastValueOutOfRangeMode,
     CastValueRoundingMode as DataTypeCastValueRoundingMode, select_cast_kernel,
 };
@@ -38,8 +38,12 @@ pub struct CastValueCodec {
 #[derive(Clone, Debug)]
 struct CastValueCodecBound {
     data_type: DataType,
+    /// The `cast_value` codec support of `data_type`.
+    cast_value: CastValueDataTypeTraitsArc,
     fill_value: Option<FillValue>,
     encoded_data_type: DataType,
+    /// The `cast_value` codec support of `encoded_data_type`.
+    encoded_cast_value: CastValueDataTypeTraitsArc,
     encoded_fill_value: Option<FillValue>,
     encode_scalar_map: Option<ScalarMap>,
     decode_scalar_map: Option<ScalarMap>,
@@ -116,8 +120,9 @@ impl UnboundArrayToArrayCodecTraits for CastValueCodec {
         fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
-        let source = data_type.codec_castvalue()?;
-        let target = self.target_data_type.codec_castvalue()?;
+        let cast_value = data_type.codec_castvalue_arc()?;
+        let encoded_cast_value = self.target_data_type.codec_castvalue_arc()?;
+        let (source, target) = (&*cast_value, &*encoded_cast_value);
         validate_wrap_mode(
             &self.target_data_type,
             target,
@@ -186,8 +191,10 @@ impl UnboundArrayToArrayCodecTraits for CastValueCodec {
             .transpose()?;
         Ok(Arc::new(CastValueCodecBound {
             data_type,
+            cast_value,
             fill_value,
             encoded_data_type: self.target_data_type.clone(),
+            encoded_cast_value,
             encoded_fill_value,
             encode_scalar_map,
             decode_scalar_map,
@@ -247,15 +254,13 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let source = self.data_type.codec_castvalue()?;
-        let target = self.encoded_data_type.codec_castvalue()?;
         Ok(ArrayBytes::from(cast_bytes(
             &bytes.into_fixed()?,
             &CastBytesContext {
                 source_data_type: &self.data_type,
                 target_data_type: &self.encoded_data_type,
-                source,
-                target,
+                source: &*self.cast_value,
+                target: &*self.encoded_cast_value,
                 scalar_map: self.encode_scalar_map.as_ref(),
                 rounding: self.rounding,
                 out_of_range: self.out_of_range,
@@ -271,15 +276,13 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let source = self.encoded_data_type.codec_castvalue()?;
-        let target = self.data_type.codec_castvalue()?;
         Ok(ArrayBytes::from(cast_bytes(
             &bytes.into_fixed()?,
             &CastBytesContext {
                 source_data_type: &self.encoded_data_type,
                 target_data_type: &self.data_type,
-                source,
-                target,
+                source: &*self.encoded_cast_value,
+                target: &*self.cast_value,
                 scalar_map: self.decode_scalar_map.as_ref(),
                 rounding: self.rounding,
                 out_of_range: self.out_of_range,
@@ -353,7 +356,9 @@ impl CastValueCodecBound {
         super::cast_value_codec_partial::CastValueCodecPartial::new(
             input_output_handle,
             &self.data_type,
+            self.cast_value.clone(),
             &self.encoded_data_type,
+            self.encoded_cast_value.clone(),
             self.encode_scalar_map.clone(),
             self.decode_scalar_map.clone(),
             self.rounding,
