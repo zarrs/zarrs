@@ -11,6 +11,7 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 
 ### Changed
 - Pass explicit operation resources when reading and writing compatibility samples
+- Update `zarrs` with optional `jiff` 1.0.0 support
 
 ### Added
 - Report non-conformant `numcodecs.fletcher32` checksums written by releases, and add `schema::REJECTS_CONFORMANT` for releases that reject the conformant equivalent of the non-conformant data they write (known issues rather than regressions)

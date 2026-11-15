@@ -311,7 +311,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Build and dependencies
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
-- **Breaking**: Bump `float8` to 0.7.0 and `dlpark` to 0.11.1
+- **Breaking**: Bump `float8` to 0.7.0, `dlpark` to 0.11.1, and `jiff` to 1.0.0
 - Add the `cowbytes` and `camino` dependencies, whose types are part of the public API
 - *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature
