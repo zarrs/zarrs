@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - This matches `ArrayToBytesCodecTraits::{encode,decode}` and lets shared bytes pass through the `bytes` codec without a copy
 - **Breaking**: `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
+- **Breaking**: `{Codec}DataTypeTraits` require `Debug`
 - Document that `DataTypeTraits::metadata_fill_value` must reject invalid fill values, including those whose length differs from a fixed data type size
   - `OptionalDataType::metadata_fill_value` relies on this to check inner fill values
 - `FillValue::equals_all` does not allocate for fill values of 2, 4 or 8 bytes

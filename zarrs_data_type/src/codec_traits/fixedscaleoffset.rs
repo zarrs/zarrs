@@ -63,7 +63,7 @@ pub enum FixedScaleOffsetFloatType {
 /// Traits for a data type supporting the `fixedscaleoffset` codec.
 ///
 /// The fixedscaleoffset codec applies a linear transformation to numerical data.
-pub trait FixedScaleOffsetDataTypeTraits {
+pub trait FixedScaleOffsetDataTypeTraits: std::fmt::Debug {
     /// Returns the element type for this data type.
     fn fixedscaleoffset_element_type(&self) -> FixedScaleOffsetElementType;
 }

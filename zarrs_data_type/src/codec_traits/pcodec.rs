@@ -38,7 +38,7 @@ impl PcodecElementType {
 /// Traits for a data type supporting the `pcodec` codec.
 ///
 /// The pcodec codec losslessly compresses numerical data with high compression ratio.
-pub trait PcodecDataTypeTraits {
+pub trait PcodecDataTypeTraits: std::fmt::Debug {
     /// Returns the pcodec element type for this data type.
     fn pcodec_element_type(&self) -> PcodecElementType;
 
