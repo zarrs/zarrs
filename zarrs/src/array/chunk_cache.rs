@@ -23,8 +23,10 @@
 //!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 //!
 //! There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
+//!
 //! `zarrs` consumers can create custom cache policies by implementing the [`ChunkCache`] trait.
 //! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
+//! [`ArrayCached`](super::ArrayCached) accepts any [`SyncArrayCache`], which every [`ChunkCache`] is.
 //!
 //! With the `async` feature, [`ArrayCached`](super::ArrayCached) also supports asynchronous array
 //! operations, which need an `AsyncChunkCache` rather than a [`ChunkCache`].
@@ -60,19 +62,19 @@ use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions, Resources};
 use zarrs_storage::AsyncReadableStorageTraits;
 use zarrs_storage::{Bytes, MaybeSend, MaybeSync, ReadableStorageTraits};
 
+mod array_cache;
 mod chunk_cache_lru;
 mod chunk_cache_type;
+#[cfg(feature = "async")]
+pub use array_cache::AsyncArrayCache;
+pub use array_cache::SyncArrayCache;
 // pub(crate) mod chunk_cache_lru_macros;
 pub use chunk_cache_lru::*;
 #[cfg(feature = "async")]
 pub(crate) use chunk_cache_type::{
-    async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
-    async_retrieve_chunk_overlap_into,
+    async_retrieve_chunk_overlap_bytes, async_retrieve_chunk_overlap_into,
 };
-pub(crate) use chunk_cache_type::{
-    fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
-    retrieve_chunk_overlap_into,
-};
+pub(crate) use chunk_cache_type::{retrieve_chunk_overlap_bytes, retrieve_chunk_overlap_into};
 
 /// The chunk type of an encoded chunk cache.
 pub type ChunkCacheTypeEncoded = Option<Bytes>;

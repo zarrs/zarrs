@@ -209,10 +209,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         subchunk_indices: &[u64],
         resources: &Resources,
     ) -> Result<T, ArrayError> {
-        let subchunk_grid = self
-            .subchunk_grid_at_level(level)
-            .as_chunk_grid()
-            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let subchunk_grid = super::subchunk_grid_at_level(self, level)?;
         let array_subset = subchunk_grid
             .subset(subchunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
@@ -245,10 +242,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         subchunks: &dyn ArraySubsetTraits,
         resources: &Resources,
     ) -> Result<T, ArrayError> {
-        let subchunk_grid = self
-            .subchunk_grid_at_level(level)
-            .as_chunk_grid()
-            .ok_or(ArrayError::MissingSubchunkGrid)?;
+        let subchunk_grid = super::subchunk_grid_at_level(self, level)?;
         let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
             ArrayError::InvalidArraySubset(
                 Box::new(subchunks.to_array_subset()),

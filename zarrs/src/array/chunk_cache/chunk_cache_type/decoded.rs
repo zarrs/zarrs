@@ -3,9 +3,10 @@ use std::sync::Arc;
 #[cfg(feature = "async")]
 use super::SyncPartialDecoderAsAsync;
 use super::{
-    cache_error, copy_array_fill_value_into, fill_value_bytes, validate_chunk_indices,
+    cache_error, copy_array_fill_value_into, validate_chunk_indices,
     validate_partial_chunk_indexer, validate_target_num_elements,
 };
+use crate::array::array_ops::fill_value_bytes;
 #[cfg(feature = "async")]
 use crate::array::chunk_cache::{AsyncChunkCache, SealedAsync};
 use crate::array::chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, SealedSync};
@@ -143,7 +144,7 @@ where
         indexer
             .validate(bytemuck::must_cast_slice(chunk_shape))
             .map_err(CodecError::from)?;
-        fill_value_bytes(array, indexer.len())
+        fill_value_bytes(array, indexer.len()).map(Arc::new)
     }
 }
 

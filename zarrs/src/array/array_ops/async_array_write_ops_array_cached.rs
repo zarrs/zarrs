@@ -5,25 +5,25 @@ use super::{
     ArrayCached, ArrayError, ArraySubsetTraits, AsyncArrayWriteOps, AsyncWritableStorageTraits,
     Indexer, IntoArrayBytes, MaybeSend, StorageError,
 };
-use crate::array::chunk_cache::AsyncChunkCache;
+use crate::array::chunk_cache::AsyncArrayCache;
 
 #[inherent]
 impl<TStorage, C> AsyncArrayWriteOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncWritableStorageTraits + 'static,
-    C: AsyncChunkCache,
+    C: AsyncArrayCache,
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
         self.array().async_store_metadata().await?;
-        self.cache().invalidate().await;
+        self.cache().async_invalidate_cached_all(self.array()).await;
         Ok(())
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
         self.array().async_erase_metadata().await?;
-        self.cache().invalidate().await;
+        self.cache().async_invalidate_cached_all(self.array()).await;
         Ok(())
     }
 
@@ -37,7 +37,9 @@ where
         self.array()
             .async_store_chunk(chunk_indices, chunk_data, resources)
             .await?;
-        self.cache().invalidate_chunk(chunk_indices).await;
+        self.cache()
+            .async_invalidate_cached_chunk(self.array(), chunk_indices)
+            .await;
         Ok(())
     }
 
@@ -51,14 +53,18 @@ where
         self.array()
             .async_store_chunks(chunks, chunks_data, resources)
             .await?;
-        self.cache().invalidate_chunks(chunks).await;
+        self.cache()
+            .async_invalidate_cached_chunks(self.array(), chunks)
+            .await;
         Ok(())
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         self.array().async_erase_chunk(chunk_indices).await?;
-        let _ = self.cache().invalidate_chunk(chunk_indices).await;
+        self.cache()
+            .async_invalidate_cached_chunk(self.array(), chunk_indices)
+            .await;
         Ok(())
     }
 
@@ -69,7 +75,9 @@ where
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.array().async_erase_chunks(chunks, resources).await?;
-        let _ = self.cache().invalidate_chunks(chunks).await;
+        self.cache()
+            .async_invalidate_cached_chunks(self.array(), chunks)
+            .await;
         Ok(())
     }
 
@@ -84,7 +92,9 @@ where
                 .async_store_encoded_chunk(chunk_indices, encoded_chunk_bytes)
                 .await?;
         }
-        self.cache().invalidate_chunk(chunk_indices).await;
+        self.cache()
+            .async_invalidate_cached_chunk(self.array(), chunk_indices)
+            .await;
         Ok(())
     }
 }

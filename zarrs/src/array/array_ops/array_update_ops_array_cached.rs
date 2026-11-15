@@ -3,10 +3,10 @@ use std::sync::Arc;
 use zarrs_codec::Resources;
 
 use super::{
-    Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ArrayUpdateOps, ChunkCache,
-    ChunkGrid, CodecOptions, DataType, IntoArrayBytes, ReadableStorageTraits,
-    ReadableWritableStorageTraits,
+    Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ArrayUpdateOps, ChunkGrid,
+    CodecOptions, DataType, IntoArrayBytes, ReadableStorageTraits, ReadableWritableStorageTraits,
 };
+use crate::array::chunk_cache::SyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
@@ -14,15 +14,16 @@ use zarrs_codec::{
 };
 use zarrs_storage::StorageError;
 
-struct CachedArrayPartialEncoder<C> {
+struct CachedArrayPartialEncoder<TStorage: ?Sized, C> {
+    cached: ArrayCached<TStorage, C>,
     encoder: Arc<dyn ArrayPartialEncoderTraits>,
-    cache: Arc<C>,
     chunk_indices: ArrayIndices,
 }
 
-impl<C> ArrayPartialDecoderSubchunkingTraits for CachedArrayPartialEncoder<C>
+impl<TStorage, C> ArrayPartialDecoderSubchunkingTraits for CachedArrayPartialEncoder<TStorage, C>
 where
-    C: ChunkCache + 'static,
+    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    C: SyncArrayCache + 'static,
 {
     fn local_subchunk_grids(
         &self,
@@ -33,9 +34,10 @@ where
     }
 }
 
-impl<C> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<C>
+impl<TStorage, C> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C>
 where
-    C: ChunkCache + 'static,
+    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    C: SyncArrayCache + 'static,
 {
     fn data_type(&self) -> &DataType {
         self.encoder.data_type()
@@ -74,13 +76,16 @@ where
     }
 }
 
-impl<C> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<C>
+impl<TStorage, C> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C>
 where
-    C: ChunkCache + 'static,
+    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    C: SyncArrayCache + 'static,
 {
     fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase();
-        self.cache.invalidate_chunk(&self.chunk_indices);
+        self.cached
+            .cache()
+            .invalidate_cached_chunk(self.cached.array(), &self.chunk_indices);
         result
     }
 
@@ -94,7 +99,11 @@ where
         let result = self
             .encoder
             .partial_encode(indexer, bytes, options, resources);
-        self.cache.invalidate_chunk(&self.chunk_indices);
+        self.cached.cache().invalidate_cached_chunk_indexer(
+            self.cached.array(),
+            &self.chunk_indices,
+            indexer,
+        );
         result
     }
 
@@ -107,7 +116,7 @@ where
 impl<TStorage, C> ArrayUpdateOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
-    C: ChunkCache + 'static,
+    C: SyncArrayCache + 'static,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_partial_chunk<'a, T: IntoArrayBytes<'a>>(
@@ -119,7 +128,8 @@ where
     ) -> Result<(), ArrayError> {
         self.array()
             .store_partial_chunk(chunk_indices, indexer, indexer_data, resources)?;
-        self.cache().invalidate_chunk(chunk_indices);
+        self.cache()
+            .invalidate_cached_chunk_indexer(self.array(), chunk_indices, indexer);
         Ok(())
     }
 
@@ -132,11 +142,8 @@ where
     ) -> Result<(), ArrayError> {
         self.array()
             .store_array_subset(array_subset, subset_data, resources)?;
-        if let Some(chunks) = self.array().chunks_in_array_subset(array_subset)? {
-            self.cache().invalidate_chunks(&chunks);
-        } else {
-            self.cache().invalidate();
-        }
+        self.cache()
+            .invalidate_cached_array_subset(self.array(), array_subset)?;
         Ok(())
     }
 
@@ -148,7 +155,8 @@ where
     ) -> Result<bool, ArrayError> {
         let compacted = self.array().compact_chunk(chunk_indices, resources)?;
         if compacted {
-            self.cache().invalidate_chunk(chunk_indices);
+            self.cache()
+                .invalidate_cached_chunk(self.array(), chunk_indices);
         }
         Ok(compacted)
     }
@@ -166,8 +174,8 @@ where
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
         let encoder = self.array().partial_encoder(chunk_indices, resources)?;
         Ok(Arc::new(CachedArrayPartialEncoder {
+            cached: self.clone(),
             encoder,
-            cache: self.cache_arc(),
             chunk_indices: chunk_indices.into(),
         }))
     }
@@ -178,7 +186,7 @@ mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use super::*;
     use crate::array::chunk_cache::{
-        ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
+        ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
         ChunkCachePartialDecoderLruChunkLimit,
     };
     use crate::array::{ArrayBuilder, ArraySubset, data_type};

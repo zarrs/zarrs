@@ -62,7 +62,6 @@ use std::sync::Arc;
 use super::array_bytes_internal::{FixedDecodeBuffers, reordered};
 use zarrs_codec::ArrayBytesTarget;
 
-use super::chunk_cache::ChunkCache;
 use super::{
     Array, ArrayBuilder, ArrayCached, ArrayCreateError, ArrayError, ArrayIndices, ArrayMetadata,
     ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkGridDecoded,
@@ -197,8 +196,22 @@ impl COrderBytes for Arc<super::ArrayBytes<'static>> {
     }
 }
 
+/// Return the subchunk grid of `array` at `level`.
+///
+/// # Errors
+/// Returns [`ArrayError::MissingSubchunkGrid`] if the subchunk grid at `level` is not globally resolvable.
+pub(crate) fn subchunk_grid_at_level(
+    array: &(impl ArrayOps + ?Sized),
+    level: usize,
+) -> Result<&ChunkGrid, ArrayError> {
+    array
+        .subchunk_grid_at_level(level)
+        .as_chunk_grid()
+        .ok_or(ArrayError::MissingSubchunkGrid)
+}
+
 /// Return the fill value of `array` for `num_elements` elements.
-fn fill_value_bytes(
+pub(crate) fn fill_value_bytes(
     array: &(impl ArrayOps + ?Sized),
     num_elements: u64,
 ) -> Result<super::ArrayBytes<'static>, ArrayError> {
