@@ -62,7 +62,7 @@ half.workspace = true
 inherent = "1.0.13"
 inventory.workspace = true
 itertools = "0.15.0"
-lru = "0.18.2"
+lru = "0.19.0"
 moka = { version = "0.12.8", features = ["sync"] }
 ndarray = { version = "0.17.1", optional = true }
 num.workspace = true

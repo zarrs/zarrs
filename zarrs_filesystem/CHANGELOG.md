@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *Behavioural change*: `FilesystemStore` no longer serialises operations on the same key
   - A read of a key concurrent with a write of that key is now undefined, which is aligned with the `zarrs` store expectations
 - `FilesystemStore` implements `get_partial` directly, rather than through `get_partial_many`
-- Bump `itertools` to 0.15.0 and `lru` to 0.18.2
+- Bump `itertools` to 0.15.0 and `lru` to 0.19.0
 
 ### Fixed
 - `FilesystemStore::get_partial_many` returns an `InvalidByteRangeError` for a byte range beyond the end of the file, rather than allocating the requested length or reading from the start of the file (`Suffix`)
