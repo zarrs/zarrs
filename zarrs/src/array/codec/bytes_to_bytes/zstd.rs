@@ -98,6 +98,7 @@ impl CodecTraitsV2 for ZstdCodec {
 #[cfg(test)]
 mod tests {
     use crate::array::Resources;
+    use std::io::Write;
     use std::mem::MaybeUninit;
     use std::sync::Arc;
     use zarrs_codec::{ComputeResources, CowBytes};
@@ -114,6 +115,18 @@ mod tests {
     "level": 22,
     "checksum": false
 }"#;
+
+    fn encode_without_content_size(decoded: &[u8]) -> Vec<u8> {
+        let mut encoder = zstd::stream::Encoder::new(Vec::new(), 1).unwrap();
+        encoder.include_contentsize(false).unwrap();
+        encoder.write_all(decoded).unwrap();
+        let encoded = encoder.finish().unwrap();
+        assert!(matches!(
+            zstd::zstd_safe::get_frame_content_size(&encoded),
+            Ok(None)
+        ));
+        encoded
+    }
 
     #[test]
     fn codec_zstd_v2_numcodecs_level_only() {
@@ -387,7 +400,7 @@ mod tests {
 
         // A frame without a content size is bounded by its block count, and decodes into the smaller decoded size
         let data = b"a frame without a content size".repeat(10);
-        let encoded = zstd::encode_all(data.as_slice(), 1).unwrap();
+        let encoded = encode_without_content_size(&data);
         assert!(
             zstd::bulk::Decompressor::upper_bound(&encoded).is_some_and(|bound| bound > data.len())
         );
@@ -421,12 +434,7 @@ mod tests {
         let options = CodecOptions::default();
         let decoded = b"streamed frame without content size".repeat(32);
         let len = decoded.len();
-        // The streaming encoder does not write the content size into the frame header
-        let encoded = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
-        assert!(matches!(
-            zstd::zstd_safe::get_frame_content_size(&encoded),
-            Ok(None)
-        ));
+        let encoded = encode_without_content_size(&decoded);
         let decode_into = |output: &mut [MaybeUninit<u8>]| {
             codec.decode_into(
                 CowBytes::from(encoded.as_slice()),
@@ -469,7 +477,7 @@ mod tests {
                 &ComputeResources::default(),
             )
             .unwrap();
-        let unknown_size = zstd::stream::encode_all(decoded.as_slice(), 1).unwrap();
+        let unknown_size = encode_without_content_size(&decoded);
         for (encoded, size_known) in [(known_size, true), (CowBytes::from(unknown_size), false)] {
             let mut output = [MaybeUninit::uninit(); 8];
             // The old allocating retry returned UnexpectedChunkDecodedSize only after expanding the entire 8 MiB

@@ -97,10 +97,10 @@ log = "0.4.28"
 base64 = "0.23.1"
 zarrs_chunk_grid.workspace = true
 zarrs_codec.workspace = true
-zstd = { version = "0.13.3", features = ["experimental"], optional = true } # experimental: bulk decompression bounds
+zstd = { version = "0.14.4", features = ["experimental"], optional = true } # experimental: bulk decompression bounds
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-zstd = { version = "0.13.3", features = ["zstdmt"], optional = true }
+zstd = { version = "0.14.4", features = ["zstdmt"], optional = true }
 blosc-src = { version = "0.3.6", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
