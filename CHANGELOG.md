@@ -95,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Writes invalidate cached subchunks belonging to each affected chunk, including values that lossy re-encoding may change outside a partial write
   - Invalidate caches for chunks that a failed write may have changed
   - `SubchunkCache` supports asynchronous operations over an asynchronous decoded subchunk cache and an asynchronous chunk cache
+  - Add the `array_caching` example, which counts the storage reads of repeated reads through each kind of cache
   - Retrieve complete cached chunks without extracting a subset
   - Fix chunk subset retrieval from a chunk cache to validate the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - Subchunks
