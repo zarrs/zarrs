@@ -187,6 +187,10 @@ impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruChunkLimit<CT> {
 
 impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruChunkLimitThreadLocal<CT> {
     impl_ChunkCacheLruCommon!();
+
+    fn is_thread_local(&self) -> bool {
+        true
+    }
 }
 
 impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruSizeLimit<CT> {
@@ -195,6 +199,10 @@ impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruSizeLimit<CT> {
 
 impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruSizeLimitThreadLocal<CT> {
     impl_ChunkCacheLruCommon!();
+
+    fn is_thread_local(&self) -> bool {
+        true
+    }
 }
 
 /// An asynchronous chunk cache with a fixed chunk capacity.

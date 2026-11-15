@@ -38,6 +38,9 @@ where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
+    let (chunk_concurrent_minimum, resources) =
+        cache.cache_concurrency(array.chunk_concurrent_minimum, resources);
+    let resources = &*resources;
     match chunks.num_elements_usize() {
         0 => super::fill_value_bytes(array, array_subset.num_elements()).map(Arc::new),
         1 => {
@@ -58,7 +61,7 @@ where
             let codec_concurrency = recommended_codec_concurrency(array, &chunk_shape)?;
             let (chunk_concurrent_limit, resources) = concurrency_chunks_and_codec(
                 num_chunks,
-                array.chunk_concurrent_minimum,
+                chunk_concurrent_minimum,
                 resources,
                 &codec_concurrency,
             );
@@ -430,13 +433,16 @@ where
         output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
+        let (chunk_concurrent_minimum, resources) = self
+            .cache()
+            .cache_concurrency(self.array().chunk_concurrent_minimum, resources);
         super::array_read_ops_common::retrieve_array_subset_into(
             self,
             array_subset,
             output_target,
-            self.array().chunk_concurrent_minimum,
+            chunk_concurrent_minimum,
             self.codec_options(),
-            resources,
+            &resources,
             |chunk_indices, output_target, options, resources| {
                 self.retrieve_chunk_into_with_options(
                     chunk_indices,

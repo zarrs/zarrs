@@ -7,7 +7,7 @@ use zarrs::array::Resources;
 
 use zarrs::array::chunk_cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-    ChunkCachePartialDecoderLruChunkLimit,
+    ChunkCachePartialDecoderLruChunkLimit, SubchunkCached,
 };
 use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::{
@@ -1082,6 +1082,20 @@ fn array_implements_complete_sync_operation_suite() -> TestResult {
 fn array_cached_implements_complete_sync_operation_suite() -> TestResult {
     let (array, _) = fixture();
     let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(16));
+    exercise_all(&cached)
+}
+
+#[test]
+fn array_subchunk_cached_implements_complete_sync_operation_suite() -> TestResult {
+    let (array, _) = fixture();
+    let cached = ArrayCached::new(
+        array,
+        SubchunkCached::new(
+            0,
+            ChunkCacheDecodedLruChunkLimit::new(16),
+            ChunkCachePartialDecoderLruChunkLimit::new(4),
+        ),
+    );
     exercise_all(&cached)
 }
 

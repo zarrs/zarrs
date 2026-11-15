@@ -47,6 +47,14 @@
 //!
 //! For many access patterns, chunk caching may reduce performance.
 //! **Benchmark your algorithm/data.**
+//!
+//! # Subchunk caches
+//!
+//! [`SubchunkCached`] layers a cache of individual subchunks over one of the chunk caches above, which serves the
+//! subchunks it does not hold. The subchunk cache is a decoded chunk cache keyed by subchunk indices (e.g. a
+//! [`ChunkCacheDecodedLruSizeLimit`]), so repeated small reads of large shards decode and hold only the subchunks they
+//! touch. Over a [`ChunkCachePartialDecoderLruChunkLimit`], which caches shard indexes, a subchunk miss reads and
+//! decodes just that subchunk. See [`SubchunkCached`] for the choice of chunk cache.
 
 #[cfg(feature = "async")]
 use std::future::Future;
@@ -65,9 +73,12 @@ use zarrs_storage::{Bytes, MaybeSend, MaybeSync, ReadableStorageTraits};
 mod array_cache;
 mod chunk_cache_lru;
 mod chunk_cache_type;
+mod subchunk_cached;
 #[cfg(feature = "async")]
 pub use array_cache::AsyncArrayCache;
 pub use array_cache::SyncArrayCache;
+pub(crate) use array_cache::thread_local_resources;
+pub use subchunk_cached::{NoChunkCache, SubchunkCached};
 // pub(crate) mod chunk_cache_lru_macros;
 pub use chunk_cache_lru::*;
 #[cfg(feature = "async")]
@@ -300,6 +311,15 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     /// [`ChunkCacheLruChunkLimit`]`<ChunkCacheTypeAsyncPartialDecoder>` is rejected where it is
     /// written rather than at an unrelated retrieval call site.
     type Value: SyncChunkCacheType;
+
+    /// Return whether entries are stored separately on each thread.
+    ///
+    /// Array operations keep accesses to a thread-local cache on the calling thread, so that subsequent writes can
+    /// invalidate the entries populated by those reads. Custom thread-local caches must return `true`.
+    #[must_use]
+    fn is_thread_local(&self) -> bool {
+        false
+    }
 
     /// Return a cached value or insert the value returned by `f`.
     ///
