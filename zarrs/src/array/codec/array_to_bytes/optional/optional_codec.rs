@@ -15,10 +15,10 @@ use crate::array::{
     ArrayBytes, ArrayBytesOffsets, BytesRepresentation, ChunkShapeTraits, CowBytes, DataType,
 };
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytesMask, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::{Configuration, DataTypeSize};
 
@@ -127,6 +127,8 @@ impl OptionalCodecBound {
                         sparse_inner_mask.push(optional_bytes.mask()[i]);
                     }
                 }
+                // SAFETY: selection preserves the source mask's values
+                let sparse_inner_mask = unsafe { ArrayBytesMask::new_unchecked(sparse_inner_mask) };
 
                 // Get the inner-inner type (unwrap the Optional)
                 let inner_opt = inner_type.as_optional().ok_or(CodecError::Other(
@@ -229,6 +231,8 @@ impl OptionalCodecBound {
                     }
                     // Invalid elements have mask value 0
                 }
+                // SAFETY: null entries remain zero; present entries copy the source mask
+                let dense_inner_mask = unsafe { ArrayBytesMask::new_unchecked(dense_inner_mask) };
 
                 Ok(dense_inner_data.with_optional_mask(dense_inner_mask))
             }
@@ -249,7 +253,7 @@ impl OptionalCodecBound {
                 "nested optional requires nested optional DataType".to_string(),
             ))?;
             let inner_data = Self::create_empty_dense_data(mask, inner_opt.data_type())?;
-            let inner_mask = vec![0u8; num_elements];
+            let inner_mask = vec![false; num_elements];
             Ok(inner_data.with_optional_mask(inner_mask))
         } else {
             match inner_type.size() {
@@ -411,7 +415,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         let sparse_data = Self::extract_sparse_data(&dense_data, &mask, opt.data_type())?;
 
         // Encode sparse data
-        let num_valid = mask.iter().filter(|&&v| v != 0).count();
+        let num_valid = mask.num_present();
         let encoded_data = if num_valid > 0 {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
             self.data_codecs
@@ -458,15 +462,8 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
             self.mask_codecs
                 .clone()
                 .decode(encoded_mask.into(), shape, options, resources)?;
-        let mask = decoded_mask.into_fixed()?.into_vec();
-        let (mask_or, valid_count) = mask
-            .iter()
-            .fold((0u8, 0usize), |(o, n), &b| (o | b, n + usize::from(b)));
-        if mask_or > 1 {
-            return Err(CodecError::Other(
-                "optional mask values must be 0 (null) or 1 (present)".to_string(),
-            ));
-        }
+        let mask = ArrayBytesMask::new(decoded_mask.into_fixed()?.into_static())?;
+        let valid_count = mask.num_present();
 
         // Decode data
         let opt = self.data_type.as_optional().ok_or_else(|| {
@@ -637,7 +634,7 @@ mod tests {
                 let inner_array_bytes = build_nested_array_bytes(opt.data_type(), num_elements);
 
                 // Create outer mask (every third element is invalid at this level)
-                let outer_mask: Vec<u8> = (0..num_elements).map(|i| u8::from(i % 3 != 0)).collect();
+                let outer_mask: Vec<bool> = (0..num_elements).map(|i| i % 3 != 0).collect();
 
                 inner_array_bytes.with_optional_mask(outer_mask)
             } else {
@@ -649,7 +646,7 @@ mod tests {
                 for i in 0..num_elements {
                     // Every third element is invalid
                     let is_valid = i % 3 != 0;
-                    mask.push(u8::from(is_valid));
+                    mask.push(is_valid);
 
                     // Add data for all elements (dense format)
                     for j in 0..inner_size {
@@ -877,8 +874,8 @@ mod tests {
         // Element 6: Some(None)      - outer valid=1, inner valid=0, data=0
         // Element 7: Some(Some(70))  - outer valid=1, inner valid=1, data=70
 
-        let outer_mask = vec![1u8, 1, 0, 1, 0, 1, 1, 1];
-        let inner_mask = vec![1u8, 0, 0, 1, 0, 1, 0, 1]; // Dense: one for each element
+        let outer_mask = ArrayBytesMask::new(vec![1u8, 1, 0, 1, 0, 1, 1, 1]).unwrap();
+        let inner_mask = ArrayBytesMask::new(vec![1u8, 0, 0, 1, 0, 1, 0, 1]).unwrap(); // Dense: one for each element
         let data = vec![10u8, 0, 0, 30, 0, 50, 0, 70]; // Dense: one for each element
 
         // Construct nested optional ArrayBytes
@@ -966,7 +963,7 @@ mod tests {
         // Element 4: Some(30)  - valid=1, data=30
         // Element 5: None      - valid=0, data=255
 
-        let mask = vec![1u8, 0, 1, 0, 1, 0];
+        let mask = ArrayBytesMask::new(vec![1u8, 0, 1, 0, 1, 0]).unwrap();
         let data = vec![10u8, 255, 20, 255, 30, 255];
 
         let input = ArrayBytes::new_flen(data).with_optional_mask(mask);
@@ -1047,9 +1044,9 @@ mod tests {
         // Element 4: Some(Some(Some(400)))  - outer=1, middle=1, inner=1, data=400
         // Element 5: Some(Some(Some(500)))  - outer=1, middle=1, inner=1, data=500
 
-        let outer_mask = vec![1u8, 1, 1, 0, 1, 1];
-        let middle_mask = vec![1u8, 1, 0, 0, 1, 1];
-        let inner_mask = vec![1u8, 0, 0, 0, 1, 1];
+        let outer_mask = ArrayBytesMask::new(vec![1u8, 1, 1, 0, 1, 1]).unwrap();
+        let middle_mask = ArrayBytesMask::new(vec![1u8, 1, 0, 0, 1, 1]).unwrap();
+        let inner_mask = ArrayBytesMask::new(vec![1u8, 0, 0, 0, 1, 1]).unwrap();
         // Data is u16, so 2 bytes per element, little-endian
         let data = vec![
             100u8, 0, // 100
@@ -1149,7 +1146,7 @@ mod tests {
         let fill_value = FillValue::from(Some(f32::NAN));
 
         // Create test data with some valid and some invalid f32 values
-        let mask = vec![1u8, 0, 1, 1, 0];
+        let mask = ArrayBytesMask::new(vec![1u8, 0, 1, 1, 0]).unwrap();
         let data = [
             1.5f32.to_le_bytes(),
             [0u8; 4], // placeholder
@@ -1251,19 +1248,17 @@ mod tests {
             )
             .unwrap();
         let shape = [NonZeroU64::new(3).unwrap()];
-        for mask in [vec![1u8, 2, 0], vec![1, 0]] {
-            let input = ArrayBytes::new_flen(vec![1u8, 2, 3]).with_optional_mask(mask);
-            assert!(
-                codec
-                    .encode(
-                        input,
-                        &shape,
-                        &CodecOptions::default(),
-                        &ComputeResources::default()
-                    )
-                    .is_err()
-            );
-        }
+        let input = ArrayBytes::new_flen(vec![1u8, 2, 3]).with_optional_mask(vec![true, false]);
+        assert!(
+            codec
+                .encode(
+                    input,
+                    &shape,
+                    &CodecOptions::default(),
+                    &ComputeResources::default()
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -1297,15 +1292,17 @@ mod tests {
                 )
                 .is_ok()
         );
-        assert!(
-            codec
-                .decode(
-                    encoded([1, 2, 0]).into(),
+        // A 2 (but not the 1s) sums to the number of data elements, which only the mask check rejects
+        for mask in [[2, 0, 0], [0, 0, 2], [1, 2, 0]] {
+            assert!(matches!(
+                codec.decode(
+                    encoded(mask).into(),
                     &shape,
                     &CodecOptions::default(),
                     &ComputeResources::default()
-                )
-                .is_err()
-        );
+                ),
+                Err(CodecError::ArrayBytesMaskCreate(_))
+            ));
+        }
     }
 }

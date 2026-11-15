@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayBytesFixedDisjointView::data_type_size`
 - Add `ArrayBytes::with_optional_masks`, with masks ordered from outermost to innermost like `ArrayBytesDecodeIntoTarget::with_optional_masks`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
+- Add `ArrayBytesMask`, an optional validity mask whose bytes are 0 (null) or 1 (present) by construction
+  - `ArrayBytesMask::new` checks raw bytes once, returning the new `ArrayBytesMaskCreateError` (`CodecError::ArrayBytesMaskCreate`), and `From<Vec<bool>>`/`From<&[bool]>` convert without copying or checking
 - Implement `[Async]BytesPartial{Encoder,Decoder}Traits` for `(TStorage: *StorageTraits, StoreKey)`
 - Implement `From<CowBytes>` for `ArrayBytes`
 
@@ -61,6 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Deref<Target = [usize]>` is removed, use the new accessors instead (e.g. `element_range`, `element_ranges`, `iter`, `get`, `last`, `as_slice`, `as_u32`, `as_u64`, `into_u32_vec`, `into_u64_vec`)
   - `ArrayBytesOffsets::new[_unchecked]` and the `TryFrom` implementations accept `u32` or `u64` offsets (via the sealed `ArrayBytesOffsetsElement` trait) rather than `usize`
   - `ArrayBytesOffsets::into_owned` is removed and `ArrayBytesVariableLength::{offsets,into_parts}` return offsets without a lifetime, as the offsets are always owned
+- **Breaking**: `ArrayBytesOptional` holds an `ArrayBytesMask` rather than `CowBytes`
+  - `ArrayBytesOptional::new` and `ArrayBytes::with_optional_mask` take `impl Into<ArrayBytesMask>`, so `bool` masks convert directly and `u8` masks go through `ArrayBytesMask::new`
+  - `ArrayBytesOptional::{mask,into_parts}` return `ArrayBytesMask`
+  - Implementations of `decode_into` and `partial_decode_into` must write only 0 or 1 to optional mask targets
 - **Breaking**: Rename `ArrayBytesRawOffsets{Create,OutOfBounds}Error` to `ArrayBytesOffsets{Create,OutOfBounds}Error` and `CodecError::RawBytesOffsets{Create,OutOfBounds}` to `CodecError::ArrayBytesOffsets{Create,OutOfBounds}`
   - Add `ArrayBytesOffsetsCreateError::{ExceedsUsizeMax,InvalidBytesLength}`
 - **Breaking**: `ArrayBytesFixedDisjointView::new` takes `impl Into<UnsafeCellSlice<MaybeUninit<u8>>>` so views can cover uninitialised memory (e.g. `Vec::spare_capacity_mut()`), and `UnsafeCellSlice<u8>` arguments still work
@@ -78,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` map ascending positions by stepping through the contiguous regions of the view, rather than unravelling each position
   - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size without boxed iterators, rather than first collecting the runs
   - `ArrayBytes::validate` checks the number of offsets and the last offset of variable length bytes, rather than iterating over the offsets, which are monotonically increasing and within the bytes by construction
+  - `ArrayBytes::validate` checks the length of optional masks, rather than iterating over them, as their values are 0 or 1 by construction
   - Compute the contiguous regions of `ArrayBytesFixedDisjointView` when used, without allocating, rather than when creating and subdividing views
   - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
   - Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
@@ -94,7 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `[Async]ByteIntervalPartialDecoder` no longer reads beyond its interval for a `ByteRange::FromStart(offset, None)` with a nonzero `offset`
 - `[Async]ByteIntervalPartialDecoder` returns `CodecError::InvalidByteRangeError` for a byte range outside of its interval, or an interval end that overflows, instead of panicking or reading bytes outside of its interval
 - `BytesPartialDecoderTraits` for `Mutex<Option<Vec<u8>>>` returns `InvalidByteRangeError` instead of panicking on out-of-bounds suffix, offset, or overflowing byte ranges
-- `ArrayBytes::validate` rejects optional masks of the wrong length or with values other than 0/1
+- `ArrayBytes::validate` rejects optional masks of the wrong length, and masks with values other than 0/1 are rejected by `ArrayBytesMask::new`
 - `ArrayBytes::is_fill_value` compares variable-length elements individually using their offsets, rather than comparing concatenated bytes
 - `ArrayBytesOptional` equality ignores elements beneath nulls, is symmetric, and no longer panics on malformed masks
 - The default bytes-to-bytes partial encoder replaces the entire chunk, rather than leaving trailing bytes of the existing chunk if the re-encoded chunk is shorter

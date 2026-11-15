@@ -23,7 +23,7 @@ where
 
         let num_elements = elements.len();
 
-        // Create validity mask - one byte per element
+        // Create validity mask - one bool per element
         let mut mask = Vec::with_capacity(num_elements);
 
         // Create dense data - all elements, using default/zero for None values
@@ -32,11 +32,10 @@ where
         let mut dense_elements = Vec::with_capacity(num_elements);
 
         for element in elements {
+            mask.push(element.is_some());
             if let Some(value) = element {
-                mask.push(1u8);
                 dense_elements.push(value.clone());
             } else {
-                mask.push(0u8);
                 dense_elements.push(default_value.clone());
             }
         }

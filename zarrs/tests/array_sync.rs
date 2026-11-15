@@ -631,7 +631,7 @@ fn array_sync_read_into_optional(array: &Array<MemoryStore>) -> Result<(), Box<d
     let expected_opt = expected.into_optional()?;
     let (expected_data, expected_mask) = expected_opt.into_parts();
     assert_eq!(data, expected_data.into_fixed()?.into_vec());
-    assert_eq!(mask, expected_mask.into_vec());
+    assert_eq!(mask, expected_mask.into_bytes().into_vec());
 
     // Verify mask values directly (1 = valid/Some, 0 = None)
     // Row 0: Some(1) Some(2)  None    Some(4)

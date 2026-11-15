@@ -223,6 +223,8 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// For optional data types, wrap the data target in one [`ArrayBytesDecodeIntoTarget::Optional`] layer per optional nesting level (see [`ArrayBytesDecodeIntoTarget::with_optional_mask`]).
     /// For non-optional data types, convert a fixed view into a target using `.into()`.
     ///
+    /// Implementations must satisfy the target's [output requirements](ArrayBytesDecodeIntoTarget#output-requirements).
+    ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded representation does not match the number of elements in the output target.
     fn decode_into(

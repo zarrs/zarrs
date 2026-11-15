@@ -76,7 +76,9 @@ use crate::array::{
     ArrayBytes, ArrayIndices, ArraySubset, ArraySubsetTraits, CowBytes, DataType, Indexer,
     IndexerError,
 };
-use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3, CodecTraitsV3};
+use zarrs_codec::{
+    ArrayBytesMask, ArrayBytesOffsets, Codec, CodecError, CodecPluginV3, CodecTraitsV3,
+};
 use zarrs_metadata::DataTypeSize;
 pub use zarrs_metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
@@ -260,6 +262,8 @@ pub(crate) fn apply_permutation<'a>(
             order_with_bytes.push(permutation.len());
             let mask = transpose_array(&order_with_bytes, input_shape, 1, optional_bytes.mask())
                 .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
+            // SAFETY: permutation preserves the source mask's values
+            let mask = unsafe { ArrayBytesMask::new_unchecked(mask) };
             Ok(data.with_optional_mask(mask))
         }
         (_, _) => Err(CodecError::Other(
@@ -388,7 +392,7 @@ mod tests {
     fn apply_permutation_optional() {
         // Shape [2, 3], row-major: [[0, 1, 2], [3, 4, 5]], elements 1 and 5 are null
         let data = ArrayBytes::new_flen((0u8..6).collect::<Vec<u8>>());
-        let mask = vec![1u8, 0, 1, 1, 1, 0];
+        let mask = vec![true, false, true, true, true, false];
         let original = data.with_optional_mask(mask);
         let data_type = data_type::uint8().to_optional();
 

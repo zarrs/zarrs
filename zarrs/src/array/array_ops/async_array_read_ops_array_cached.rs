@@ -192,7 +192,7 @@ where
         },
     )
     .await?;
-    // SAFETY: the chunks cover the array subset, so every element has been written
+    // SAFETY: decoding covers the array subset and satisfies the target's output requirements
     Ok(unsafe { buffers.into_array_bytes() }.into())
 }
 

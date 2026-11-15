@@ -134,7 +134,7 @@ where
             )?;
             drop(buffers_target);
             if let Some(buffers) = buffers {
-                // SAFETY: the chunks cover the array subset, so every element has been written
+                // SAFETY: decoding covers the array subset and satisfies the target's output requirements
                 let bytes = unsafe { buffers.into_array_bytes() };
                 decode_into_array_bytes_target(&bytes, output_target)?;
             }

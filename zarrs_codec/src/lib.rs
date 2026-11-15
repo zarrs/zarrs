@@ -65,12 +65,12 @@ pub use array_bytes_decode_into_input::{ArrayBytesDecodeIntoInput, BytesDecodeSo
 
 mod array_bytes;
 pub use array_bytes::{
-    ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOffsetsCreateError,
-    ArrayBytesOffsetsElement, ArrayBytesOffsetsIter, ArrayBytesOffsetsOutOfBoundsError,
-    ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice, ArrayBytesOptional,
-    ArrayBytesVariableLength, CowBytes, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
-    ExpectedVariableLengthBytesError, copy_fill_value_into, decode_into_array_bytes_target,
-    update_array_bytes,
+    ArrayBytes, ArrayBytesError, ArrayBytesMask, ArrayBytesMaskCreateError, ArrayBytesOffsets,
+    ArrayBytesOffsetsCreateError, ArrayBytesOffsetsElement, ArrayBytesOffsetsIter,
+    ArrayBytesOffsetsOutOfBoundsError, ArrayBytesOffsetsRangesIter, ArrayBytesOffsetsSlice,
+    ArrayBytesOptional, ArrayBytesVariableLength, CowBytes, ExpectedFixedLengthBytesError,
+    ExpectedOptionalBytesError, ExpectedVariableLengthBytesError, copy_fill_value_into,
+    decode_into_array_bytes_target, update_array_bytes,
 };
 
 mod byte_interval_partial_decoder;
@@ -103,6 +103,12 @@ use zarrs_plugin::{
 ///
 /// This enum mirrors the structure of [`ArrayBytes`] to support decoding fixed-length
 /// and optional data types into preallocated views.
+///
+/// # Output requirements
+///
+/// A successful decode must initialize every element of the target, including all optional masks.
+/// Mask bytes must use the representation defined by [`ArrayBytesMask`]. Callers may rely on this
+/// contract to adopt decoded masks without checking them again.
 // #[non_exhaustive]
 pub enum ArrayBytesDecodeIntoTarget<'a> {
     /// Target for non-optional (fixed-length) data.
@@ -919,6 +925,9 @@ pub enum CodecError {
     /// Variable length array bytes offsets are out of bounds.
     #[error(transparent)]
     ArrayBytesOffsetsOutOfBounds(#[from] ArrayBytesOffsetsOutOfBoundsError),
+    /// An optional mask value is not 0 or 1.
+    #[error(transparent)]
+    ArrayBytesMaskCreate(#[from] ArrayBytesMaskCreateError),
     /// An incompatible fill value error
     #[error(transparent)]
     DataTypeFillValueError(#[from] DataTypeFillValueError),
