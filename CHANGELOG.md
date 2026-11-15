@@ -213,6 +213,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Convert endianness while copying borrowed or shared bytes into strided output views with regions of at least 256 bytes, rather than into a temporary buffer
 - Return an error rather than panicking if a decoded shape's element count or byte size overflows
 - Reject short decoded byte ranges in synchronous and asynchronous partial decoding
+- Cache data type codec support when binding, and re-export `BytesDataTypeTraitsArc`
 
 #### `blosc`
 - Decode directly into preallocated output on native and WebAssembly backends

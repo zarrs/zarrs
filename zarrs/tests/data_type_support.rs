@@ -2,9 +2,16 @@
 
 use std::any::Any;
 use std::borrow::Cow;
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs::array::data_type;
+use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs::array::codec::BytesCodec;
+use zarrs::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArraySubset, data_type};
+use zarrs_codec::{
+    ArrayBytesDecodeIntoInput, CodecOptions, CodecSpecificOptions, ComputeResources,
+    UnboundArrayToBytesCodecTraits,
+};
 use zarrs_data_type::codec_traits::bytes::{
     BytesCodecEndiannessMissingError, BytesDataTypeExt, BytesDataTypePlugin, BytesDataTypeTraits,
 };
@@ -137,4 +144,56 @@ fn unsupported_arc_lookup_returns_an_error() {
     } = dtype.codec_bytes_arc().unwrap_err();
     assert_eq!(data_type, dtype);
     assert_eq!(codec_name, "Bytes");
+}
+
+#[test]
+fn bound_custom_support_decodes_into_output_views() {
+    let codec = BytesCodec::little()
+        .with_context(
+            DataType::new(Custom { mask: 0xA5 }),
+            None,
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+    let shape = [NonZeroU64::new(2).unwrap(); 2];
+    let input = [0, 1, 2, 3, 4, 5, 6, 7];
+    let options = CodecOptions::default();
+    let resources = ComputeResources::default();
+    let encoded = codec
+        .encode(
+            ArrayBytes::new_flen(input.to_vec()),
+            &shape,
+            &options,
+            &resources,
+        )
+        .unwrap();
+    assert_eq!(encoded.as_ref(), input.map(|byte| byte ^ 0xA5));
+    let mut output = [0xCC; 16];
+    {
+        // SAFETY: this is the only view of output and is used synchronously.
+        let view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut output),
+                2,
+                &[2, 4],
+                ArraySubset::new_with_shape([2, 2]),
+            )
+        }
+        .unwrap();
+        codec
+            .decode_into(
+                ArrayBytesDecodeIntoInput::Bytes(encoded),
+                &shape,
+                &mut view.into(),
+                &options,
+                &resources,
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        output,
+        [
+            0, 1, 2, 3, 0xCC, 0xCC, 0xCC, 0xCC, 4, 5, 6, 7, 0xCC, 0xCC, 0xCC, 0xCC
+        ]
+    );
 }
