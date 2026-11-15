@@ -137,6 +137,11 @@ required-features = ["filesystem", "ndarray"]
 doc-scrape-examples = true
 
 [[example]]
+name = "array_caching"
+required-features = ["gzip"]
+doc-scrape-examples = true
+
+[[example]]
 name = "array_write_read_ndarray"
 required-features = ["filesystem", "ndarray"]
 doc-scrape-examples = true
