@@ -8,7 +8,7 @@ use thread_local::ThreadLocal;
 
 use super::{
     Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits, ChunkCacheType,
-    ChunkIndices, atomic,
+    ChunkIndices, Indexer, atomic,
 };
 
 type Cache<CT> = moka::sync::Cache<ChunkIndices, CT>;
@@ -21,6 +21,15 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for Cache<CT> {
 
     fn remove(&self, chunk_indices: &[u64]) -> bool {
         let removed = self.remove(chunk_indices).is_some();
+        self.run_pending_tasks();
+        removed
+    }
+
+    fn remove_many(&self, indexer: &dyn Indexer) -> usize {
+        let removed = indexer
+            .iter_indices()
+            .filter(|chunk_indices| self.remove(chunk_indices.as_slice()).is_some())
+            .count();
         self.run_pending_tasks();
         removed
     }

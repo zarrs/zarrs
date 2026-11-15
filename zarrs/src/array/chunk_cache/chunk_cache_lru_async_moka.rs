@@ -3,7 +3,7 @@ use moka::policy::EvictionPolicy;
 
 use super::{
     Arc, ArrayError, AsyncCacheTraits, CacheChunkLimitTraits, CacheSizeLimitTraits, ChunkCacheType,
-    ChunkIndices, Future,
+    ChunkIndices, Future, Indexer,
 };
 
 type Cache<CT> = moka::future::Cache<ChunkIndices, CT>;
@@ -18,6 +18,19 @@ impl<CT: ChunkCacheType> AsyncCacheTraits<CT> for Cache<CT> {
         let removed = moka::future::Cache::remove(self, chunk_indices)
             .await
             .is_some();
+        self.run_pending_tasks().await;
+        removed
+    }
+
+    async fn remove_many(&self, indexer: &dyn Indexer) -> usize {
+        let mut removed = 0;
+        for chunk_indices in indexer.iter_indices() {
+            removed += usize::from(
+                moka::future::Cache::remove(self, chunk_indices.as_slice())
+                    .await
+                    .is_some(),
+            );
+        }
         self.run_pending_tasks().await;
         removed
     }
