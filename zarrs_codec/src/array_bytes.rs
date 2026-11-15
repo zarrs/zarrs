@@ -304,7 +304,9 @@ impl<'a> ArrayBytes<'a> {
     /// Validate that the array has a valid encoding.
     ///
     /// For a fixed-length array, check it matches the expected size.
-    /// For a variable-length array, check that the offsets are monotonically increasing and the largest offset is equal to the array length.
+    /// For a variable-length array, check that there is one more offset than elements and the last offset is equal to the length of the bytes.
+    /// The offsets are monotonically increasing by construction, so this does not iterate over them.
+    /// For an optional array, check that the mask has one byte per element, each 0 or 1, and validate the inner array.
     ///
     /// # Errors
     /// Returns an error if the array is not valid.
@@ -466,23 +468,16 @@ fn validate_bytes_flen(bytes: &CowBytes, array_size: usize) -> Result<(), Invali
 }
 
 /// Validate variable length array bytes for an array with `num_elements`.
+///
+/// The offsets are monotonically increasing (an invariant of [`ArrayBytesOffsets`]), and the last does not exceed the length of the bytes (an invariant of [`ArrayBytesVariableLength`]).
+/// So every offset is within the bytes, and only the number of offsets and the last offset need checking.
 fn validate_bytes_vlen(
     bytes: &CowBytes,
     offsets: &ArrayBytesOffsets,
     num_elements: u64,
 ) -> Result<(), CodecError> {
-    if offsets.len() as u64 != num_elements + 1 {
-        return Err(CodecError::InvalidVariableSizedArrayOffsets);
-    }
-    let len = bytes.len();
-    let mut offset_last = 0;
-    for offset in offsets {
-        if offset < offset_last || offset > len {
-            return Err(CodecError::InvalidVariableSizedArrayOffsets);
-        }
-        offset_last = offset;
-    }
-    if offset_last == len {
+    debug_assert!(offsets.as_slice().iter().is_sorted() && offsets.last() <= bytes.len());
+    if offsets.len() as u64 == num_elements + 1 && offsets.last() == bytes.len() {
         Ok(())
     } else {
         Err(CodecError::InvalidVariableSizedArrayOffsets)
@@ -1058,6 +1053,19 @@ mod tests {
             extract_elements(&[], &empty_subset, &[3, 4], 2).unwrap(),
             Vec::<u8>::new()
         );
+    }
+
+    #[test]
+    fn validate_bytes_vlen_checks_count_and_last_offset() {
+        let bytes = CowBytes::from(b"abcd".to_vec());
+        let offsets = ArrayBytesOffsets::new(vec![0u32, 1, 4]).unwrap();
+        assert!(validate_bytes_vlen(&bytes, &offsets, 2).is_ok());
+        // The wrong number of elements
+        assert!(validate_bytes_vlen(&bytes, &offsets, 1).is_err());
+        assert!(validate_bytes_vlen(&bytes, &offsets, 3).is_err());
+        // Trailing bytes after the last element
+        let offsets = ArrayBytesOffsets::new(vec![0u32, 1, 3]).unwrap();
+        assert!(validate_bytes_vlen(&bytes, &offsets, 2).is_err());
     }
 
     #[test]

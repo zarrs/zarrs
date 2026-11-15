@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Copy small contiguous regions and elements directly when extracting array subsets and writing or filling output views
   - `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` map ascending positions by stepping through the contiguous regions of the view, rather than unravelling each position
   - `ArrayBytes::extract_array_subset` copies the contiguous runs of a subset into an output of the subset size without boxed iterators, rather than first collecting the runs
+  - `ArrayBytes::validate` checks the number of offsets and the last offset of variable length bytes, rather than iterating over the offsets, which are monotonically increasing and within the bytes by construction
   - Compute the contiguous regions of `ArrayBytesFixedDisjointView` when used, without allocating, rather than when creating and subdividing views
   - Reserve capacity for storage-backed partial decoding, mutex-backed decoding, and fallible output-shape conversions
   - Box the private array subsets in `SubsetOutOfBoundsError` to keep codec errors small
