@@ -260,7 +260,7 @@ pub trait DataTypeTraitsV2 {
 /// Note that codecs that act on numerical data typically expect the data to be in native endianness.
 ///
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
-pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
+pub trait DataTypeTraits: Any + ExtensionName + Debug + MaybeSend + MaybeSync {
     /// The configuration of the data type.
     fn configuration(&self, version: ZarrVersion) -> Configuration;
 

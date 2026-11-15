@@ -257,7 +257,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Data types
 
-`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): `Debug` trait bounds; in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): `Any`/`Debug` trait bounds; in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 - Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification
