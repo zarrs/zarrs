@@ -11,7 +11,7 @@ use super::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder, SyncChunkCacheType,
 };
-use crate::array::{ArrayError, ArrayIndices};
+use crate::array::{ArrayError, ArrayIndices, Indexer};
 
 type ChunkIndices = ArrayIndices;
 
@@ -19,6 +19,14 @@ trait CacheTraits<CT: ChunkCacheType> {
     fn len(&self) -> usize;
 
     fn remove(&self, chunk_indices: &[u64]) -> bool;
+
+    /// Remove the entries at the indices of `indexer`, returning the number removed.
+    fn remove_many(&self, indexer: &dyn Indexer) -> usize {
+        indexer
+            .iter_indices()
+            .filter(|chunk_indices| self.remove(chunk_indices))
+            .count()
+    }
 
     fn clear(&self) -> usize;
 
@@ -44,6 +52,17 @@ trait AsyncCacheTraits<CT: ChunkCacheType> {
     fn len(&self) -> impl Future<Output = usize>;
 
     fn remove(&self, chunk_indices: &[u64]) -> impl Future<Output = bool>;
+
+    /// Remove the entries at the indices of `indexer`, returning the number removed.
+    fn remove_many(&self, indexer: &dyn Indexer) -> impl Future<Output = usize> {
+        async move {
+            let mut removed = 0;
+            for chunk_indices in indexer.iter_indices() {
+                removed += usize::from(self.remove(&chunk_indices).await);
+            }
+            removed
+        }
+    }
 
     fn clear(&self) -> impl Future<Output = usize>;
 
@@ -128,6 +147,7 @@ impl<CT: SyncChunkCacheType> ChunkCacheLruSizeLimitThreadLocal<CT> {
     }
 }
 
+/// The [`ChunkCache`] methods of an LRU cache.
 macro_rules! impl_ChunkCacheLruCommon {
     () => {
         type Value = CT;
@@ -145,6 +165,10 @@ macro_rules! impl_ChunkCacheLruCommon {
 
         fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
             CacheTraits::remove(&self.cache, chunk_indices)
+        }
+
+        fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
+            CacheTraits::remove_many(&self.cache, chunks)
         }
 
         fn len(&self) -> usize {
@@ -206,6 +230,7 @@ impl<CT: AsyncChunkCacheType> AsyncChunkCacheLruSizeLimit<CT> {
 }
 
 #[cfg(feature = "async")]
+/// The [`AsyncChunkCache`] methods of an LRU cache.
 macro_rules! impl_AsyncChunkCacheLruCommon {
     () => {
         type Value = CT;
@@ -223,6 +248,10 @@ macro_rules! impl_AsyncChunkCacheLruCommon {
 
         async fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
             AsyncCacheTraits::remove(&self.cache, chunk_indices).await
+        }
+
+        async fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
+            AsyncCacheTraits::remove_many(&self.cache, chunks).await
         }
 
         async fn len(&self) -> usize {
