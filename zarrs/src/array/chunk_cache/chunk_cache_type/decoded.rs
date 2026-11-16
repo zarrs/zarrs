@@ -100,45 +100,48 @@ impl ChunkCacheType for ChunkCacheTypeDecoded {
 }
 
 /// Wrap already-decoded chunk bytes in a partial decoder.
+///
+/// `chunk_shape` must come from [`validate_chunk_indices`].
 fn cached_partial_decoder<TStorage>(
     array: &Array<TStorage>,
     bytes: ChunkCacheTypeDecoded,
-    chunk_indices: &[u64],
-) -> Result<CachedArrayBytesPartialDecoder, ArrayError>
+    chunk_shape: ChunkShape,
+) -> CachedArrayBytesPartialDecoder
 where
     TStorage: ?Sized + 'static,
 {
-    Ok(CachedArrayBytesPartialDecoder {
+    CachedArrayBytesPartialDecoder {
         bytes,
-        shape: validate_chunk_indices(array, chunk_indices)?,
+        shape: chunk_shape,
         data_type: array.data_type().clone(),
         fill_value: array.fill_value().clone(),
-    })
+    }
 }
 
 /// Extract a chunk subset from already-decoded chunk bytes, or from the fill value if absent.
+///
+/// `chunk_shape` must come from [`validate_chunk_indices`].
 fn cached_chunk_subset_bytes<TStorage>(
     array: &Array<TStorage>,
     chunk: ChunkCacheTypeDecoded,
-    chunk_indices: &[u64],
+    chunk_shape: &ChunkShape,
     indexer: &dyn Indexer,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + 'static,
 {
-    let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
     if let Some(chunk) = chunk {
         Ok(chunk
             .extract_array_subset(
                 indexer,
-                bytemuck::must_cast_slice(&chunk_shape),
+                bytemuck::must_cast_slice(chunk_shape),
                 array.data_type(),
             )?
             .into_owned()
             .into())
     } else {
         indexer
-            .validate(bytemuck::must_cast_slice(&chunk_shape))
+            .validate(bytemuck::must_cast_slice(chunk_shape))
             .map_err(CodecError::from)?;
         fill_value_bytes(array, indexer.len())
     }
@@ -252,13 +255,9 @@ impl SealedSync for ChunkCacheTypeDecoded {
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
-        let bytes =
-            Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options, resources)?;
-        Ok(Arc::new(cached_partial_decoder(
-            array,
-            bytes,
-            chunk_indices,
-        )?))
+        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+        let bytes = retrieve_decoded(cache, array, chunk_indices, options, resources)?;
+        Ok(Arc::new(cached_partial_decoder(array, bytes, chunk_shape)))
     }
 
     fn retrieve_chunk_bytes_if_exists<TStorage, C>(
@@ -288,9 +287,9 @@ impl SealedSync for ChunkCacheTypeDecoded {
         TStorage: ?Sized + ReadableStorageTraits + 'static,
         C: ChunkCache<Value = Self> + ?Sized,
     {
-        let chunk =
-            Self::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options, resources)?;
-        cached_chunk_subset_bytes(array, chunk, chunk_indices, indexer)
+        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+        let chunk = retrieve_decoded(cache, array, chunk_indices, options, resources)?;
+        cached_chunk_subset_bytes(array, chunk, &chunk_shape, indexer)
     }
 
     fn retrieve_chunk_into<TStorage, C>(
@@ -353,19 +352,10 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
         C: AsyncChunkCache<Value = Self> + ?Sized,
     {
-        let bytes = Self::async_retrieve_chunk_bytes_if_exists(
-            cache,
-            array,
-            chunk_indices,
-            options,
-            resources,
-        )
-        .await?;
-        let decoder = SyncPartialDecoderAsAsync(Arc::new(cached_partial_decoder(
-            array,
-            bytes,
-            chunk_indices,
-        )?));
+        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+        let bytes = async_retrieve_decoded(cache, array, chunk_indices, options, resources).await?;
+        let decoder =
+            SyncPartialDecoderAsAsync(Arc::new(cached_partial_decoder(array, bytes, chunk_shape)));
         Ok(Arc::new(decoder) as Arc<dyn AsyncArrayPartialDecoderTraits>)
     }
 
@@ -396,15 +386,9 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
         C: AsyncChunkCache<Value = Self> + ?Sized,
     {
-        let chunk = Self::async_retrieve_chunk_bytes_if_exists(
-            cache,
-            array,
-            chunk_indices,
-            options,
-            resources,
-        )
-        .await?;
-        cached_chunk_subset_bytes(array, chunk, chunk_indices, indexer)
+        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+        let chunk = async_retrieve_decoded(cache, array, chunk_indices, options, resources).await?;
+        cached_chunk_subset_bytes(array, chunk, &chunk_shape, indexer)
     }
 
     async fn async_retrieve_chunk_into<TStorage, C>(

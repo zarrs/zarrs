@@ -69,7 +69,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         let shape = chunk_shape_to_array_shape(&validate_chunk_indices(array, chunk_indices)?);
-        let decoder = Self::partial_decoder(cache, array, chunk_indices, options, resources)?;
+        let decoder = retrieve_partial_decoder(cache, array, chunk_indices, options, resources)?;
         if decoder.exists()? {
             Ok(Some(
                 decoder

@@ -75,7 +75,7 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
     {
         let shape = chunk_shape_to_array_shape(&validate_chunk_indices(array, chunk_indices)?);
         let decoder =
-            Self::async_partial_decoder(cache, array, chunk_indices, options, resources).await?;
+            async_retrieve_partial_decoder(cache, array, chunk_indices, options, resources).await?;
         if decoder.exists().await? {
             Ok(Some(
                 decoder
