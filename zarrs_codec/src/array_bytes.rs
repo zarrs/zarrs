@@ -4,6 +4,7 @@ use std::ops::IndexMut;
 use derive_more::derive::Display;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_chunk_grid::iterators::ContiguousLinearisedIndices;
 use zarrs_chunk_grid::{ArraySubsetTraits, ravel_indices};
 use zarrs_data_type::{DataTypeFillValueError, OptionalDataType};
 use zarrs_metadata::DataTypeSize;
@@ -351,6 +352,7 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns a [`CodecError::IncompatibleIndexer`] if the `indexer` has an incompatible dimensionality with, or is out-of-bounds of, `array_shape`.
+    /// Returns another [`CodecError`] if `self` is incompatible with `data_type`.
     ///
     /// # Panics
     /// Panics if indices in the subset exceed [`usize::MAX`].
@@ -360,6 +362,11 @@ impl<'a> ArrayBytes<'a> {
         array_shape: &[u64],
         data_type: &DataType,
     ) -> Result<ArrayBytes<'_>, CodecError> {
+        if let Some(subset) = indexer.as_array_subset() {
+            // The runs are computed once, and shared by the data and mask of optional bytes
+            let runs = subset.contiguous_linearised_indices(array_shape)?;
+            return self.extract_runs(&runs, data_type);
+        }
         match self {
             ArrayBytes::Variable(ArrayBytesVariableLength { bytes, offsets }) => {
                 let num_elements = indexer.len();
@@ -413,6 +420,206 @@ impl<'a> ArrayBytes<'a> {
             }
         }
     }
+
+    /// Extract the elements in the contiguous `runs` of element indices, in order.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `self` is incompatible with `data_type` or `runs` address elements out of bounds.
+    ///
+    /// # Panics
+    /// Panics if indices or byte lengths exceed [`usize::MAX`].
+    pub fn extract_runs(
+        &self,
+        runs: &ContiguousLinearisedIndices,
+        data_type: &DataType,
+    ) -> Result<ArrayBytes<'static>, CodecError> {
+        match self {
+            ArrayBytes::Fixed(bytes) => {
+                if data_type.is_optional() {
+                    return Err(ExpectedOptionalBytesError.into());
+                }
+                let size = data_type
+                    .fixed_size()
+                    .ok_or(ExpectedVariableLengthBytesError)?;
+                Ok(ArrayBytes::new_flen(extract_runs_fixed(bytes, runs, size)?))
+            }
+            ArrayBytes::Variable(variable) => {
+                if data_type.is_optional() {
+                    return Err(ExpectedOptionalBytesError.into());
+                }
+                if data_type.is_fixed() {
+                    return Err(ExpectedFixedLengthBytesError.into());
+                }
+                Ok(ArrayBytes::Variable(extract_runs_variable(
+                    variable.bytes(),
+                    variable.offsets(),
+                    runs,
+                )?))
+            }
+            ArrayBytes::Optional(optional) => {
+                let Some(opt) = data_type.as_optional() else {
+                    return Err(CodecError::Other(
+                        "Optional array bytes requires an optional data type".to_string(),
+                    ));
+                };
+                let data = optional.data().extract_runs(runs, opt.data_type())?;
+                let mask = extract_runs_fixed(optional.mask(), runs, 1)?;
+                // SAFETY: the bytes are extracted from a mask of 0 or 1
+                let mask = unsafe { ArrayBytesMask::new_unchecked(mask) };
+                Ok(data.with_optional_mask(mask))
+            }
+        }
+    }
+}
+
+/// Extract variable-length elements in `runs` into `extracted`, constructing `O`-width offsets directly.
+///
+/// Returns [`None`] if a run addresses elements beyond `offsets` or `bytes`, or an extracted offset exceeds `O`.
+fn extract_vlen_runs<O: ArrayBytesOffsetsElement + TryFrom<usize>>(
+    bytes: &[u8],
+    offsets: &ArrayBytesOffsets,
+    runs: &ContiguousLinearisedIndices,
+    run_elements: usize,
+    num_out: usize,
+    extracted: &mut Vec<u8>,
+) -> Option<ArrayBytesOffsets> {
+    let mut out_offsets = Vec::with_capacity(num_out.saturating_add(1));
+    for (index, _) in runs {
+        let start = usize::try_from(index).ok()?;
+        let end = start.checked_add(run_elements)?;
+        let first_offset = offsets.get(start)?;
+        let source = bytes.get(first_offset..offsets.get(end)?)?;
+        let base = extracted.len();
+        for element in start..end {
+            // Offsets increase, so the offset within the source is not negative.
+            // It is at most `source.len()`, so adding it to `base` (both at most `isize::MAX`) does not overflow.
+            let offset = base + (offsets.get(element)? - first_offset);
+            out_offsets.push(O::try_from(offset).ok()?);
+        }
+        extracted.extend_from_slice(source);
+    }
+    out_offsets.push(O::try_from(extracted.len()).ok()?);
+    // SAFETY: `out_offsets` is non-empty and monotonically increasing, since each run continues from the end of the previous run, and its offsets are from `usize`.
+    Some(unsafe { ArrayBytesOffsets::new_unchecked(out_offsets) })
+}
+
+/// Extract variable-length elements in `runs` from `bytes` and `offsets`.
+fn extract_runs_variable(
+    bytes: &[u8],
+    offsets: &ArrayBytesOffsets,
+    runs: &ContiguousLinearisedIndices,
+) -> Result<ArrayBytesVariableLength<'static>, CodecError> {
+    // Offsets are non-empty
+    let num_elements = offsets.len() - 1;
+    let run_elements = match runs.iter().next_back() {
+        None => 0,
+        Some((index, run_elements)) => {
+            // Runs are ordered, so the last run bounds the runs
+            if index
+                .checked_add(run_elements)
+                .is_none_or(|end| end > num_elements as u64)
+            {
+                return Err(CodecError::InvalidVariableSizedArrayOffsets);
+            }
+            // The run is within the offsets, so its length fits in `usize`
+            usize::try_from(run_elements).unwrap()
+        }
+    };
+    // Runs that repeat elements can select more elements than there are
+    let num_out = runs
+        .len()
+        .checked_mul(run_elements)
+        .filter(|&num_out| num_out <= num_elements)
+        .ok_or_else(|| {
+            IndexerError::IncompatibleLength(
+                (runs.len() as u64).saturating_mul(run_elements as u64),
+                num_elements as u64,
+            )
+        })?;
+    // The extracted byte length, unless runs repeat elements
+    let bytes_len = if num_out == num_elements {
+        // The runs cover as many elements as the bytes, e.g. reordering all elements
+        offsets.last() - offsets.get(0).unwrap_or(0)
+    } else {
+        runs.iter()
+            .try_fold(0usize, |bytes_len, (index, _)| {
+                let start = usize::try_from(index).ok()?;
+                let len = offsets.get(start.checked_add(run_elements)?)? - offsets.get(start)?;
+                bytes_len.checked_add(len)
+            })
+            .ok_or(CodecError::InvalidVariableSizedArrayOffsets)?
+    };
+    let mut extracted = Vec::with_capacity(bytes_len);
+    // The offsets are u64 if the extracted bytes exceed u32, which `bytes_len` underestimates if runs repeat elements
+    let out_offsets = u32::try_from(bytes_len)
+        .ok()
+        .and_then(|_| {
+            extract_vlen_runs::<u32>(bytes, offsets, runs, run_elements, num_out, &mut extracted)
+        })
+        .or_else(|| {
+            extracted.clear();
+            extract_vlen_runs::<u64>(bytes, offsets, runs, run_elements, num_out, &mut extracted)
+        })
+        .ok_or(CodecError::InvalidVariableSizedArrayOffsets)?;
+    // SAFETY: the last offset is `extracted.len()`.
+    Ok(unsafe { ArrayBytesVariableLength::new_unchecked(extracted, out_offsets) })
+}
+
+/// Extract fixed-length elements of `element_size` bytes in `runs` from `bytes`.
+fn extract_runs_fixed(
+    bytes: &[u8],
+    runs: &ContiguousLinearisedIndices,
+    element_size: usize,
+) -> Result<Vec<u8>, CodecError> {
+    let element_size = element_size as u64;
+    // Runs are ordered and have equal lengths, so the last run bounds all selected bytes.
+    // Validate it before allocating the output, which may be large even for truncated input.
+    // The offsets are checked so that an overflowing end cannot wrap within `bytes`.
+    if let Some((index, elements)) = runs.iter().next_back() {
+        let end = index
+            .checked_add(elements)
+            .and_then(|end| end.checked_mul(element_size));
+        if end.is_none_or(|end| end > bytes.len() as u64) {
+            let range = index.saturating_mul(element_size)..end.unwrap_or(u64::MAX);
+            return Err(
+                InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64).into(),
+            );
+        }
+    }
+    if runs.is_empty() || element_size == 0 {
+        return Ok(Vec::new());
+    }
+    // Runs that repeat elements can select more elements than `bytes` holds
+    let num_available = bytes.len() as u64 / element_size;
+    let num_selected = (runs.len() as u64)
+        .checked_mul(runs.contiguous_elements())
+        .filter(|&num_selected| num_selected <= num_available)
+        .ok_or_else(|| {
+            IndexerError::IncompatibleLength(
+                (runs.len() as u64).saturating_mul(runs.contiguous_elements()),
+                num_available,
+            )
+        })?;
+    // The selected bytes are at most `bytes.len()`, so their lengths do not overflow
+    let run_len = usize::try_from(runs.contiguous_elements() * element_size).unwrap();
+    let mut out = Vec::with_capacity(usize::try_from(num_selected * element_size).unwrap());
+    with_small_len!(run_len, |run_len| {
+        for (index, _) in runs {
+            let start = index.checked_mul(element_size);
+            let Some(run) = start
+                .and_then(|start| usize::try_from(start).ok())
+                .and_then(|start| bytes.get(start..)?.get(..run_len))
+            else {
+                let start = start.unwrap_or(u64::MAX);
+                let range = start..start.saturating_add(run_len as u64);
+                return Err(
+                    InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64).into(),
+                );
+            };
+            out.extend_from_slice(run);
+        }
+    });
+    Ok(out)
 }
 
 /// The bytes of the elements of `indexer` in `bytes`, an array of `array_shape` with elements of `element_size` bytes.
@@ -422,38 +629,12 @@ fn extract_elements(
     array_shape: &[u64],
     element_size: usize,
 ) -> Result<Vec<u8>, CodecError> {
-    let element_size = element_size as u64;
     let bytes = if let Some(subset) = indexer.as_array_subset() {
         // The contiguous runs of an array subset are iterated without boxing an iterator, and copied into an output of the known size
         let runs = subset.contiguous_linearised_indices(array_shape)?;
-        // Runs are ordered and have equal lengths, so the last run bounds all selected bytes.
-        // Validate it before allocating the output, which may be large even for truncated input.
-        // The offsets are checked so that an overflowing end cannot wrap within `bytes`.
-        if let Some((index, elements)) = runs.iter().next_back() {
-            let end = index
-                .checked_add(elements)
-                .and_then(|end| end.checked_mul(element_size));
-            if end.is_none_or(|end| end > bytes.len() as u64) {
-                let range = index.saturating_mul(element_size)..end.unwrap_or(u64::MAX);
-                return Err(
-                    InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64).into(),
-                );
-            }
-        }
-        // The selected bytes are within `bytes`, so neither their offsets nor their total size overflow
-        let mut out =
-            Vec::with_capacity(usize::try_from(subset.num_elements() * element_size).unwrap());
-        let run_len = usize::try_from(runs.contiguous_elements() * element_size).unwrap();
-        with_small_len!(run_len, |run_len| {
-            for (index, _) in &runs {
-                let start = usize::try_from(index * element_size).unwrap();
-                out.extend_from_slice(&bytes[start..start + run_len]);
-            }
-        });
-        out
+        extract_runs_fixed(bytes, &runs, element_size)?
     } else {
-        let byte_ranges = indexer
-            .iter_contiguous_byte_ranges(array_shape, usize::try_from(element_size).unwrap())?;
+        let byte_ranges = indexer.iter_contiguous_byte_ranges(array_shape, element_size)?;
         extract_byte_ranges_concat(bytes, byte_ranges)?
     };
     Ok(bytes)
@@ -1395,5 +1576,50 @@ mod tests {
         assert_eq!(result_outer_mask[12], 0);
 
         Ok(())
+    }
+
+    #[test]
+    fn extract_runs_variable_multi_element_runs() {
+        // 3x4 variable-length elements; extracting rows 0..2, cols 1..3 gives two 2-element runs
+        let data = b"aabbbccddddeefffgghhiijjjkkkllll";
+        let lens = [2usize, 3, 2, 4, 2, 3, 2, 2, 2, 3, 3, 4];
+        let mut raw_offsets = vec![0u64];
+        for len in lens {
+            raw_offsets.push(raw_offsets.last().unwrap() + len as u64);
+        }
+        let offsets = ArrayBytesOffsets::new(raw_offsets).unwrap();
+        let subset = ArraySubset::new_with_ranges(&[0..2, 1..3]);
+        let runs = subset.contiguous_linearised_indices(&[3, 4]).unwrap();
+        assert_eq!(runs.contiguous_elements(), 2);
+
+        let extracted = extract_runs_variable(data, &offsets, &runs).unwrap();
+        assert!(extracted.offsets().is_u32());
+        assert_eq!(extracted.bytes().as_ref(), b"bbbccfffgg");
+        assert_eq!(
+            extracted.offsets().iter().collect::<Vec<_>>(),
+            vec![0, 3, 5, 8, 10]
+        );
+
+        let empty_runs = ArraySubset::new_with_ranges(&[0..0, 1..3])
+            .contiguous_linearised_indices(&[3, 4])
+            .unwrap();
+        let empty = extract_runs_variable(data, &offsets, &empty_runs).unwrap();
+        assert!(empty.offsets().is_u32());
+        assert_eq!(empty.bytes().as_ref(), b"");
+        assert_eq!(empty.offsets().iter().collect::<Vec<_>>(), vec![0]);
+
+        let short_offsets = ArrayBytesOffsets::new(vec![0u32, 2, 5, 7, 11, 13]).unwrap();
+        assert!(matches!(
+            extract_runs_variable(&data[..13], &short_offsets, &runs),
+            Err(CodecError::InvalidVariableSizedArrayOffsets)
+        ));
+
+        // Offsets beyond the bytes are an error
+        assert!(matches!(
+            extract_runs_variable(&data[..4], &offsets, &runs),
+            Err(CodecError::InvalidVariableSizedArrayOffsets)
+        ));
+
+        assert_eq!(extract_runs_fixed(&[], &runs, 0).unwrap(), [] as [u8; 0]);
     }
 }

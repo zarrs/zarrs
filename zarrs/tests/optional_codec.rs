@@ -756,3 +756,35 @@ fn optional_array_malformed_fill_value() {
         );
     }
 }
+
+#[test]
+fn extract_runs_rejects_incompatible_data_types() {
+    use zarrs::array::{ArrayBytes, CodecError};
+
+    let runs = ArraySubset::new_with_ranges(&[0..2, 1..3])
+        .contiguous_linearised_indices(&[2, 4])
+        .unwrap();
+    let fixed = ArrayBytes::new_flen(vec![0u8, 1, 2, 3, 4, 5, 6, 7]);
+    let optional = fixed.clone().with_optional_mask(vec![true; 8]);
+    let uint8 = data_type::uint8();
+    let optional_uint8 = data_type::uint8().to_optional();
+
+    assert_eq!(
+        fixed.extract_runs(&runs, &uint8).unwrap(),
+        ArrayBytes::new_flen(vec![1u8, 2, 5, 6])
+    );
+    assert_eq!(
+        optional.extract_runs(&runs, &optional_uint8).unwrap(),
+        ArrayBytes::new_flen(vec![1u8, 2, 5, 6]).with_optional_mask(vec![true; 4])
+    );
+    // Fixed bytes have no mask, so they are not the bytes of an optional data type
+    assert!(matches!(
+        fixed.extract_runs(&runs, &optional_uint8),
+        Err(CodecError::ExpectedOptionalBytes(_))
+    ));
+    assert!(matches!(
+        fixed.extract_runs(&runs, &data_type::string()),
+        Err(CodecError::ExpectedVariableLengthBytes(_))
+    ));
+    assert!(optional.extract_runs(&runs, &uint8).is_err());
+}
