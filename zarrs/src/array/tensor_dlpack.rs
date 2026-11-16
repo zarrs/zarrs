@@ -2,9 +2,8 @@ use std::any::TypeId;
 use std::ffi::c_void;
 
 use dlpark::ffi::{DLDataType, DLDataTypeCode, DLDevice};
-use dlpark::metadata::CopiedSlice;
-use dlpark::tensor::compact_strides;
-use dlpark::{Builder, DlpackFlags, versioned};
+use dlpark::metadata::Dynamic;
+use dlpark::{DlpackFlags, versioned};
 
 use super::element_layout::{ElementLayout, ElementPacking};
 use super::{DataType, Tensor, TensorError};
@@ -93,6 +92,8 @@ fn data_type_to_dlpack(
         DLDataType::scalar(DLDataTypeCode::FLOAT6_E3M2FN, 6)
     } else if type_id == TypeId::of::<dt::Float4E2M1FNDataType>() {
         DLDataType::scalar(DLDataTypeCode::FLOAT4_E2M1FN, 4)
+    } else if type_id == TypeId::of::<dt::ComplexBFloat16DataType>() {
+        DLDataType::scalar(DLDataTypeCode::BCOMPLEX, 32)
     } else if type_id == TypeId::of::<dt::ComplexFloat16DataType>() {
         // `DLPack` complex `bits` is the width of the whole complex number, not one component
         DLDataType::scalar(DLDataTypeCode::COMPLEX, 32)
@@ -106,7 +107,6 @@ fn data_type_to_dlpack(
         DLDataType::scalar(DLDataTypeCode::COMPLEX, 128)
     } else {
         // Unsupported data types include:
-        // - `complex_bfloat16`, which needs a data type code that postdates DLPack 1.3
         // - the complex subfloats, which have no `DLPack` data type code
         // - the variable-sized, time, and raw data types
         return Err(unsupported());
@@ -146,26 +146,11 @@ fn expected_num_bytes(
     usize::try_from(layout.byte_offset.checked_add(elements)?).ok()
 }
 
-/// Convert a tensor shape into `DLPack` shape and row-major compact strides (in elements).
-///
-/// # Errors
-/// Returns [`TensorError::UnsupportedShape`] if a dimension or a stride is not representable as an
-/// [`i64`].
-fn shape_and_strides(shape: &[u64]) -> Result<(Vec<i64>, Vec<i64>), TensorError> {
-    let unsupported = || TensorError::UnsupportedShape(shape.to_vec());
-    let shape = shape
-        .iter()
-        .map(|s| i64::try_from(*s).map_err(|_| unsupported()))
-        .collect::<Result<Vec<i64>, TensorError>>()?;
-    let strides = compact_strides(&shape).map_err(|_| unsupported())?;
-    Ok((shape, strides))
-}
-
 impl Tensor<'static> {
-    /// Convert this tensor into a versioned `DLPack` managed tensor.
+    /// Convert this tensor into a read-only, versioned `DLPack` managed tensor.
     ///
-    /// The tensor is moved into the managed tensor and keeps its data alive. Only the shape and
-    /// strides are copied, not the elements.
+    /// The managed tensor keeps the backing bytes alive. Only the shape and strides are copied,
+    /// not the elements.
     ///
     /// A consumer may hold the data for as long as it likes, so the tensor must be `'static`. Use
     /// [`into_static`](Tensor::into_static) to export borrowed bytes, which copies them.
@@ -186,10 +171,12 @@ impl Tensor<'static> {
     /// let subset = ArraySubset::new_with_shape(vec![1, 2]);
     /// let tensor: Tensor<'static> = array.retrieve_chunks(&subset, &Resources::default())?;
     /// let dlpack = tensor.into_dlpack()?;
+    /// let view = dlpack.validate()?;
     ///
-    /// assert_eq!(dlpack.shape()?, &[2, 4]);
+    /// assert_eq!(view.shape(), &[2, 4]);
+    /// // SAFETY: the export owns enough initialized bytes for eight f32 values and is read-only.
     /// assert_eq!(
-    ///     dlpack.cpu_data_slice::<f32>()?,
+    ///     unsafe { view.cpu_slice::<f32>()? },
     ///     &[0.0, 1.0, -1.0, -1.0, 2.0, 3.0, -1.0, -1.0]
     /// );
     /// # Ok::<_, Box<dyn std::error::Error>>(())
@@ -205,14 +192,15 @@ impl Tensor<'static> {
     /// ```
     pub fn into_dlpack(self) -> Result<versioned::Dlpack, TensorError> {
         let unsupported_shape = self.shape().to_vec();
-        let tensor = Box::new(self);
-        let layout = tensor.layout();
-        let (dtype, flags) = data_type_to_dlpack(tensor.data_type(), layout)?;
-        let (shape, strides) = shape_and_strides(tensor.shape())?;
+        let layout = self.layout();
+        let (dtype, flags) = data_type_to_dlpack(self.data_type(), layout)?;
+        let metadata = Dynamic::compact(self.shape())
+            .prepare()
+            .map_err(|_| TensorError::UnsupportedShape(unsupported_shape.clone()))?;
 
         // The exported tensor must not describe bytes beyond the end of the buffer
-        let expected = expected_num_bytes(tensor.num_elements(), dtype, layout);
-        let actual = tensor.bytes().len();
+        let expected = expected_num_bytes(self.num_elements(), dtype, layout);
+        let actual = self.bytes().len();
         if expected.is_none_or(|expected| expected > actual) {
             return Err(TensorError::InsufficientBytes {
                 expected: expected.unwrap_or(usize::MAX),
@@ -220,23 +208,30 @@ impl Tensor<'static> {
             });
         }
 
-        let data = if tensor.bytes().is_empty() {
+        let (bytes, _, _) = self.into_parts();
+        let data = if bytes.is_empty() {
             std::ptr::null_mut()
         } else {
-            tensor.bytes().as_ptr().cast::<c_void>().cast_mut()
+            bytes.as_ptr().cast::<c_void>().cast_mut()
         };
-        let builder = Builder::new(tensor, CopiedSlice::new(shape, strides));
-        // SAFETY: the boxed tensor owns the bytes at `data` and outlives the managed tensor, which
-        // needs the `'static` tensor. `dtype`/shape/strides/`byte_offset` describe those bytes as a
-        // compact row-major tensor, and there are enough of them for the elements described.
-        let builder = unsafe { builder.data(data) }
-            .dtype(dtype)
-            .device(DLDevice::CPU)
-            .byte_offset(layout.byte_offset);
-        // SAFETY: `data_type_to_dlpack` only returns layout flags and never `IS_COPIED`.
-        unsafe { builder.flags_unchecked(flags) }
-            .try_build()
-            .map_err(|_| TensorError::UnsupportedShape(unsupported_shape))
+        let mut initialized = metadata.initialize(Box::new(bytes));
+        initialized
+            .set_data(data)
+            .set_dtype(dtype)
+            .set_device(DLDevice::CPU)
+            .set_byte_offset(layout.byte_offset);
+        initialized
+            .set_flags(flags | DlpackFlags::READ_ONLY)
+            .expect("export flags never assert IS_COPIED");
+        // SAFETY: the context retains the `'static` bytes at `data` until the managed tensor is
+        // dropped. `dtype`/shape/strides/`byte_offset` describe those bytes as a compact row-major
+        // tensor, and there are enough bytes for its elements. The flags declare shared read-only
+        // storage and any sub-byte padding without asserting exclusive ownership.
+        let dlpack = unsafe { initialized.finish() };
+        dlpack
+            .validate_export()
+            .map_err(|_| TensorError::UnsupportedShape(unsupported_shape))?;
+        Ok(dlpack)
     }
 }
 

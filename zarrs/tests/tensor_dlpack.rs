@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 #![cfg(feature = "dlpack")]
 
-use dlpark::ffi::{DLDataType, DLDataTypeCode};
+use dlpark::ffi::{DLDataType, DLDataTypeCode, DLPackVersion};
 use dlpark::{DlpackFlags, versioned};
 use zarrs::array::{ArrayBuilder, ArraySubset, Resources, Tensor, TensorError, data_type};
 use zarrs_storage::store::MemoryStore;
@@ -40,21 +40,50 @@ fn tensor_borrowed_into_static_dlpack() {
 
     // `into_static` copied the borrowed bytes, so the export outlives them
     drop(bytes);
-    assert_eq!(dlpack.shape().unwrap(), &[2, 2]);
-    assert_eq!(dlpack.cpu_data_slice::<f32>().unwrap(), &elements);
+    let view = dlpack.validate().unwrap();
+    assert_eq!(view.shape(), &[2, 2]);
+    // SAFETY: the read-only export owns the initialized bytes of all four f32 values.
+    assert_eq!(unsafe { view.cpu_slice::<f32>().unwrap() }, &elements);
 }
 
 #[test]
 fn tensor_dlpack_versioned() {
     let dlpack: versioned::Dlpack = test_tensor().into_dlpack().unwrap();
+    let view = dlpack.validate().unwrap();
 
-    assert_eq!(dlpack.shape().unwrap(), &[2, 4]);
-    assert_eq!(dlpack.strides().unwrap().unwrap(), &[4, 1]);
-    assert_eq!(dlpack.num_bytes().unwrap(), 8 * size_of::<f32>());
+    assert_eq!(view.shape(), &[2, 4]);
+    assert_eq!(view.strides().unwrap(), &[4, 1]);
+    assert_eq!(view.num_bytes(), 8 * size_of::<f32>());
+    // SAFETY: the read-only export owns the initialized bytes of all eight f32 values.
     assert_eq!(
-        dlpack.cpu_data_slice::<f32>().unwrap(),
+        unsafe { view.cpu_slice::<f32>().unwrap() },
         &[0.0f32, 1.0, -1.0, -1.0, 2.0, 3.0, -1.0, -1.0]
     );
+}
+
+#[test]
+fn tensor_dlpack_read_only_shared_bytes() {
+    let tensor = Tensor::new(vec![1u8, 2, 3, 4], data_type::uint8(), vec![2, 2]);
+    let shared = tensor.clone();
+    let ptr = tensor.bytes().as_ptr();
+    let mut dlpack = tensor.into_dlpack().unwrap();
+
+    assert_eq!(dlpack.flags(), DlpackFlags::READ_ONLY);
+    assert!(matches!(
+        dlpack.validate_mut(),
+        Err(dlpark::tensor::Error::ReadOnly)
+    ));
+    assert_eq!(dlpack.validate().unwrap().data_ptr().cast::<u8>(), ptr);
+    assert_eq!(shared.bytes(), &[1, 2, 3, 4]);
+    drop(shared);
+
+    std::thread::spawn(move || {
+        let view = dlpack.validate().unwrap();
+        // SAFETY: the read-only export still owns all four initialized bytes after the clone is dropped.
+        assert_eq!(unsafe { view.cpu_slice::<u8>().unwrap() }, &[1, 2, 3, 4]);
+    })
+    .join()
+    .unwrap();
 }
 
 #[test]
@@ -104,6 +133,7 @@ fn tensor_dlpack_data_types() {
         (data_type::float6_e2m3fn(), DLDataTypeCode::FLOAT6_E2M3FN, 6),
         (data_type::float6_e3m2fn(), DLDataTypeCode::FLOAT6_E3M2FN, 6),
         (data_type::float4_e2m1fn(), DLDataTypeCode::FLOAT4_E2M1FN, 4),
+        (data_type::complex_bfloat16(), DLDataTypeCode::BCOMPLEX, 32),
         (data_type::complex_float16(), DLDataTypeCode::COMPLEX, 32),
         (data_type::complex64(), DLDataTypeCode::COMPLEX, 64),
         (data_type::complex_float32(), DLDataTypeCode::COMPLEX, 64),
@@ -117,14 +147,41 @@ fn tensor_dlpack_data_types() {
         let dlpack = tensor
             .into_dlpack()
             .unwrap_or_else(|err| panic!("{data_type} should be supported: {err}"));
-        let dtype = dlpack.tensor().dtype;
+        let dtype = dlpack.validate().unwrap().dtype();
         assert!(
             dtype.matches(DLDataType::scalar(code, bits)),
             "{data_type} mapped to {dtype:?}"
         );
         // The DLPack element size must match the zarrs in-memory element size
         assert_eq!(data_type.fixed_size(), Some(dtype.element_size()));
+        assert!(dlpack.flags().contains(DlpackFlags::READ_ONLY));
+        assert!(!dlpack.flags().contains(DlpackFlags::IS_COPIED));
     }
+}
+
+#[test]
+fn tensor_dlpack_complex_bfloat16() {
+    let bytes: Vec<u8> = [1.25, -2.5, 3.75, 4.0]
+        .into_iter()
+        .flat_map(|value| half::bf16::from_f32(value).to_bits().to_ne_bytes())
+        .collect();
+    let tensor = Tensor::new(bytes.clone(), data_type::complex_bfloat16(), vec![2]);
+    let dlpack = tensor.into_dlpack().unwrap();
+    let view = dlpack.validate().unwrap();
+
+    assert!(
+        dlpack
+            .version()
+            .supports(DLPackVersion { major: 1, minor: 4 })
+    );
+    assert_eq!(
+        view.dtype(),
+        DLDataType::scalar(DLDataTypeCode::BCOMPLEX, 32)
+    );
+    assert_eq!(view.shape(), &[2]);
+    assert_eq!(view.num_bytes(), 8);
+    // SAFETY: the read-only export owns all eight initialized bytes of the two complex values.
+    assert_eq!(unsafe { view.cpu_bytes().unwrap() }, bytes);
 }
 
 #[test]
@@ -132,20 +189,19 @@ fn tensor_dlpack_subbyte_flag() {
     // `zarrs` pads sub-byte elements to a byte, so the padded flag must be set
     let tensor = Tensor::new(vec![0u8; 4], data_type::float4_e2m1fn(), vec![4]);
     let dlpack: versioned::Dlpack = tensor.into_dlpack().unwrap();
-    assert_eq!(dlpack.flags(), DlpackFlags::IS_SUBBYTE_TYPE_PADDED);
+    assert_eq!(
+        dlpack.flags(),
+        DlpackFlags::READ_ONLY | DlpackFlags::IS_SUBBYTE_TYPE_PADDED
+    );
 
     // Byte-sized data types are neither packed nor padded
     let tensor = Tensor::new(vec![0u8; 4], data_type::float8_e4m3(), vec![4]);
     let dlpack: versioned::Dlpack = tensor.into_dlpack().unwrap();
-    assert_eq!(dlpack.flags(), DlpackFlags::empty());
+    assert_eq!(dlpack.flags(), DlpackFlags::READ_ONLY);
 }
 
 #[test]
 fn tensor_dlpack_unsupported_data_type() {
-    // `complex_bfloat16` needs a data type code that postdates DLPack 1.3
-    let tensor = Tensor::new(vec![0u8; 4], data_type::complex_bfloat16(), vec![1]);
-    assert!(tensor.into_dlpack().is_err());
-
     // Complex subfloats have no DLPack data type code
     let tensor = Tensor::new(vec![0u8; 2], data_type::complex_float8_e4m3(), vec![1]);
     assert!(tensor.into_dlpack().is_err());
@@ -159,11 +215,31 @@ fn tensor_dlpack_unsupported_data_type() {
 fn tensor_dlpack_unsupported_shape() {
     // A dimension that does not fit in an i64
     let tensor = Tensor::new(vec![], data_type::uint8(), vec![u64::MAX]);
-    assert!(tensor.into_dlpack().is_err());
+    assert!(matches!(
+        tensor.into_dlpack(),
+        Err(TensorError::UnsupportedShape(_))
+    ));
 
     // A shape whose compact strides overflow an i64
     let tensor = Tensor::new(vec![], data_type::uint8(), vec![2, i64::MAX as u64]);
-    assert!(tensor.into_dlpack().is_err());
+    assert!(matches!(
+        tensor.into_dlpack(),
+        Err(TensorError::UnsupportedShape(_))
+    ));
+}
+
+#[test]
+fn tensor_dlpack_scalar() {
+    let tensor = Tensor::new(vec![42u8], data_type::uint8(), vec![]);
+    let dlpack = tensor.into_dlpack().unwrap();
+    let view = dlpack.validate().unwrap();
+
+    assert!(view.shape().is_empty());
+    assert!(view.strides().is_none());
+    assert_eq!(view.num_elements(), 1);
+    assert_eq!(view.num_bytes(), 1);
+    // SAFETY: the read-only export owns the initialized byte of this scalar.
+    assert_eq!(unsafe { view.cpu_slice::<u8>().unwrap() }, &[42]);
 }
 
 #[test]
@@ -182,7 +258,32 @@ fn tensor_dlpack_insufficient_bytes() {
     let tensor = Tensor::new(vec![0u8; 400], data_type::float32(), vec![100]);
     assert!(tensor.into_dlpack().is_ok());
 
+    // Padded sub-byte elements still need one byte each.
+    let tensor = Tensor::new(vec![0u8; 1], data_type::float4_e2m1fn(), vec![2]);
+    assert!(matches!(
+        tensor.into_dlpack(),
+        Err(TensorError::InsufficientBytes {
+            expected: 2,
+            actual: 1
+        })
+    ));
+
+    // The shape fits in i64, but its byte count overflows.
+    let tensor = Tensor::new(vec![], data_type::float64(), vec![i64::MAX as u64]);
+    assert!(matches!(
+        tensor.into_dlpack(),
+        Err(TensorError::InsufficientBytes {
+            expected: usize::MAX,
+            actual: 0
+        })
+    ));
+
     // A zero element tensor needs no bytes
     let tensor = Tensor::new(vec![], data_type::float32(), vec![0]);
-    assert!(tensor.into_dlpack().is_ok());
+    let dlpack = tensor.into_dlpack().unwrap();
+    let view = dlpack.validate().unwrap();
+    assert_eq!(view.shape(), &[0]);
+    assert_eq!(view.num_elements(), 0);
+    assert_eq!(view.num_bytes(), 0);
+    assert!(view.data_ptr().is_null());
 }

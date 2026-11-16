@@ -102,7 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tensors and bytes
   - **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library, removing copies on some array `retrieve_`/`store_` paths with select stores and codecs
   - **Breaking**: `Tensor` has a lifetime parameter and may borrow its bytes, and `Tensor::into_parts` returns `CowBytes`
-  - **Breaking**: Replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`, which exports a `Tensor<'static>` as a versioned DLPack managed tensor (requires `dlpack`)
+  - **Breaking**: Replace the `TensorLike` implementation for `Tensor` with `Tensor::into_dlpack()`, which exports a `Tensor<'static>` as a read-only, versioned DLPack managed tensor (requires `dlpack`)
+    - Support DLPack 1.4, including `complex_bfloat16` export
   - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
   - Add `Tensor::num_elements()` and implement `Clone` and `Debug` for `Tensor`
   - Implement `IntoArrayBytes` for `&bytes::Bytes`; storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
@@ -310,7 +311,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Build and dependencies
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
-- **Breaking**: Bump `float8` to 0.7.0 and `dlpark` to 0.8.0
+- **Breaking**: Bump `float8` to 0.7.0 and `dlpark` to 0.11.1
 - Add the `cowbytes` and `camino` dependencies, whose types are part of the public API
 - *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
 - Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature
