@@ -5,7 +5,10 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
+use zarrs::array::chunk_cache::{
+    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
+    ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheType,
+};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, ArrayError, ArrayIndices, ArrayMetadata, ArraySubset,
     Element, ElementError, ElementOrder, ElementOwned, FillValue, Indexer, IndexerError, Resources,
@@ -592,6 +595,110 @@ fn element_order_out_of_bounds() {
     ));
 }
 
+fn check_cached_reads<T, C>(
+    cache_name: &str,
+    name: &str,
+    array: &Array<MemoryStore>,
+    cache: C,
+    elements: &[T],
+) where
+    T: Element + ElementOwned + Clone + PartialEq + Debug,
+    C: ChunkCache,
+    C::Value: SyncChunkCacheType,
+{
+    let resources = Resources::default();
+    let c = array.with_element_order(ElementOrder::C);
+    let f = array.with_element_order(ElementOrder::F);
+    let all = ArraySubset::new_with_shape(SHAPE);
+    c.store_array_subset(&all, elements.to_vec(), &resources)
+        .unwrap();
+    let cached = ArrayCached::new(Arc::new(f), cache);
+
+    for subset in [
+        all.clone(),
+        ArraySubset::new_with_ranges(&[1..6, 2..8]),
+        ArraySubset::new_with_ranges(&[4..8, 4..8]),
+        ArraySubset::new_with_ranges(&[1..3, 5..8]),
+    ] {
+        let expected = c_to_f(
+            &c.retrieve_array_subset::<Vec<T>>(&subset, &resources)
+                .unwrap(),
+            subset.shape(),
+        );
+        // Retrieve twice to cover both cache fill and cache hit paths.
+        for pass in 0..2 {
+            let actual: Vec<T> = cached.retrieve_array_subset(&subset, &resources).unwrap();
+            assert_eq!(actual, expected, "{cache_name} {name} pass={pass} {subset}");
+        }
+    }
+
+    for chunk_indices in [[0, 0], [1, 2]] {
+        let expected = c_to_f(
+            &c.retrieve_chunk::<Vec<T>>(&chunk_indices, &resources)
+                .unwrap(),
+            &[4, 4],
+        );
+        let actual: Vec<T> = cached.retrieve_chunk(&chunk_indices, &resources).unwrap();
+        assert_eq!(
+            actual, expected,
+            "{cache_name} {name} chunk {chunk_indices:?}"
+        );
+    }
+
+    for partial in [
+        ArraySubset::new_with_ranges(&[1..4, 0..3]),
+        ArraySubset::new_with_ranges(&[0..4, 0..4]),
+    ] {
+        let expected = c_to_f(
+            &c.retrieve_partial_chunk::<Vec<T>>(&[0, 1], &partial, &resources)
+                .unwrap(),
+            partial.shape(),
+        );
+        let actual: Vec<T> = cached
+            .retrieve_partial_chunk(&[0, 1], &partial, &resources)
+            .unwrap();
+        assert_eq!(actual, expected, "{cache_name} {name} partial {partial}");
+    }
+
+    // Missing chunk fill-value path (chunk, partial chunk, and multi-chunk subset)
+    cached.erase_chunk(&[1, 1]).unwrap();
+    let expected = c_to_f(
+        &c.retrieve_chunk::<Vec<T>>(&[1, 1], &resources).unwrap(),
+        &[4, 4],
+    );
+    assert_eq!(
+        cached
+            .retrieve_chunk::<Vec<T>>(&[1, 1], &resources)
+            .unwrap(),
+        expected,
+        "{cache_name} {name} missing chunk"
+    );
+    let partial = ArraySubset::new_with_ranges(&[1..3, 0..3]);
+    let expected = c_to_f(
+        &c.retrieve_partial_chunk::<Vec<T>>(&[1, 1], &partial, &resources)
+            .unwrap(),
+        partial.shape(),
+    );
+    assert_eq!(
+        cached
+            .retrieve_partial_chunk::<Vec<T>>(&[1, 1], &partial, &resources)
+            .unwrap(),
+        expected,
+        "{cache_name} {name} missing partial chunk"
+    );
+    let expected = c_to_f(
+        &c.retrieve_array_subset::<Vec<T>>(&all, &resources).unwrap(),
+        all.shape(),
+    );
+    assert_eq!(
+        cached
+            .retrieve_array_subset::<Vec<T>>(&all, &resources)
+            .unwrap(),
+        expected,
+        "{cache_name} {name} missing subset"
+    );
+}
+
 #[test]
 fn element_order_empty_store_chunks() {
     let resources = Resources::default();
@@ -659,10 +766,80 @@ fn element_order_empty_store_chunks() {
     }
 }
 
+#[test]
+fn element_order_cached_reads() {
+    let u16_elements: Vec<u16> = (0..63u16).map(|i| i * 3 + 1).collect();
+    let optional_elements: Vec<Option<u16>> =
+        (0..63u16).map(|i| (i % 4 != 0).then_some(i * 3)).collect();
+    let string_elements: Vec<String> = (0..63).map(|i| "s".repeat(i % 5)).collect();
+
+    for (name, array) in u16_arrays() {
+        check_cached_reads(
+            "decoded",
+            name,
+            &array,
+            ChunkCacheDecodedLruChunkLimit::new(4),
+            &u16_elements,
+        );
+        check_cached_reads(
+            "encoded",
+            name,
+            &array,
+            ChunkCacheEncodedLruChunkLimit::new(4),
+            &u16_elements,
+        );
+        check_cached_reads(
+            "partial_decoder",
+            name,
+            &array,
+            ChunkCachePartialDecoderLruChunkLimit::new(4),
+            &u16_elements,
+        );
+    }
+
+    let opt_array = build(&builder(
+        data_type::uint16().to_optional(),
+        FillValue::new_optional_null(),
+    ));
+    check_cached_reads(
+        "encoded",
+        "optional",
+        &opt_array,
+        ChunkCacheEncodedLruChunkLimit::new(4),
+        &optional_elements,
+    );
+    check_cached_reads(
+        "partial_decoder",
+        "optional",
+        &opt_array,
+        ChunkCachePartialDecoderLruChunkLimit::new(4),
+        &optional_elements,
+    );
+
+    let str_array = build(&builder(data_type::string(), ""));
+    check_cached_reads(
+        "encoded",
+        "string",
+        &str_array,
+        ChunkCacheEncodedLruChunkLimit::new(4),
+        &string_elements,
+    );
+    check_cached_reads(
+        "partial_decoder",
+        "string",
+        &str_array,
+        ChunkCachePartialDecoderLruChunkLimit::new(4),
+        &string_elements,
+    );
+}
+
 #[cfg(feature = "async")]
 mod async_reads {
     use super::*;
-    use zarrs::array::chunk_cache::AsyncChunkCacheDecodedLruChunkLimit;
+    use zarrs::array::chunk_cache::{
+        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheType,
+    };
     use zarrs_storage::store::AsyncMemoryStore;
 
     async fn check_async_reads<T>(name: &str, builder: &ArrayBuilder, elements: &[T])
@@ -898,6 +1075,225 @@ mod async_reads {
         .await;
         let strings: Vec<String> = (0..63).map(|i| "s".repeat(i % 5)).collect();
         check_async_reads("string", &builder(data_type::string(), ""), &strings).await;
+    }
+
+    async fn check_async_cached_reads<T, C>(
+        cache_name: &str,
+        name: &str,
+        builder: &ArrayBuilder,
+        cache: C,
+        elements: &[T],
+    ) where
+        T: Element + ElementOwned + Clone + PartialEq + Debug + Send + Sync,
+        C: AsyncChunkCache,
+        C::Value: AsyncChunkCacheType,
+    {
+        let resources = Resources::default();
+        let c = builder
+            .build(Arc::new(AsyncMemoryStore::new()), "/array")
+            .unwrap();
+        let f = c.with_element_order(ElementOrder::F);
+        let all = ArraySubset::new_with_shape(SHAPE);
+        c.async_store_array_subset(&all, elements.to_vec(), &resources)
+            .await
+            .unwrap();
+        let cached = ArrayCached::new(Arc::new(f), cache);
+
+        for subset in [
+            all.clone(),
+            ArraySubset::new_with_ranges(&[1..6, 2..8]),
+            ArraySubset::new_with_ranges(&[4..8, 4..8]),
+            ArraySubset::new_with_ranges(&[1..3, 5..8]),
+        ] {
+            let expected = c_to_f(
+                &c.async_retrieve_array_subset::<Vec<T>>(&subset, &resources)
+                    .await
+                    .unwrap(),
+                subset.shape(),
+            );
+            for pass in 0..2 {
+                let actual: Vec<T> = cached
+                    .async_retrieve_array_subset(&subset, &resources)
+                    .await
+                    .unwrap();
+                assert_eq!(actual, expected, "{cache_name} {name} pass={pass} {subset}");
+            }
+        }
+
+        for chunk_indices in [[0, 0], [1, 2]] {
+            assert_eq!(
+                cached
+                    .async_retrieve_chunk::<Vec<T>>(&chunk_indices, &resources)
+                    .await
+                    .unwrap(),
+                c_to_f(
+                    &c.async_retrieve_chunk::<Vec<T>>(&chunk_indices, &resources)
+                        .await
+                        .unwrap(),
+                    &[4, 4],
+                ),
+                "{cache_name} {name} chunk {chunk_indices:?}"
+            );
+        }
+
+        for partial in [
+            ArraySubset::new_with_ranges(&[1..4, 0..3]),
+            ArraySubset::new_with_ranges(&[0..4, 0..4]),
+        ] {
+            assert_eq!(
+                cached
+                    .async_retrieve_partial_chunk::<Vec<T>>(&[0, 1], &partial, &resources)
+                    .await
+                    .unwrap(),
+                c_to_f(
+                    &c.async_retrieve_partial_chunk::<Vec<T>>(&[0, 1], &partial, &resources)
+                        .await
+                        .unwrap(),
+                    partial.shape(),
+                ),
+                "{cache_name} {name} partial {partial}"
+            );
+        }
+
+        check_async_cached_missing::<T, C>(cache_name, name, &c, &cached, &all, &resources).await;
+    }
+
+    async fn check_async_cached_missing<T, C>(
+        cache_name: &str,
+        name: &str,
+        c: &Array<AsyncMemoryStore>,
+        cached: &ArrayCached<AsyncMemoryStore, C>,
+        all: &ArraySubset,
+        resources: &Resources,
+    ) where
+        T: Element + ElementOwned + Clone + PartialEq + Debug + Send + Sync,
+        C: AsyncChunkCache,
+        C::Value: AsyncChunkCacheType,
+    {
+        cached.async_erase_chunk(&[1, 1]).await.unwrap();
+        let partial = ArraySubset::new_with_ranges(&[1..3, 0..3]);
+        assert_eq!(
+            cached
+                .async_retrieve_chunk::<Vec<T>>(&[1, 1], resources)
+                .await
+                .unwrap(),
+            c_to_f(
+                &c.async_retrieve_chunk::<Vec<T>>(&[1, 1], resources)
+                    .await
+                    .unwrap(),
+                &[4, 4],
+            ),
+            "{cache_name} {name} missing chunk"
+        );
+        assert_eq!(
+            cached
+                .async_retrieve_partial_chunk::<Vec<T>>(&[1, 1], &partial, resources)
+                .await
+                .unwrap(),
+            c_to_f(
+                &c.async_retrieve_partial_chunk::<Vec<T>>(&[1, 1], &partial, resources)
+                    .await
+                    .unwrap(),
+                partial.shape(),
+            ),
+            "{cache_name} {name} missing partial chunk"
+        );
+        assert_eq!(
+            cached
+                .async_retrieve_array_subset::<Vec<T>>(all, resources)
+                .await
+                .unwrap(),
+            c_to_f(
+                &c.async_retrieve_array_subset::<Vec<T>>(all, resources)
+                    .await
+                    .unwrap(),
+                all.shape(),
+            ),
+            "{cache_name} {name} missing subset"
+        );
+    }
+
+    #[tokio::test]
+    async fn element_order_async_cached_reads() {
+        let u16_elements: Vec<u16> = (0..63u16).map(|i| i * 3 + 1).collect();
+        let optional_elements: Vec<Option<u16>> =
+            (0..63u16).map(|i| (i % 4 != 0).then_some(i * 3)).collect();
+        let string_elements: Vec<String> = (0..63).map(|i| "s".repeat(i % 5)).collect();
+
+        for (name, mut arr_builder) in [
+            ("bytes", builder(data_type::uint16(), 0u16)),
+            (
+                "sharded",
+                builder(data_type::uint16(), 0u16)
+                    .subchunk_shape(vec![2, 2])
+                    .clone(),
+            ),
+        ] {
+            let _ = &mut arr_builder;
+            check_async_cached_reads(
+                "decoded",
+                name,
+                &arr_builder,
+                AsyncChunkCacheDecodedLruChunkLimit::new(4),
+                &u16_elements,
+            )
+            .await;
+            check_async_cached_reads(
+                "encoded",
+                name,
+                &arr_builder,
+                AsyncChunkCacheEncodedLruChunkLimit::new(4),
+                &u16_elements,
+            )
+            .await;
+            check_async_cached_reads(
+                "partial_decoder",
+                name,
+                &arr_builder,
+                AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                &u16_elements,
+            )
+            .await;
+        }
+
+        let opt_builder = builder(
+            data_type::uint16().to_optional(),
+            FillValue::new_optional_null(),
+        );
+        check_async_cached_reads(
+            "encoded",
+            "optional",
+            &opt_builder,
+            AsyncChunkCacheEncodedLruChunkLimit::new(4),
+            &optional_elements,
+        )
+        .await;
+        check_async_cached_reads(
+            "partial_decoder",
+            "optional",
+            &opt_builder,
+            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+            &optional_elements,
+        )
+        .await;
+
+        let str_builder = builder(data_type::string(), "");
+        check_async_cached_reads(
+            "encoded",
+            "string",
+            &str_builder,
+            AsyncChunkCacheEncodedLruChunkLimit::new(4),
+            &string_elements,
+        )
+        .await;
+        check_async_cached_reads(
+            "partial_decoder",
+            "string",
+            &str_builder,
+            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+            &string_elements,
+        )
+        .await;
     }
 
     #[tokio::test]
