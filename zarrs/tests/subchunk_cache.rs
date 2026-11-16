@@ -4,7 +4,7 @@
 
 use std::error::Error;
 use std::num::NonZeroU64;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use zarrs::array::chunk_cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruChunkLimitThreadLocal,
@@ -15,8 +15,8 @@ use zarrs::array::chunk_cache::{
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
-    ArrayError, ArrayReadOps, ArraySubset, CodecOptions, DataType, ElementOrder, FillValue,
-    Resources, data_type, transmute_to_bytes_vec,
+    ArrayError, ArrayIndices, ArrayReadOps, ArraySubset, CodecOptions, DataType, ElementOrder,
+    FillValue, Indexer, Resources, data_type, transmute_to_bytes_vec,
 };
 use zarrs::storage::ReadableWritableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -95,6 +95,81 @@ fn sharded_array<TStorage: ?Sized + ReadableWritableStorageTraits + 'static>(
         ),
     }?;
     Ok(array)
+}
+
+/// A hook run once by a [`HookedCache`].
+type Hook = Box<dyn FnOnce() + Send>;
+
+/// A chunk cache that runs a hook before its next chunk invalidation, and a hook after its next retrieval.
+struct HookedCache<C> {
+    cache: C,
+    before_invalidate: Mutex<Option<Hook>>,
+    after_retrieve: Mutex<Option<Hook>>,
+}
+
+impl<C> HookedCache<C> {
+    fn new(cache: C) -> Self {
+        Self {
+            cache,
+            before_invalidate: Mutex::new(None),
+            after_retrieve: Mutex::new(None),
+        }
+    }
+
+    fn before_invalidate(&self, hook: impl FnOnce() + Send + 'static) {
+        *self.before_invalidate.lock().unwrap() = Some(Box::new(hook));
+    }
+
+    fn after_retrieve(&self, hook: impl FnOnce() + Send + 'static) {
+        *self.after_retrieve.lock().unwrap() = Some(Box::new(hook));
+    }
+}
+
+/// Run and clear the hook in `hook`, if any.
+fn run_hook(hook: &Mutex<Option<Hook>>) {
+    let hook = hook.lock().unwrap().take();
+    if let Some(hook) = hook {
+        hook();
+    }
+}
+
+impl<C: ChunkCache> ChunkCache for HookedCache<C> {
+    type Value = C::Value;
+
+    fn try_get_or_insert_with<F>(
+        &self,
+        chunk_indices: ArrayIndices,
+        f: F,
+    ) -> Result<Self::Value, Arc<ArrayError>>
+    where
+        F: FnOnce() -> Result<Self::Value, ArrayError>,
+    {
+        let value = self.cache.try_get_or_insert_with(chunk_indices, f);
+        run_hook(&self.after_retrieve);
+        value
+    }
+
+    fn invalidate(&self) -> usize {
+        self.cache.invalidate()
+    }
+
+    fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
+        run_hook(&self.before_invalidate);
+        self.cache.invalidate_chunk(chunk_indices)
+    }
+
+    fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
+        run_hook(&self.before_invalidate);
+        self.cache.invalidate_chunks(chunks)
+    }
+
+    fn len(&self) -> usize {
+        self.cache.len()
+    }
+
+    fn size(&self) -> usize {
+        self.cache.size()
+    }
 }
 
 /// Read regions, chunks and subchunks of `array`, twice, so the second reads are served by cached subchunks.
@@ -785,6 +860,76 @@ fn subchunk_cache_accepts_empty_selections_with_arbitrary_origins() -> TestResul
     Ok(())
 }
 
+#[test]
+fn reads_during_invalidation_do_not_refill_subchunks_from_the_chunk_cache() -> TestResult {
+    let array = ArrayBuilder::new(vec![8], vec![8], data_type::uint8(), 0u8)
+        .subchunk_shape(vec![2])
+        .build_arc(Arc::new(MemoryStore::default()), "/array")?;
+    let cached = ArrayCached::new(
+        array,
+        SubchunkCached::new(
+            0,
+            ChunkCacheDecodedLruChunkLimit::new(8),
+            HookedCache::new(ChunkCacheEncodedLruChunkLimit::new(2)),
+        ),
+    );
+    let resources = Resources::default();
+    cached.store_chunk(&[0], &[1u8; 8], &resources)?;
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0], &resources)?,
+        vec![1; 8]
+    );
+
+    // A read while the chunk cache still holds the stored chunk, after it is written
+    let reader = cached.clone();
+    cached.cache().chunks().before_invalidate(move || {
+        reader
+            .retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
+            .unwrap();
+    });
+    cached.store_chunk(&[0], &[2u8; 8], &resources)?;
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0], &resources)?,
+        vec![2; 8]
+    );
+    Ok(())
+}
+
+#[test]
+fn partial_decoders_opened_during_invalidation_do_not_refill_subchunks() -> TestResult {
+    let array = ArrayBuilder::new(vec![8], vec![8], data_type::uint8(), 0u8)
+        .subchunk_shape(vec![2])
+        .build_arc(Arc::new(MemoryStore::default()), "/array")?;
+    let cached = ArrayCached::new(
+        array,
+        SubchunkCached::new(
+            0,
+            ChunkCacheDecodedLruChunkLimit::new(8),
+            HookedCache::new(ChunkCacheEncodedLruChunkLimit::new(2)),
+        ),
+    );
+    let resources = Resources::default();
+    cached.store_chunk(&[0], &[1u8; 8], &resources)?;
+
+    // A write after a partial decoder retrieves the chunk it decodes
+    let writer = cached.clone();
+    cached.cache().chunks().after_retrieve(move || {
+        writer
+            .store_chunk(&[0], &[2u8; 8], &Resources::default())
+            .unwrap();
+    });
+    let decoder = cached.partial_decoder(&[0], &resources)?;
+    assert_eq!(
+        decoder.partial_decode(&[0..8], &CodecOptions::default(), &resources)?,
+        ArrayBytes::new_flen(vec![1u8; 8])
+    );
+    assert_eq!(
+        cached.retrieve_chunk::<Vec<u8>>(&[0], &resources)?,
+        vec![2; 8]
+    );
+    Ok(())
+}
+
 fn lossy_sharded_array() -> Result<Arc<Array<MemoryStore>>, Box<dyn Error>> {
     use zarrs::array::codec::FixedScaleOffsetCodec;
     use zarrs::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
@@ -842,8 +987,72 @@ mod r#async {
         AsyncArrayCache, AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit,
         AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
     };
-    use zarrs::storage::AsyncReadableWritableStorageTraits;
     use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::{AsyncReadableWritableStorageTraits, MaybeSend};
+
+    /// The asynchronous counterpart of [`HookedCache`].
+    struct AsyncHookedCache<C> {
+        cache: C,
+        before_invalidate: Mutex<Option<Hook>>,
+        after_retrieve: Mutex<Option<Hook>>,
+    }
+
+    impl<C> AsyncHookedCache<C> {
+        fn new(cache: C) -> Self {
+            Self {
+                cache,
+                before_invalidate: Mutex::new(None),
+                after_retrieve: Mutex::new(None),
+            }
+        }
+
+        fn before_invalidate(&self, hook: impl FnOnce() + Send + 'static) {
+            *self.before_invalidate.lock().unwrap() = Some(Box::new(hook));
+        }
+
+        fn after_retrieve(&self, hook: impl FnOnce() + Send + 'static) {
+            *self.after_retrieve.lock().unwrap() = Some(Box::new(hook));
+        }
+    }
+
+    impl<C: AsyncChunkCache> AsyncChunkCache for AsyncHookedCache<C> {
+        type Value = C::Value;
+
+        async fn try_get_or_insert_with<F>(
+            &self,
+            chunk_indices: ArrayIndices,
+            init: F,
+        ) -> Result<Self::Value, Arc<ArrayError>>
+        where
+            F: Future<Output = Result<Self::Value, ArrayError>> + MaybeSend,
+        {
+            let value = self.cache.try_get_or_insert_with(chunk_indices, init).await;
+            run_hook(&self.after_retrieve);
+            value
+        }
+
+        async fn invalidate(&self) -> usize {
+            self.cache.invalidate().await
+        }
+
+        async fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
+            run_hook(&self.before_invalidate);
+            self.cache.invalidate_chunk(chunk_indices).await
+        }
+
+        async fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
+            run_hook(&self.before_invalidate);
+            self.cache.invalidate_chunks(chunks).await
+        }
+
+        async fn len(&self) -> usize {
+            self.cache.len().await
+        }
+
+        async fn size(&self) -> usize {
+            self.cache.size().await
+        }
+    }
 
     /// The asynchronous counterpart of [`sharded_array`], with the same data.
     async fn async_sharded_array<TStorage>(
@@ -1142,6 +1351,97 @@ mod r#async {
         }
         check(AsyncChunkCacheDecodedLruChunkLimit::new(2)).await?;
         check(AsyncChunkCacheEncodedLruChunkLimit::new(2)).await
+    }
+
+    #[tokio::test]
+    async fn async_reads_during_invalidation_do_not_refill_subchunks_from_the_chunk_cache()
+    -> TestResult {
+        let array = ArrayBuilder::new(vec![8], vec![8], data_type::uint8(), 0u8)
+            .subchunk_shape(vec![2])
+            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
+        let cached = ArrayCached::new(
+            array,
+            SubchunkCached::new(
+                0,
+                AsyncChunkCacheDecodedLruChunkLimit::new(8),
+                AsyncHookedCache::new(AsyncChunkCacheEncodedLruChunkLimit::new(2)),
+            ),
+        );
+        let resources = Resources::default();
+        cached
+            .async_store_chunk(&[0], &[1u8; 8], &resources)
+            .await?;
+        assert_eq!(
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &resources)
+                .await?,
+            vec![1; 8]
+        );
+
+        // A read while the chunk cache still holds the stored chunk, after it is written
+        let reader = cached.clone();
+        // Hooks are synchronous, as the futures of array operations are not provably `Send`
+        cached.cache().chunks().before_invalidate(move || {
+            futures::executor::block_on(
+                reader.async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default()),
+            )
+            .unwrap();
+        });
+        cached
+            .async_store_chunk(&[0], &[2u8; 8], &resources)
+            .await?;
+        assert_eq!(
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &resources)
+                .await?,
+            vec![2; 8]
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn async_partial_decoders_opened_during_invalidation_do_not_refill_subchunks()
+    -> TestResult {
+        let array = ArrayBuilder::new(vec![8], vec![8], data_type::uint8(), 0u8)
+            .subchunk_shape(vec![2])
+            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
+        let cached = ArrayCached::new(
+            array,
+            SubchunkCached::new(
+                0,
+                AsyncChunkCacheDecodedLruChunkLimit::new(8),
+                AsyncHookedCache::new(AsyncChunkCacheEncodedLruChunkLimit::new(2)),
+            ),
+        );
+        let resources = Resources::default();
+        cached
+            .async_store_chunk(&[0], &[1u8; 8], &resources)
+            .await?;
+
+        // A write after a partial decoder retrieves the chunk it decodes
+        let writer = cached.clone();
+        cached.cache().chunks().after_retrieve(move || {
+            futures::executor::block_on(writer.async_store_chunk(
+                &[0],
+                &[2u8; 8],
+                &Resources::default(),
+            ))
+            .unwrap();
+        });
+        let decoder = cached.async_partial_decoder(&[0], &resources).await?;
+        assert_eq!(
+            decoder
+                .partial_decode(&[0..8], &CodecOptions::default(), &resources)
+                .await?,
+            ArrayBytes::new_flen(vec![1u8; 8])
+        );
+        assert_eq!(
+            cached
+                .async_retrieve_chunk::<Vec<u8>>(&[0], &resources)
+                .await?,
+            vec![2; 8]
+        );
+        Ok(())
     }
 
     #[tokio::test]
