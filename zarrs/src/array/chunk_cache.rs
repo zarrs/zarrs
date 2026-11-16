@@ -65,9 +65,13 @@ mod chunk_cache_type;
 // pub(crate) mod chunk_cache_lru_macros;
 pub use chunk_cache_lru::*;
 #[cfg(feature = "async")]
-pub(crate) use chunk_cache_type::{async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes};
+pub(crate) use chunk_cache_type::{
+    async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
+    async_retrieve_chunk_overlap_into,
+};
 pub(crate) use chunk_cache_type::{
     fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
+    retrieve_chunk_overlap_into,
 };
 
 /// The chunk type of an encoded chunk cache.
@@ -132,6 +136,7 @@ mod chunk_cache_type_sealed {
         AsyncArrayPartialDecoderTraits, AsyncChunkCache, AsyncReadableStorageTraits,
         ChunkCacheTypeAsyncPartialDecoder,
     };
+    use zarrs_codec::ArrayBytesDecodeIntoTarget;
 
     pub trait Sealed {}
 
@@ -179,6 +184,31 @@ mod chunk_cache_type_sealed {
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
             C: ChunkCache<Value = Self> + ?Sized;
+
+        fn retrieve_chunk_into<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<(), ArrayError>
+        where
+            TStorage: ?Sized + ReadableStorageTraits + 'static,
+            C: ChunkCache<Value = Self> + ?Sized;
+
+        fn retrieve_partial_chunk_into<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            indexer: &dyn Indexer,
+            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<(), ArrayError>
+        where
+            TStorage: ?Sized + ReadableStorageTraits + 'static,
+            C: ChunkCache<Value = Self> + ?Sized;
     }
 
     /// The asynchronous retrieval operations of [`AsyncChunkCacheType`](super::AsyncChunkCacheType).
@@ -220,6 +250,31 @@ mod chunk_cache_type_sealed {
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+        where
+            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+            C: AsyncChunkCache<Value = Self> + ?Sized;
+
+        async fn async_retrieve_chunk_into<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<(), ArrayError>
+        where
+            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+            C: AsyncChunkCache<Value = Self> + ?Sized;
+
+        async fn async_retrieve_partial_chunk_into<TStorage, C>(
+            cache: &C,
+            array: &Array<TStorage>,
+            chunk_indices: &[u64],
+            indexer: &dyn Indexer,
+            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            options: &CodecOptions,
+            resources: &Resources,
+        ) -> Result<(), ArrayError>
         where
             TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
             C: AsyncChunkCache<Value = Self> + ?Sized;

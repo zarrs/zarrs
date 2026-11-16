@@ -15,11 +15,10 @@ use crate::array::ArrayBytes;
 use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_cached_chunks};
 use crate::array::chunk_cache::{
     SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
+    retrieve_chunk_overlap_into,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
-use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, decode_into_array_bytes_target,
-};
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
 fn retrieve_array_subset_bytes<TStorage, C>(
@@ -166,16 +165,16 @@ where
         options,
         resources,
         &|chunk_indices, chunk_subset, overlap, target, options, resources| {
-            let bytes = retrieve_chunk_overlap_bytes(
+            retrieve_chunk_overlap_into(
                 cache,
                 array,
                 chunk_indices,
                 chunk_subset,
                 overlap,
+                target,
                 options,
                 resources,
-            )?;
-            decode_into_array_bytes_target(&bytes, target).map_err(ArrayError::CodecError)
+            )
         },
     )?;
     // SAFETY: decoding covers the array subset and satisfies the target's output requirements
@@ -194,14 +193,14 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let bytes = retrieve_chunk_bytes(
+        C::Value::retrieve_chunk_into(
             self.cache(),
             self.array(),
             chunk_indices,
+            output_target,
             options,
             resources,
-        )?;
-        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+        )
     }
 
     pub(in crate::array) fn retrieve_partial_chunk_into_with_options(
@@ -212,15 +211,15 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let bytes = C::Value::retrieve_partial_chunk_bytes(
+        C::Value::retrieve_partial_chunk_into(
             self.cache(),
             self.array(),
             chunk_indices,
             indexer,
+            output_target,
             options,
             resources,
-        )?;
-        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+        )
     }
 }
 

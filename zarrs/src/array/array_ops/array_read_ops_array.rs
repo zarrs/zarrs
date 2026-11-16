@@ -354,14 +354,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<T, ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
-        if let Some(chunk_subset) = indexer.as_array_subset()
-            && !chunk_subset.inbounds_shape(chunk_shape_u64)
-        {
-            return Err(ArrayError::InvalidArraySubset(
-                Box::new(chunk_subset.to_array_subset()),
-                chunk_shape_u64.to_vec(),
-            ));
-        }
+        super::validate_partial_chunk_subset(indexer, chunk_shape_u64)?;
         if indexer.covers_array(chunk_shape_u64) {
             return self.retrieve_chunk_with_options(chunk_indices, options, resources);
         }
@@ -389,14 +382,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<(), ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
-        if let Some(chunk_subset) = indexer.as_array_subset()
-            && !chunk_subset.inbounds_shape(chunk_shape_u64)
-        {
-            return Err(ArrayError::InvalidArraySubset(
-                Box::new(chunk_subset.to_array_subset()),
-                chunk_shape_u64.to_vec(),
-            ));
-        }
+        super::validate_partial_chunk_subset(indexer, chunk_shape_u64)?;
         if indexer.covers_array(chunk_shape_u64) {
             return self.retrieve_chunk_into_with_options(
                 chunk_indices,

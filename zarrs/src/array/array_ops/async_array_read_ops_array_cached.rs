@@ -13,13 +13,11 @@ use super::{
 use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_cached_chunks};
 use crate::array::chunk_cache::{
     AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
-    fill_value_bytes,
+    async_retrieve_chunk_overlap_into, fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayIndices};
-use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, decode_into_array_bytes_target,
-};
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
 async fn async_retrieve_array_subset_bytes<TStorage, C>(
@@ -178,17 +176,17 @@ where
         chunk_concurrent_limit,
         &buffers.target()?,
         |chunk_indices, chunk_subset, overlap, mut target| async move {
-            let bytes = async_retrieve_chunk_overlap_bytes(
+            async_retrieve_chunk_overlap_into(
                 cache,
                 array,
                 &chunk_indices,
                 &chunk_subset,
                 &overlap,
+                &mut target,
                 options,
                 resources,
             )
-            .await?;
-            decode_into_array_bytes_target(&bytes, &mut target).map_err(ArrayError::CodecError)
+            .await
         },
     )
     .await?;
@@ -208,15 +206,15 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let bytes = async_retrieve_chunk_bytes(
+        C::Value::async_retrieve_chunk_into(
             self.cache(),
             self.array(),
             chunk_indices,
+            output_target,
             options,
             resources,
         )
-        .await?;
-        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+        .await
     }
 
     pub(in crate::array) async fn async_retrieve_partial_chunk_into_with_options(
@@ -227,16 +225,16 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let bytes = C::Value::async_retrieve_partial_chunk_bytes(
+        C::Value::async_retrieve_partial_chunk_into(
             self.cache(),
             self.array(),
             chunk_indices,
             indexer,
+            output_target,
             options,
             resources,
         )
-        .await?;
-        decode_into_array_bytes_target(&bytes, output_target).map_err(ArrayError::CodecError)
+        .await
     }
 }
 

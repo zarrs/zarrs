@@ -1,20 +1,44 @@
 use std::sync::Arc;
 
-use super::{cache_error, validate_chunk_indices};
+use super::{
+    cache_error, copy_array_fill_value_into, validate_chunk_indices,
+    validate_partial_chunk_indexer, validate_target_num_elements,
+};
 use crate::array::chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync,
 };
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer, Resources,
+    Array, ArrayBytes, ArrayError, ArraySubset, ChunkShapeTraits, CodecOptions, Indexer, Resources,
     chunk_shape_to_array_shape,
 };
-use zarrs_codec::ArrayPartialDecoderTraits;
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
 use zarrs_storage::ReadableStorageTraits;
 
 impl ChunkCacheType for ChunkCacheTypePartialDecoder {
     fn size(&self) -> usize {
         self.as_ref().size_held()
     }
+}
+
+/// Retrieve the partial decoder of a chunk from the cache, or create it on a miss.
+///
+/// The chunk indices must be validated with [`validate_chunk_indices`] first, so that an out-of-bounds chunk is never inserted.
+fn retrieve_partial_decoder<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    options: &CodecOptions,
+    resources: &Resources,
+) -> Result<ChunkCacheTypePartialDecoder, ArrayError>
+where
+    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    C: ChunkCache<Value = ChunkCacheTypePartialDecoder> + ?Sized,
+{
+    cache
+        .try_get_or_insert_with(chunk_indices.into(), || {
+            array.partial_decoder_with_options(chunk_indices, options, resources)
+        })
+        .map_err(cache_error)
 }
 
 impl SealedSync for ChunkCacheTypePartialDecoder {
@@ -30,11 +54,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         C: ChunkCache<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
-        cache
-            .try_get_or_insert_with(chunk_indices.into(), || {
-                array.partial_decoder_with_options(chunk_indices, options, resources)
-            })
-            .map_err(cache_error)
+        retrieve_partial_decoder(cache, array, chunk_indices, options, resources)
     }
 
     fn retrieve_chunk_bytes_if_exists<TStorage, C>(
@@ -80,5 +100,53 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
                 .into_owned()
                 .into(),
         )
+    }
+
+    fn retrieve_chunk_into<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), ArrayError>
+    where
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        C: ChunkCache<Value = Self> + ?Sized,
+    {
+        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+        validate_target_num_elements(output_target, chunk_shape.num_elements_u64())?;
+        let decoder = retrieve_partial_decoder(cache, array, chunk_indices, options, resources)?;
+        if !decoder.exists()? {
+            return copy_array_fill_value_into(array, output_target);
+        }
+        let shape = chunk_shape_to_array_shape(&chunk_shape);
+        decoder
+            .partial_decode_into(
+                &ArraySubset::new_with_shape(shape),
+                output_target,
+                options,
+                resources,
+            )
+            .map_err(ArrayError::from)
+    }
+
+    fn retrieve_partial_chunk_into<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        indexer: &dyn Indexer,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), ArrayError>
+    where
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        C: ChunkCache<Value = Self> + ?Sized,
+    {
+        validate_partial_chunk_indexer(array, chunk_indices, indexer, output_target)?;
+        retrieve_partial_decoder(cache, array, chunk_indices, options, resources)?
+            .partial_decode_into(indexer, output_target, options, resources)
+            .map_err(ArrayError::from)
     }
 }

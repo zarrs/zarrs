@@ -5,9 +5,11 @@ use super::{AsyncChunkCache, SealedAsync};
 use super::{ChunkCache, SealedSync};
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits,
-    CodecOptions, Resources,
+    CodecOptions, Indexer, Resources,
 };
-use zarrs_codec::CodecError;
+use zarrs_codec::{
+    ArrayBytesDecodeIntoTarget, CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
+};
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
 use zarrs_storage::{ReadableStorageTraits, StorageError};
@@ -38,6 +40,43 @@ pub(super) fn validate_chunk_indices<TStorage: ?Sized>(
         ));
     }
     array.chunk_shape(chunk_indices)
+}
+
+/// Return an error if `output_target` does not have `expected` elements.
+pub(super) fn validate_target_num_elements(
+    output_target: &ArrayBytesDecodeIntoTarget<'_>,
+    expected: u64,
+) -> Result<(), CodecError> {
+    if output_target.num_elements() != expected {
+        return Err(
+            InvalidNumberOfElementsError::new(output_target.num_elements(), expected).into(),
+        );
+    }
+    Ok(())
+}
+
+pub(super) fn validate_partial_chunk_indexer<TStorage: ?Sized>(
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    indexer: &dyn Indexer,
+    output_target: &ArrayBytesDecodeIntoTarget<'_>,
+) -> Result<ChunkShape, ArrayError> {
+    let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+    let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+    crate::array::array_ops::validate_partial_chunk_subset(indexer, chunk_shape_u64)?;
+    indexer
+        .validate(chunk_shape_u64)
+        .map_err(CodecError::from)?;
+    validate_target_num_elements(output_target, indexer.len())?;
+    Ok(chunk_shape)
+}
+
+pub(super) fn copy_array_fill_value_into(
+    array: &Array<impl ?Sized>,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+) -> Result<(), ArrayError> {
+    copy_fill_value_into(array.data_type(), array.fill_value(), output_target)
+        .map_err(ArrayError::CodecError)
 }
 
 pub(crate) fn fill_value_bytes(
@@ -103,6 +142,45 @@ where
     }
 }
 
+/// Retrieve `overlap`, a subset of the chunk at `chunk_indices` with array subset `chunk_subset`,
+/// directly into `output_target`.
+#[expect(clippy::too_many_arguments)]
+pub(crate) fn retrieve_chunk_overlap_into<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    chunk_subset: &ArraySubset,
+    overlap: &dyn ArraySubsetTraits,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    options: &CodecOptions,
+    resources: &Resources,
+) -> Result<(), ArrayError>
+where
+    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    C: ChunkCache + ?Sized,
+{
+    if *chunk_subset == overlap {
+        C::Value::retrieve_chunk_into(
+            cache,
+            array,
+            chunk_indices,
+            output_target,
+            options,
+            resources,
+        )
+    } else {
+        C::Value::retrieve_partial_chunk_into(
+            cache,
+            array,
+            chunk_indices,
+            &overlap.relative_to(chunk_subset.start())?,
+            output_target,
+            options,
+            resources,
+        )
+    }
+}
+
 #[cfg(feature = "async")]
 pub(crate) async fn async_retrieve_chunk_bytes<TStorage, C>(
     cache: &C,
@@ -154,6 +232,47 @@ where
             array,
             chunk_indices,
             &overlap.relative_to(chunk_subset.start())?,
+            options,
+            resources,
+        )
+        .await
+    }
+}
+
+/// Asynchronous version of [`retrieve_chunk_overlap_into`].
+#[cfg(feature = "async")]
+#[expect(clippy::too_many_arguments)]
+pub(crate) async fn async_retrieve_chunk_overlap_into<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    chunk_subset: &ArraySubset,
+    overlap: &dyn ArraySubsetTraits,
+    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    options: &CodecOptions,
+    resources: &Resources,
+) -> Result<(), ArrayError>
+where
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    C: AsyncChunkCache + ?Sized,
+{
+    if *chunk_subset == overlap {
+        C::Value::async_retrieve_chunk_into(
+            cache,
+            array,
+            chunk_indices,
+            output_target,
+            options,
+            resources,
+        )
+        .await
+    } else {
+        C::Value::async_retrieve_partial_chunk_into(
+            cache,
+            array,
+            chunk_indices,
+            &overlap.relative_to(chunk_subset.start())?,
+            output_target,
             options,
             resources,
         )

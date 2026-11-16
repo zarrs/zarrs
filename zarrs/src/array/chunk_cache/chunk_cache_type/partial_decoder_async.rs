@@ -1,20 +1,47 @@
 use std::sync::Arc;
 
-use super::{cache_error, validate_chunk_indices};
+use super::{
+    cache_error, copy_array_fill_value_into, validate_chunk_indices,
+    validate_partial_chunk_indexer, validate_target_num_elements,
+};
 use crate::array::chunk_cache::{
     AsyncChunkCache, ChunkCacheType, ChunkCacheTypeAsyncPartialDecoder, SealedAsync,
 };
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, CodecOptions, Indexer, Resources,
+    Array, ArrayBytes, ArrayError, ArraySubset, ChunkShapeTraits, CodecOptions, Indexer, Resources,
     chunk_shape_to_array_shape,
 };
-use zarrs_codec::AsyncArrayPartialDecoderTraits;
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::AsyncReadableStorageTraits;
 
 impl ChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
     fn size(&self) -> usize {
         self.as_ref().size_held()
     }
+}
+
+/// Retrieve the partial decoder of a chunk from the cache, or create it on a miss.
+///
+/// The chunk indices must be validated with [`validate_chunk_indices`] first, so that an out-of-bounds chunk is never inserted.
+async fn async_retrieve_partial_decoder<TStorage, C>(
+    cache: &C,
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+    options: &CodecOptions,
+    resources: &Resources,
+) -> Result<ChunkCacheTypeAsyncPartialDecoder, ArrayError>
+where
+    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+    C: AsyncChunkCache<Value = ChunkCacheTypeAsyncPartialDecoder> + ?Sized,
+{
+    cache
+        .try_get_or_insert_with(chunk_indices.into(), async move {
+            array
+                .async_partial_decoder_with_options(chunk_indices, options, resources)
+                .await
+        })
+        .await
+        .map_err(cache_error)
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -32,14 +59,7 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
         C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
-        cache
-            .try_get_or_insert_with(chunk_indices.into(), async move {
-                array
-                    .async_partial_decoder_with_options(chunk_indices, options, resources)
-                    .await
-            })
-            .await
-            .map_err(cache_error)
+        async_retrieve_partial_decoder(cache, array, chunk_indices, options, resources).await
     }
 
     async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
@@ -89,5 +109,57 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
                 .into_owned()
                 .into(),
         )
+    }
+
+    async fn async_retrieve_chunk_into<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), ArrayError>
+    where
+        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
+    {
+        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
+        validate_target_num_elements(output_target, chunk_shape.num_elements_u64())?;
+        let decoder =
+            async_retrieve_partial_decoder(cache, array, chunk_indices, options, resources).await?;
+        if !decoder.exists().await? {
+            return copy_array_fill_value_into(array, output_target);
+        }
+        let shape = chunk_shape_to_array_shape(&chunk_shape);
+        decoder
+            .partial_decode_into(
+                &ArraySubset::new_with_shape(shape),
+                output_target,
+                options,
+                resources,
+            )
+            .await
+            .map_err(ArrayError::from)
+    }
+
+    async fn async_retrieve_partial_chunk_into<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        indexer: &dyn Indexer,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), ArrayError>
+    where
+        TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
+    {
+        validate_partial_chunk_indexer(array, chunk_indices, indexer, output_target)?;
+        async_retrieve_partial_decoder(cache, array, chunk_indices, options, resources)
+            .await?
+            .partial_decode_into(indexer, output_target, options, resources)
+            .await
+            .map_err(ArrayError::from)
     }
 }

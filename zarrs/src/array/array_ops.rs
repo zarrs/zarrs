@@ -137,6 +137,22 @@ fn recommended_codec_concurrency(
     Ok(array.codecs_bound().recommended_concurrency(chunk_shape)?)
 }
 
+/// Return an error if `indexer` is an array subset that is not within `chunk_shape`.
+pub(in crate::array) fn validate_partial_chunk_subset(
+    indexer: &dyn Indexer,
+    chunk_shape: &[u64],
+) -> Result<(), ArrayError> {
+    if let Some(chunk_subset) = indexer.as_array_subset()
+        && !chunk_subset.inbounds_shape(chunk_shape)
+    {
+        return Err(ArrayError::InvalidArraySubset(
+            Box::new(chunk_subset.to_array_subset()),
+            chunk_shape.to_vec(),
+        ));
+    }
+    Ok(())
+}
+
 /// Return `chunk` if it exists, otherwise the fill value of the chunk at `chunk_indices`.
 fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
     array: &A,
