@@ -470,6 +470,42 @@ impl<'a> ArrayBytes<'a> {
             }
         }
     }
+
+    /// Copy the elements in the contiguous `runs` of element indices into `output_target`, in order.
+    ///
+    /// This is equivalent to [`decode_into_array_bytes_target`] with the elements [extracted](Self::extract_runs) from `runs`, without an intermediate buffer.
+    /// The elements have the data type size of `output_target`.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if
+    /// - `self` is incompatible with `output_target`,
+    /// - `runs` address elements beyond `self`, or
+    /// - `runs` do not have as many elements as `output_target`.
+    ///
+    /// # Panics
+    /// Panics if indices or byte lengths exceed [`usize::MAX`].
+    pub fn extract_runs_into(
+        &self,
+        runs: &ContiguousLinearisedIndices,
+        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Result<(), CodecError> {
+        match (self, output_target) {
+            (ArrayBytes::Fixed(bytes), ArrayBytesDecodeIntoTarget::Fixed(view)) => {
+                view.copy_runs_from_slice(bytes, runs)
+            }
+            (ArrayBytes::Optional(optional), ArrayBytesDecodeIntoTarget::Optional(target)) => {
+                optional.data().extract_runs_into(runs, &mut target.data)?;
+                target.mask.copy_runs_from_slice(optional.mask(), runs)
+            }
+            (ArrayBytes::Variable(..), _) => Err(ExpectedFixedLengthBytesError.into()),
+            (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(_)) => {
+                Err(ExpectedOptionalBytesError.into())
+            }
+            (ArrayBytes::Optional(..), ArrayBytesDecodeIntoTarget::Fixed(_)) => {
+                Err(ExpectedFixedLengthBytesError.into())
+            }
+        }
+    }
 }
 
 /// Extract variable-length elements in `runs` into `extracted`, constructing `O`-width offsets directly.
@@ -565,16 +601,16 @@ fn extract_runs_variable(
     Ok(unsafe { ArrayBytesVariableLength::new_unchecked(extracted, out_offsets) })
 }
 
-/// Extract fixed-length elements of `element_size` bytes in `runs` from `bytes`.
-fn extract_runs_fixed(
+/// Return an error if the fixed-length elements of `element_size` bytes in `runs` are not within `bytes`.
+///
+/// Runs are ordered and have equal lengths, so the last run bounds all selected bytes.
+/// The offsets are checked so that an overflowing end cannot wrap within `bytes`.
+pub(crate) fn validate_runs_within(
     bytes: &[u8],
     runs: &ContiguousLinearisedIndices,
     element_size: usize,
-) -> Result<Vec<u8>, CodecError> {
+) -> Result<(), CodecError> {
     let element_size = element_size as u64;
-    // Runs are ordered and have equal lengths, so the last run bounds all selected bytes.
-    // Validate it before allocating the output, which may be large even for truncated input.
-    // The offsets are checked so that an overflowing end cannot wrap within `bytes`.
     if let Some((index, elements)) = runs.iter().next_back() {
         let end = index
             .checked_add(elements)
@@ -586,6 +622,18 @@ fn extract_runs_fixed(
             );
         }
     }
+    Ok(())
+}
+
+/// Extract fixed-length elements of `element_size` bytes in `runs` from `bytes`.
+pub(crate) fn extract_runs_fixed(
+    bytes: &[u8],
+    runs: &ContiguousLinearisedIndices,
+    element_size: usize,
+) -> Result<Vec<u8>, CodecError> {
+    // Validate the runs before allocating the output, which may be large even for truncated input.
+    validate_runs_within(bytes, runs, element_size)?;
+    let element_size = element_size as u64;
     if runs.is_empty() || element_size == 0 {
         return Ok(Vec::new());
     }

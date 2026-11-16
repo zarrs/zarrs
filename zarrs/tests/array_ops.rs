@@ -1123,6 +1123,59 @@ fn array_and_cached_support_optional_operation_suite() -> TestResult {
     exercise_optional_ops(&cached)
 }
 
+/// Read subsets covering chunks partially along rows, columns or both through each type of chunk cache.
+#[test]
+fn cached_partial_chunk_reads_match_uncached() -> TestResult {
+    fn check<C: ChunkCache>(array: &Arc<Array<MemoryStore>>, cache: C) -> TestResult {
+        let cached = ArrayCached::new(array.clone(), cache);
+        for ranges in [
+            [0..2, 0..6],
+            [1..3, 1..5],
+            [0..6, 1..2],
+            [2..5, 0..4],
+            [0..5, 0..5],
+            [1..1, 0..6],
+        ] {
+            let subset = ArraySubset::new_with_ranges(&ranges);
+            let expected: ArrayBytes =
+                array.retrieve_array_subset(&subset, &Resources::default())?;
+            // Read through an empty, then a filled, cache
+            for _ in 0..2 {
+                let actual: ArrayBytes =
+                    cached.retrieve_array_subset(&subset, &Resources::default())?;
+                assert_eq!(actual, expected, "{ranges:?}");
+            }
+        }
+        Ok(())
+    }
+
+    let data: Vec<u16> = (0..36).collect();
+    let optional_data: Vec<Option<u16>> = (0..36).map(|i| (i % 3 != 0).then_some(i)).collect();
+    for optional in [false, true] {
+        let store = Arc::new(MemoryStore::default());
+        let array = if optional {
+            let array = ArrayBuilder::new(
+                vec![6, 6],
+                vec![3, 2],
+                data_type::uint16().to_optional(),
+                zarrs::array::FillValue::from(None::<u16>),
+            )
+            .build_arc(store, "/array")?;
+            array.store_array_subset(&array.subset_all(), &optional_data, &Resources::default())?;
+            array
+        } else {
+            let array = ArrayBuilder::new(vec![6, 6], vec![3, 2], data_type::uint16(), 0u16)
+                .build_arc(store, "/array")?;
+            array.store_array_subset(&array.subset_all(), &data, &Resources::default())?;
+            array
+        };
+        check(&array, ChunkCacheEncodedLruChunkLimit::new(16))?;
+        check(&array, ChunkCacheDecodedLruChunkLimit::new(16))?;
+        check(&array, ChunkCachePartialDecoderLruChunkLimit::new(16))?;
+    }
+    Ok(())
+}
+
 fn assert_cache_hits_and_invalidation<C>(cache: C, caches_full_chunk_reads: bool) -> TestResult
 where
     C: ChunkCache + 'static,

@@ -7,8 +7,13 @@ use zarrs_chunk_grid::iterators::{
 };
 use zarrs_chunk_grid::{ArraySubset, IndexerError};
 
+use crate::array_bytes::{extract_runs_fixed, validate_runs_within};
 use crate::small_copy::with_small_len;
-use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError, write_copy_of_slice};
+use crate::{
+    CodecError, InvalidBytesLengthError, InvalidNumberOfElementsError, SubsetOutOfBoundsError,
+    write_copy_of_slice,
+};
+use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError};
 
 /// A disjoint view of the bytes in an array with a fixed-length data type.
 ///
@@ -308,6 +313,80 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             }
         });
         Ok(())
+    }
+
+    /// Copy the elements of `bytes` in the contiguous `runs` of element indices into the view, in order.
+    ///
+    /// The elements of `bytes` have the data type size of the view.
+    /// This is equivalent to copying the elements of the runs into a new buffer, then into the view with [`copy_from_slice`](Self::copy_from_slice), without the buffer.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `runs` address elements beyond `bytes`, or do not have as many elements as the view.
+    ///
+    /// # Panics
+    /// Panics if an offset into `bytes` or the internal bytes reference exceeds [`usize::MAX`].
+    pub(crate) fn copy_runs_from_slice(
+        &mut self,
+        bytes: &[u8],
+        runs: &ContiguousLinearisedIndices,
+    ) -> Result<(), CodecError> {
+        let num_elements = self.num_elements();
+        let run_elements = runs.contiguous_elements();
+        let runs_num_elements = (runs.len() as u64).checked_mul(run_elements);
+        if runs_num_elements != Some(num_elements) {
+            return Err(InvalidNumberOfElementsError::new(
+                runs_num_elements.unwrap_or(u64::MAX),
+                num_elements,
+            )
+            .into());
+        }
+        let size = self.data_type_size;
+        validate_runs_within(bytes, runs, size)?;
+        if num_elements == 0 || size == 0 {
+            return Ok(());
+        }
+        let regions = self.contiguous_linearised_indices();
+        let region_elements = regions.contiguous_elements();
+        // A piece with the length of the shorter of the runs and regions is contiguous in both if it divides the longer.
+        // It does if the runs and regions are of the same subset shape in C-order arrays, since each length is a product of trailing dimensions of the subset.
+        let piece_elements = run_elements.min(region_elements);
+        let pieces = run_elements.max(region_elements) / piece_elements;
+        if pieces * piece_elements != run_elements.max(region_elements) {
+            return Ok(self.copy_from_slice(&extract_runs_fixed(bytes, runs, size)?)?);
+        }
+        // A piece is within a run, which is within `bytes`, so its length does not overflow
+        let piece_len = usize::try_from(piece_elements).unwrap() * size;
+        with_small_len!(piece_len, |piece_len| {
+            let copy = |run_index: u64, region_index: u64| {
+                let start = run_index.checked_mul(size as u64);
+                let source = start
+                    .and_then(|start| usize::try_from(start).ok())
+                    .and_then(|start| bytes.get(start..)?.get(..piece_len))
+                    .ok_or_else(|| {
+                        let start = start.unwrap_or(u64::MAX);
+                        let range = start..start.saturating_add(piece_len as u64);
+                        InvalidByteRangeError::new(ByteRange::new(range), bytes.len() as u64)
+                    })?;
+                // SAFETY: each piece is within a region of the view, and the regions of the view are disjoint from each other and from other views.
+                write_copy_of_slice(unsafe { self.region_mut(region_index, piece_len) }, source);
+                Ok::<_, CodecError>(())
+            };
+            // Split runs or regions into pieces, so that both have the same number of pieces
+            let split = move |(index, _): (u64, u64)| {
+                (0..pieces).map(move |piece| index + piece * piece_elements)
+            };
+            if run_elements == region_elements {
+                std::iter::zip(runs, &regions).try_for_each(
+                    |((run_index, _), (region_index, _))| copy(run_index, region_index),
+                )
+            } else if run_elements > region_elements {
+                std::iter::zip(runs.iter().flat_map(split), &regions)
+                    .try_for_each(|(run_index, (region_index, _))| copy(run_index, region_index))
+            } else {
+                std::iter::zip(runs, regions.iter().flat_map(split))
+                    .try_for_each(|((run_index, _), region_index)| copy(run_index, region_index))
+            }
+        })
     }
 
     /// Copy elements into the view at `positions`.
@@ -818,5 +897,101 @@ mod tests {
         view.fill_elements(&[2, 1], &[]).unwrap();
         assert!(view.copy_elements_from_slice(&[4], &[]).is_err()); // OOB
         assert!(view.fill_elements(&[4], &[]).is_err()); // OOB
+    }
+
+    #[test]
+    fn copy_runs_from_slice_matches_extracted_copy() {
+        // (source shape, source subset, target shape, target subset)
+        let cases = [
+            // Runs and regions of equal length
+            (vec![4, 6], vec![1..3, 2..5], vec![4, 5], vec![1..3, 1..4]),
+            // Runs shorter than regions
+            (vec![4, 6], vec![1..3, 2..5], vec![2, 3], vec![0..2, 0..3]),
+            // Runs longer than regions
+            (vec![3, 4], vec![0..2, 0..4], vec![4, 6], vec![1..3, 2..6]),
+            (
+                vec![2, 3, 4],
+                vec![0..2, 0..3, 0..4],
+                vec![2, 3, 5],
+                vec![0..2, 0..3, 1..5],
+            ),
+            // Runs of 3 and regions of 2 elements, which do not divide each other
+            (vec![2, 4], vec![0..2, 0..3], vec![3, 3], vec![0..3, 0..2]),
+            // Empty
+            (vec![2, 4], vec![0..0, 0..3], vec![3, 3], vec![0..3, 0..0]),
+        ];
+        for size in [0usize, 1, 2, 3, 8] {
+            for (source_shape, source_subset, target_shape, target_subset) in &cases {
+                let source_subset = ArraySubset::new_with_ranges(source_subset);
+                let target_subset = ArraySubset::new_with_ranges(target_subset);
+                let source_len = usize::try_from(source_shape.iter().product::<u64>()).unwrap();
+                let source: Vec<u8> = (0..=255u8).cycle().take(source_len * size).collect();
+                let runs = source_subset
+                    .contiguous_linearised_indices(source_shape)
+                    .unwrap();
+                let mut extracted = Vec::new();
+                for (index, elements) in &runs {
+                    let start = usize::try_from(index).unwrap() * size;
+                    let end = start + usize::try_from(elements).unwrap() * size;
+                    extracted.extend_from_slice(&source[start..end]);
+                }
+                let target_len = usize::try_from(target_shape.iter().product::<u64>()).unwrap();
+                let mut expected = vec![0xa5; target_len * size];
+                let mut actual = expected.clone();
+                // SAFETY: each view is the only view of its bytes.
+                unsafe {
+                    ArrayBytesFixedDisjointView::new(
+                        UnsafeCellSlice::new(&mut expected),
+                        size,
+                        target_shape,
+                        target_subset.clone(),
+                    )
+                    .unwrap()
+                    .copy_from_slice(&extracted)
+                    .unwrap();
+                    let mut view = ArrayBytesFixedDisjointView::new(
+                        UnsafeCellSlice::new(&mut actual),
+                        size,
+                        target_shape,
+                        target_subset.clone(),
+                    )
+                    .unwrap();
+                    view.copy_runs_from_slice(&source, &runs).unwrap();
+                    // The last run is truncated
+                    if size > 0 && !extracted.is_empty() {
+                        let (index, elements) = runs.iter().next_back().unwrap();
+                        let end = usize::try_from(index + elements).unwrap() * size;
+                        assert!(matches!(
+                            view.copy_runs_from_slice(&source[..end - 1], &runs),
+                            Err(CodecError::InvalidByteRangeError(_))
+                        ));
+                    }
+                }
+                assert_eq!(
+                    actual, expected,
+                    "{size} {source_subset:?} {target_subset:?}"
+                );
+            }
+        }
+
+        // The runs must have as many elements as the view
+        let mut bytes = vec![0u8; 9];
+        // SAFETY: this is the only view of bytes.
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut bytes),
+                1,
+                &[3, 3],
+                ArraySubset::new_with_ranges(&[0..2, 0..2]),
+            )
+            .unwrap()
+        };
+        let runs = ArraySubset::new_with_ranges(&[0..1, 0..3])
+            .contiguous_linearised_indices(&[3, 3])
+            .unwrap();
+        assert!(matches!(
+            view.copy_runs_from_slice(&[0; 9], &runs),
+            Err(CodecError::InvalidNumberOfElements(_))
+        ));
     }
 }

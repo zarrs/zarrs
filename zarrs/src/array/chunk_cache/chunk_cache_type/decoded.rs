@@ -173,6 +173,10 @@ fn decoded_chunk_subset_into(
     };
     if indexer.covers_array(chunk_shape) {
         decode_into_array_bytes_target(chunk, output_target)
+    } else if let Some(subset) = indexer.as_array_subset() {
+        // Copy the runs of the subset directly, without extracting them into a new buffer
+        let runs = subset.contiguous_linearised_indices(chunk_shape)?;
+        chunk.extract_runs_into(&runs, output_target)
     } else {
         let subset = chunk.extract_array_subset(indexer, chunk_shape, data_type)?;
         decode_into_array_bytes_target(&subset, output_target)
