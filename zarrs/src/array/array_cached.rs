@@ -34,7 +34,8 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 ///
 /// ### Write Operations
 ///
-/// Write operations delegate to the inner [`Array`] and invalidate cache entries:
+/// Write operations delegate to the inner [`Array`] and invalidate cache entries, even if
+/// they fail, as a failed write may have changed some chunks:
 ///
 /// - `store_metadata` / `erase_metadata` — invalidates the entire cache.
 /// - `store_chunk` / `erase_chunk` — invalidates the affected chunk.
@@ -43,12 +44,13 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 ///
 /// ### Update Operations
 ///
-/// Update operations (partial writes) also delegate to the inner [`Array`]:
+/// Update operations (partial writes) also delegate to the inner [`Array`], and
+/// invalidate even if they fail:
 ///
 /// - `store_partial_chunk` — invalidates the affected chunk.
 /// - `store_array_subset` — invalidates all intersecting chunks, or the entire
 ///   cache if the affected chunks cannot be determined.
-/// - `compact_chunk` — invalidates the chunk only if compaction occurred.
+/// - `compact_chunk` — invalidates the chunk unless it succeeds without compacting it.
 /// - `partial_encoder` — invalidates the affected chunk after each mutation
 ///   attempt.
 ///

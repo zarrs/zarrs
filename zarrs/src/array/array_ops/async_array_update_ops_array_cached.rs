@@ -142,13 +142,14 @@ where
         indexer_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
+        let result = self
+            .array()
             .async_store_partial_chunk(chunk_indices, indexer, indexer_data, resources)
-            .await?;
+            .await;
         self.cache()
             .async_invalidate_cached_chunk_indexer(self.array(), chunk_indices, indexer)
             .await;
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -158,13 +159,15 @@ where
         subset_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
+        let result = self
+            .array()
             .async_store_array_subset(array_subset, subset_data, resources)
-            .await?;
-        self.cache()
+            .await;
+        let invalidated = self
+            .cache()
             .async_invalidate_cached_array_subset(self.array(), array_subset)
-            .await?;
-        Ok(())
+            .await;
+        result.and(invalidated)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -176,13 +179,13 @@ where
         let compacted = self
             .array()
             .async_compact_chunk(chunk_indices, resources)
-            .await?;
-        if compacted {
+            .await;
+        if !matches!(compacted, Ok(false)) {
             self.cache()
                 .async_invalidate_cached_chunk(self.array(), chunk_indices)
                 .await;
         }
-        Ok(compacted)
+        compacted
     }
 
     #[allow(clippy::must_use_candidate)]

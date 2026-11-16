@@ -92,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `SubchunkCached`, which caches the decoded subchunks of a subchunk grid level in a decoded chunk cache keyed by subchunk indices, over a chunk cache that serves its misses, and `NoChunkCache` to serve misses from the array
   - Add `ArrayCached::[async_]invalidate{,_chunk,_chunks}`, which invalidate every layer of the cache after writes that bypass it
   - Writes invalidate cached subchunks belonging to each affected chunk, including values that lossy re-encoding may change outside a partial write
+  - Invalidate caches for chunks that a failed write may have changed
   - `SubchunkCached` supports asynchronous operations over an asynchronous decoded subchunk cache and an asynchronous chunk cache
   - Add the `array_caching` example, which counts the storage reads of repeated reads through each kind of cache
   - Retrieve complete cached chunks without extracting a subset
