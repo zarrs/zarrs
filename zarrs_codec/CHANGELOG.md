@@ -78,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, `zarrs_data_type` to 0.10.0, and `zarrs_storage` to 0.5.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk
-- Make `async-trait` optional and enable it only with the `async` feature
+- Only compile asynchronous dependencies when the `async` feature is enabled
 - Document that a `CodecOptions` concurrent target of zero is unconstrained
 - Improve performance
   - Copy small contiguous regions and elements directly when extracting array subsets and writing or filling output views

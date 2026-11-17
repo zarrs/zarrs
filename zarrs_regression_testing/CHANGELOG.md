@@ -22,7 +22,7 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 - Report `packbits` padding compatibility issues with `zarrs` 0.20-0.23 as known issues, including current not reading their chunks (`schema::UNREAD_BY_REFERENCE`), and expand coverage of padding encodings and `numcodecs.packbits`
 
 ### Changed
-- Use the codec dependency feature gate so non-async compatibility runs do not enable `async-trait` through `zarrs_codec`
+- Avoid compiling asynchronous codec dependencies for synchronous compatibility runs
 
 ## [0.1.0] - Unreleased
 
