@@ -314,7 +314,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `float8` to 0.7.0, `dlpark` to 0.11.1, and `jiff` to 1.0.0
 - Add the `cowbytes` and `camino` dependencies, whose types are part of the public API
 - *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
-- Only enable the `zarrs_codec` `async-trait` dependency with the `async` feature
+- Avoid unused asynchronous dependencies
 - Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.19.0, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4, `pco` 1.1.0, `flate2` 1.1.9, `bzip2` 0.6.1, `zstd` 0.14.4
 
 ### Internal
