@@ -69,7 +69,11 @@ fn test_array_to_array_codec_sync_partial_encoding<
 
     // Get the full chunk size for comparison
     let full_chunk_size = array.chunk_shape(&[0, 0]).unwrap().num_elements_usize()
-        * array.data_type().fixed_size().unwrap();
+        * array
+            .data_type()
+            .as_fixed()
+            .expect("expected fixed data type")
+            .size();
 
     store_perf.reset();
 
@@ -206,7 +210,11 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
 
     // Get the chunk size for comparison
     let full_chunk_size = array.chunk_shape(&[0, 0]).unwrap().num_elements_usize()
-        * array.data_type().fixed_size().unwrap();
+        * array
+            .data_type()
+            .as_fixed()
+            .expect("expected fixed data type")
+            .size();
 
     store_perf.reset();
 

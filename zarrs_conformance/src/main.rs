@@ -23,16 +23,17 @@ fn print_elements_as_fill_value_metadata(
     data_type: &DataType,
     element_bytes: ArrayBytes,
 ) -> Result<()> {
-    match element_bytes {
-        ArrayBytes::Fixed(bytes) => {
-            for byte_slice in bytes.chunks_exact(data_type.fixed_size().unwrap()) {
+    match (element_bytes, data_type) {
+        (ArrayBytes::Fixed(bytes), DataType::Fixed(fixed)) => {
+            anyhow::ensure!(fixed.size() != 0, "zero-sized data types are not supported");
+            for byte_slice in bytes.chunks_exact(fixed.size()) {
                 let fill_value = FillValue::from(byte_slice);
                 let fill_value_metadata = data_type.metadata_fill_value(&fill_value).unwrap();
                 println!("{fill_value_metadata}");
             }
             Ok(())
         }
-        ArrayBytes::Variable(bytes_and_offsets) => {
+        (ArrayBytes::Variable(bytes_and_offsets), DataType::Variable(_)) => {
             let bytes = bytes_and_offsets.bytes();
             let offsets = bytes_and_offsets.offsets();
             for range in offsets.element_ranges() {
@@ -43,9 +44,10 @@ fn print_elements_as_fill_value_metadata(
             }
             Ok(())
         }
-        ArrayBytes::Optional(..) => {
+        (ArrayBytes::Optional(..), _) | (_, DataType::Optional(_)) => {
             anyhow::bail!("Optional data types are not yet supported in conformance testing");
         }
+        _ => anyhow::bail!("array bytes do not match the data type"),
     }
 }
 

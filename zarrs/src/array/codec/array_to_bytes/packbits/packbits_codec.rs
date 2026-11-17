@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use zarrs_plugin::{PluginCreateError, ZarrVersion};
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
@@ -44,6 +44,7 @@ pub(crate) struct PackBitsCodecBound {
     /// The number of packed bits of an element.
     pub(super) element_size_bits: u64,
     pub(super) data_type: DataType,
+    pub(super) data_type_size: usize,
     pub(super) fill_value: Option<FillValue>,
 }
 
@@ -187,7 +188,7 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         // A data type supporting `packbits` need not support `bytes`, so keep the packbits codec if binding fails.
         if self.padding_encoding == PackBitsPaddingEncoding::None
             && bound.layout.first_bit == 0
-            && Some(bound.element_size_bits) == data_type.fixed_size().map(|size| size as u64 * 8)
+            && Some(bound.element_size_bits) == (bound.data_type_size as u64).checked_mul(8)
             && let Ok(codec) =
                 crate::array::codec::BytesCodec::new(Some(zarrs_metadata::Endianness::Little))
                     .with_context(data_type, fill_value, codec_specific_options)
@@ -211,6 +212,13 @@ impl PackBitsCodec {
         fill_value: Option<FillValue>,
         bit_order: PackBitsBitOrder,
     ) -> Result<PackBitsCodecBound, CodecCreateError> {
+        let DataType::Fixed(fixed) = &data_type else {
+            return Err(CodecCreateError::UnsupportedDataType(
+                data_type,
+                Self::aliases_v3().default_name.to_string(),
+            ));
+        };
+        let data_type_size = fixed.size();
         let components = pack_bits_components(&data_type)?;
         if components.component_size_bits > 64 {
             return Err(CodecCreateError::Other(
@@ -232,11 +240,10 @@ impl PackBitsCodec {
         }
 
         // Components are packed contiguously from the decoded bytes
-        if let Some(data_type_size) = data_type.fixed_size()
-            && Some(data_type_size as u64)
-                != components
-                    .num_components
-                    .checked_mul(components.component_size_bits.div_ceil(8))
+        if Some(data_type_size as u64)
+            != components
+                .num_components
+                .checked_mul(components.component_size_bits.div_ceil(8))
         {
             return Err(CodecCreateError::Other(
                 "packbits codec data type size does not match its components".to_string(),
@@ -259,6 +266,7 @@ impl PackBitsCodec {
             convert_bytes,
             element_size_bits,
             data_type,
+            data_type_size,
             fill_value,
         })
     }
@@ -268,11 +276,9 @@ impl PackBitsCodecBound {
     /// Returns the sizes of an array with `shape`.
     ///
     /// # Errors
-    /// Returns an error if the data type does not have a fixed size, or a size overflows.
+    /// Returns an error if a size overflows.
     pub(super) fn sizes(&self, shape: &[NonZeroU64]) -> Result<PackBitsSizes, CodecError> {
-        let data_type_size_dec = self.data_type.fixed_size().ok_or_else(|| {
-            CodecError::Other("data type must have a fixed size for the packbits codec".to_string())
-        })?;
+        let data_type_size_dec = self.data_type_size;
         let num_elements = shape
             .iter()
             .try_fold(1u64, |count, d| count.checked_mul(d.get()))
@@ -334,7 +340,7 @@ impl PackBitsCodecBound {
     /// Returns the size in bytes of an encoded array with `shape`.
     ///
     /// # Errors
-    /// Returns an error if the data type does not have a fixed size, or a size overflows.
+    /// Returns an error if a size overflows.
     pub(crate) fn encoded_size(&self, shape: &[NonZeroU64]) -> Result<u64, CodecError> {
         Ok(self.sizes(shape)?.encoded_bytes as u64)
     }

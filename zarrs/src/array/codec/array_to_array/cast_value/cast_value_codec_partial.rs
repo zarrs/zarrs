@@ -112,12 +112,12 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
 }
 
 fn require_fixed(data_type: &DataType) -> Result<(), CodecError> {
-    data_type.fixed_size().ok_or_else(|| {
-        CodecError::Other(format!(
+    match data_type {
+        DataType::Fixed(_) => Ok(()),
+        DataType::Variable(_) | DataType::Optional(_) => Err(CodecError::Other(format!(
             "cast_value requires fixed-size data types, got {data_type}"
-        ))
-    })?;
-    Ok(())
+        ))),
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>

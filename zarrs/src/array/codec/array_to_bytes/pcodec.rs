@@ -154,7 +154,11 @@ mod tests {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let chunk_shape = vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(10).unwrap()];
         let fill_value = fill_value.into();
-        let size = chunk_shape.num_elements_usize() * data_type.fixed_size().unwrap();
+        let size = chunk_shape.num_elements_usize()
+            * data_type
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
@@ -494,7 +498,10 @@ mod tests {
             ),
         ];
         for (data_type, fill_value) in cases {
-            let element_size = data_type.fixed_size().unwrap();
+            let element_size = data_type
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size();
             let bytes: Vec<u8> = (0..16 * element_size)
                 .map(|i| u8::try_from(i * 7 % 256).unwrap())
                 .collect();

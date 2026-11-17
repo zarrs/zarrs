@@ -1,6 +1,6 @@
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{
-    ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits,
+    ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, DataType,
     IncompatibleDimensionalityError, Indexer,
 };
 #[cfg(not(target_arch = "wasm32"))]
@@ -11,7 +11,7 @@ use zarrs_codec::{
 };
 use zarrs_storage::{MaybeSend, MaybeSync};
 
-use super::super::array_bytes_internal::FixedDecodeBuffers;
+use super::super::array_bytes_internal::{FixedDecodeBuffers, optional_innermost_with_depth};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::recommended_codec_concurrency;
 
@@ -53,11 +53,12 @@ where
         ));
     }
 
-    if !array.data_type().is_fixed() {
+    let (DataType::Fixed(fixed), optional_depth) = optional_innermost_with_depth(array.data_type())
+    else {
         return Err(ArrayError::CodecError(CodecError::Other(
             "retrieve_array_subset_into does not support variable-length data types".to_string(),
         )));
-    }
+    };
 
     if output_target.num_elements() != array_subset.num_elements() {
         return Err(ArrayError::CodecError(
@@ -105,11 +106,10 @@ where
                 &codec_concurrency,
             );
             // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
-            let mut buffers = (output_target.subset().shape() != array_subset.shape().as_ref())
-                .then(|| {
-                    FixedDecodeBuffers::new(array.data_type(), &array_subset.shape())
-                        .expect("fixed data type")
-                });
+            let shape = array_subset.shape();
+            let mut buffers = (output_target.subset().shape() != shape.as_ref()).then(|| {
+                FixedDecodeBuffers::with_size_and_depth(fixed.size(), optional_depth, &shape)
+            });
             let buffers_target = buffers
                 .as_mut()
                 .map(FixedDecodeBuffers::target)

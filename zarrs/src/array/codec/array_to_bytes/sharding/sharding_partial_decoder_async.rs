@@ -154,7 +154,7 @@ pub(crate) async fn partial_decode(
         .await;
     };
 
-    if !data_type.is_optional() && data_type.is_fixed() {
+    if data_type.is_fixed() {
         return partial_decode_fixed_array_subset(
             input_handle,
             subchunk_grid,
@@ -475,7 +475,10 @@ async fn partial_decode_fixed_array_subset(
     let fill_value = inner_codecs
         .fill_value()
         .ok_or(CodecError::UndefinedFillValue)?;
-    let data_type_size = data_type.fixed_size().expect("called on fixed data type");
+    let DataType::Fixed(fixed) = data_type else {
+        return Err(CodecError::Other("expected a fixed data type".to_string()));
+    };
+    let data_type_size = fixed.size();
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, array_subset);
     };

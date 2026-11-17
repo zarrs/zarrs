@@ -10,7 +10,9 @@ use ElementError::IncompatibleElementType as IET;
 impl<const N: usize> Element for &[u8; N] {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         // RawBits and fixed size equal to N
-        if data_type.is::<data_type::RawBitsDataType>() && data_type.fixed_size() == Some(N) {
+        if data_type.is::<data_type::RawBitsDataType>()
+            && matches!(data_type, DataType::Fixed(fixed) if fixed.size() == N)
+        {
             Ok(())
         } else {
             Err(IET)
@@ -39,7 +41,9 @@ impl<const N: usize> Element for &[u8; N] {
 impl<const N: usize> Element for [u8; N] {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         // RawBits and fixed size equal to N
-        if data_type.is::<data_type::RawBitsDataType>() && data_type.fixed_size() == Some(N) {
+        if data_type.is::<data_type::RawBitsDataType>()
+            && matches!(data_type, DataType::Fixed(fixed) if fixed.size() == N)
+        {
             Ok(())
         } else {
             Err(IET)

@@ -12,8 +12,8 @@ use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, Codec,
     CodecChain, CodecChainBound, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, ComputeResources, CowBytes, DataType, DataTypeSize, FillValue,
-    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits, data_type,
+    CodecTraits, ComputeResources, CowBytes, DataType, FillValue, RecommendedConcurrency,
+    Resources, UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
@@ -95,7 +95,7 @@ fn decode_shape_header(bytes: &[u8], dimensionality: usize) -> Result<ChunkShape
 }
 
 fn zero_bytes(data_type: &DataType, num_elements: u64) -> Result<ArrayBytes<'static>, CodecError> {
-    let DataTypeSize::Fixed(size) = data_type.size() else {
+    let DataType::Fixed(fixed) = data_type else {
         return Err(CodecError::UnsupportedDataType(
             data_type.clone(),
             "dynamic local subchunk test codec only supports fixed-size data types".to_string(),
@@ -105,7 +105,7 @@ fn zero_bytes(data_type: &DataType, num_elements: u64) -> Result<ArrayBytes<'sta
         0;
         usize::try_from(num_elements)
             .unwrap()
-            * size
+            * fixed.size()
     ]))
 }
 

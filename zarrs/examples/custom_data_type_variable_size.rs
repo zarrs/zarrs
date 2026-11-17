@@ -6,8 +6,7 @@ use zarrs::array::Resources;
 use derive_more::Deref;
 use serde::{Deserialize, Serialize};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, DataType, DataTypeSize, Element, ElementError,
-    ElementOwned,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, DataType, Element, ElementError, ElementOwned,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, FillValueMetadata};
@@ -121,6 +120,8 @@ inventory::submit! {
     DataTypePluginV3::new::<CustomDataTypeVariableSize>()
 }
 
+impl zarrs_data_type::VariableDataTypeTraits for CustomDataTypeVariableSize {}
+
 impl DataTypeTraits for CustomDataTypeVariableSize {
     fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
@@ -157,8 +158,8 @@ impl DataTypeTraits for CustomDataTypeVariableSize {
         }
     }
 
-    fn size(&self) -> zarrs::array::DataTypeSize {
-        DataTypeSize::Variable
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Variable(self)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

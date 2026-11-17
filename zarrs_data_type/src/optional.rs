@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::{DataType, DataTypeFillValueMetadataError, FillValue};
+use crate::{DataType, DataTypeFillValueMetadataError, FillValue, OptionalDataTypeTraits};
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{Configuration, ConfigurationSerialize};
 use zarrs_plugin::{ExtensionName, PluginCreateError, ZarrVersion};
@@ -80,7 +80,7 @@ impl OptionalDataType {
     /// Check if the fill value represents null (last byte is `0x00`).
     #[must_use]
     pub fn is_fill_value_null(&self, fill_value: &FillValue) -> bool {
-        fill_value.as_ne_bytes().last() == Some(&0)
+        OptionalDataTypeTraits::is_fill_value_null(self, fill_value)
     }
 
     /// Get the inner fill value bytes (without optional suffix).
@@ -88,12 +88,7 @@ impl OptionalDataType {
     /// For optional data types, returns all bytes except the last suffix byte.
     #[must_use]
     pub fn fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
-        let bytes = fill_value.as_ne_bytes();
-        if bytes.is_empty() {
-            &[]
-        } else {
-            &bytes[..bytes.len() - 1]
-        }
+        OptionalDataTypeTraits::fill_value_inner_bytes(self, fill_value)
     }
 
     /// Returns the configuration for this optional data type.
@@ -131,24 +126,6 @@ impl OptionalDataType {
         &self.0
     }
 
-    /// The size of the inner data type.
-    #[must_use]
-    pub fn inner_size(&self) -> zarrs_metadata::DataTypeSize {
-        self.0.size()
-    }
-
-    /// Returns true if the inner data type is fixed size.
-    #[must_use]
-    pub fn is_fixed(&self) -> bool {
-        self.0.is_fixed()
-    }
-
-    /// Returns the fixed size of the inner data type if it's fixed size.
-    #[must_use]
-    pub fn fixed_size(&self) -> Option<usize> {
-        self.0.fixed_size()
-    }
-
     /// Create a fill value from metadata for the inner data type.
     ///
     /// # Errors
@@ -164,15 +141,13 @@ impl OptionalDataType {
 
 // DataTypeTraits implementation for OptionalDataType
 impl crate::DataTypeTraits for OptionalDataType {
+    fn into_data_type(self: std::sync::Arc<Self>) -> DataType {
+        DataType::Optional(self)
+    }
+
     fn configuration(&self, version: ZarrVersion) -> Configuration {
         // Use the existing configuration() method
         OptionalDataType::configuration(self, version)
-    }
-
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        // Optional type size is the inner type's size
-        // The mask/suffix byte is stored separately in the data representation
-        self.inner_size()
     }
 
     fn fill_value(
@@ -211,7 +186,182 @@ impl crate::DataTypeTraits for OptionalDataType {
         }
     }
 
+    fn eq(&self, other: &dyn crate::DataTypeTraits) -> bool {
+        other
+            .as_any()
+            .downcast_ref::<Self>()
+            .is_some_and(|other| self == other)
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+impl OptionalDataTypeTraits for OptionalDataType {
+    fn data_type(&self) -> &DataType {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::any::Any;
+    use std::borrow::Cow;
+
+    use zarrs_metadata::FillValueMetadata;
+
+    use super::*;
+    use crate::{
+        DataTypeFillValueError, DataTypeTraits, FixedDataTypeTraits, VariableDataTypeTraits,
+    };
+
+    #[derive(Debug)]
+    struct UnnamedA;
+    #[derive(Debug)]
+    struct UnnamedB;
+    #[derive(Debug)]
+    struct TaggedEq(u8);
+
+    impl ExtensionName for UnnamedA {
+        fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+            None
+        }
+    }
+
+    impl ExtensionName for UnnamedB {
+        fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+            None
+        }
+    }
+
+    impl ExtensionName for TaggedEq {
+        fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+            Some(Cow::Borrowed("test.tagged_eq"))
+        }
+    }
+
+    impl FixedDataTypeTraits for UnnamedA {
+        fn size(&self) -> usize {
+            1
+        }
+    }
+
+    impl VariableDataTypeTraits for UnnamedB {}
+
+    impl FixedDataTypeTraits for TaggedEq {
+        fn size(&self) -> usize {
+            1
+        }
+    }
+
+    impl DataTypeTraits for UnnamedA {
+        fn into_data_type(self: std::sync::Arc<Self>) -> DataType {
+            DataType::Fixed(self)
+        }
+
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
+            Configuration::default()
+        }
+
+        fn fill_value(
+            &self,
+            _metadata: &FillValueMetadata,
+            _version: ZarrVersion,
+        ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+            Ok(FillValue::from(0u8))
+        }
+
+        fn metadata_fill_value(
+            &self,
+            _fill_value: &FillValue,
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            Ok(FillValueMetadata::from(0))
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    impl DataTypeTraits for UnnamedB {
+        fn into_data_type(self: std::sync::Arc<Self>) -> DataType {
+            DataType::Variable(self)
+        }
+
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
+            Configuration::default()
+        }
+
+        fn fill_value(
+            &self,
+            _metadata: &FillValueMetadata,
+            _version: ZarrVersion,
+        ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+            Ok(FillValue::new(vec![]))
+        }
+
+        fn metadata_fill_value(
+            &self,
+            _fill_value: &FillValue,
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            Ok(FillValueMetadata::Null)
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    impl DataTypeTraits for TaggedEq {
+        fn into_data_type(self: std::sync::Arc<Self>) -> DataType {
+            DataType::Fixed(self)
+        }
+
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
+            Configuration::default()
+        }
+
+        fn fill_value(
+            &self,
+            _metadata: &FillValueMetadata,
+            _version: ZarrVersion,
+        ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+            Ok(FillValue::from(0u8))
+        }
+
+        fn metadata_fill_value(
+            &self,
+            _fill_value: &FillValue,
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            Ok(FillValueMetadata::from(0))
+        }
+
+        fn eq(&self, other: &dyn DataTypeTraits) -> bool {
+            other
+                .as_any()
+                .downcast_ref::<Self>()
+                .is_some_and(|other| self.0 == other.0)
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    #[test]
+    fn optional_data_type_equality_delegates_to_inner_type() {
+        let a = DataType::new(UnnamedA);
+        let b = DataType::new(UnnamedB);
+        assert_ne!(a, b);
+        assert_ne!(a.to_optional(), b.to_optional());
+        assert_ne!(a.to_optional().to_optional(), b.to_optional().to_optional());
+        assert_eq!(a.to_optional(), DataType::new(UnnamedA).to_optional());
+
+        let t1 = DataType::new(TaggedEq(1));
+        let t2 = DataType::new(TaggedEq(2));
+        assert_ne!(t1, t2);
+        assert_ne!(t1.to_optional(), t2.to_optional());
+        assert_eq!(t1.to_optional(), DataType::new(TaggedEq(1)).to_optional());
     }
 }

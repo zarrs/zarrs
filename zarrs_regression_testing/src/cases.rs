@@ -952,7 +952,14 @@ fn array_metadata(
     let mut metadata = serde_json::to_value(metadata).map_err(|err| err.to_string())?;
     let default_codecs = metadata["codecs"].take();
     let default_codecs = default_codecs.as_array().cloned().unwrap_or_default();
-    let element_size = data_type.data_type.fixed_size().unwrap_or(1);
+    let mut inner = &data_type.data_type;
+    let element_size = loop {
+        match inner {
+            zarrs::array::DataType::Fixed(fixed) => break fixed.size(),
+            zarrs::array::DataType::Variable(_) => break 1,
+            zarrs::array::DataType::Optional(optional) => inner = optional.data_type(),
+        }
+    };
 
     let p = params;
     let zfp = |name: &str, mode: ZfpMode| -> Value {

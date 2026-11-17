@@ -8,13 +8,19 @@ pub struct UInt2DataType;
 register_data_type_plugin!(UInt2DataType);
 zarrs_plugin::impl_extension_aliases!(UInt2DataType, v3: "uint2");
 
+impl zarrs_data_type::FixedDataTypeTraits for UInt2DataType {
+    fn size(&self) -> usize {
+        1
+    }
+}
+
 impl zarrs_data_type::DataTypeTraits for UInt2DataType {
     fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        zarrs_metadata::DataTypeSize::Fixed(1)
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn fill_value(

@@ -10,13 +10,15 @@ use super::{
     AsyncReadableStorageTraits, ChunkGrid, CodecOptions, FromArrayBytes, Indexer,
     recommended_codec_concurrency,
 };
-use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_cached_chunks};
+use crate::array::array_bytes_internal::{
+    FixedDecodeBuffers, merge_cached_chunks, optional_innermost_with_depth,
+};
 use crate::array::chunk_cache::{
     AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
     async_retrieve_chunk_overlap_into, fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
-use crate::array::{ArrayBytes, ArrayIndices};
+use crate::array::{ArrayBytes, ArrayIndices, DataType};
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
@@ -68,12 +70,16 @@ where
                 resources,
                 &codec_concurrency,
             );
-            if array.data_type().is_fixed() {
+            if let (DataType::Fixed(fixed), optional_depth) =
+                optional_innermost_with_depth(array.data_type())
+            {
                 async_retrieve_multi_chunk_fixed(
                     cache,
                     array,
                     array_subset,
                     &chunks,
+                    fixed.size(),
+                    optional_depth,
                     chunk_concurrent_limit,
                     options,
                     &resources,
@@ -149,11 +155,14 @@ where
     .into())
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn async_retrieve_multi_chunk_fixed<TStorage, C>(
     cache: &C,
     array: &Array<TStorage>,
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
+    data_type_size: usize,
+    optional_depth: usize,
     chunk_concurrent_limit: usize,
     options: &CodecOptions,
     resources: &Resources,
@@ -163,12 +172,14 @@ where
     C: AsyncChunkCache + ?Sized,
 {
     // Zero-sized data has no bytes to decode, unlike the masks of zero-sized optional data
-    let data_type = array.data_type();
-    if !data_type.is_optional() && data_type.fixed_size() == Some(0) {
+    if optional_depth == 0 && data_type_size == 0 {
         return Ok(Arc::new(ArrayBytes::new_flen(vec![])));
     }
-    let mut buffers =
-        FixedDecodeBuffers::new(data_type, &array_subset.shape()).expect("fixed data type");
+    let mut buffers = FixedDecodeBuffers::with_size_and_depth(
+        data_type_size,
+        optional_depth,
+        &array_subset.shape(),
+    );
     retrieve_multi_chunk_fixed_into(
         array,
         array_subset,

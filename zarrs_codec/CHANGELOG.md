@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `From<CowBytes>` for `ArrayBytes`
 
 ### Changed
+- **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, checking fixed, variable, and nested optional layouts against both the original bytes and update bytes
+- **Breaking**: Box `CodecError::CodecCreateError` to retain the error-size limits after `DataType` becomes an enum; conversion from `CodecCreateError` is retained
 - **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `ArrayBytesDecodeIntoInput`, resolving immediate or deferred encoded bytes without cloning them
 - **Breaking**: Pass `ComputeResources` after codec options on in-memory operations and `Resources` on storage-capable partial interfaces and factories; remove compute-target control and `chunk_concurrent_minimum` (including its getter, setter, and `with_` method) from `CodecOptions`
 - **Breaking**: Refactor `ArrayTo{Array,Bytes}CodecTraits` into codecs _bound_ to a data type and fill value and validated at array creation time
@@ -99,10 +101,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `CodecError::UnsupportedDataTypeCodec`, unsupported data types are rejected when binding with `CodecCreateError::UnsupportedDataType`
 
 ### Fixed
+- Reject incompatible data type layouts when extracting array bytes with arbitrary indexers, and preserve optional layers in empty outputs from default partial decoders
 - `[Async]ByteIntervalPartialDecoder` no longer reads beyond its interval for a `ByteRange::FromStart(offset, None)` with a nonzero `offset`
 - `[Async]ByteIntervalPartialDecoder` returns `CodecError::InvalidByteRangeError` for a byte range outside of its interval, or an interval end that overflows, instead of panicking or reading bytes outside of its interval
 - `BytesPartialDecoderTraits` for `Mutex<Option<Vec<u8>>>` returns `InvalidByteRangeError` instead of panicking on out-of-bounds suffix, offset, or overflowing byte ranges
-- `ArrayBytes::validate` rejects optional masks of the wrong length, and masks with values other than 0/1 are rejected by `ArrayBytesMask::new`
+- `ArrayBytes::validate` rejects overflowing fixed byte lengths and optional masks of the wrong length. `ArrayBytesMask::new` rejects mask values other than 0 or 1
 - `ArrayBytes::is_fill_value` compares variable-length elements individually using their offsets, rather than comparing concatenated bytes
 - `ArrayBytesOptional` equality ignores elements beneath nulls, is symmetric, and no longer panics on malformed masks
 - The default bytes-to-bytes partial encoder replaces the entire chunk, rather than leaving trailing bytes of the existing chunk if the re-encoded chunk is shorter

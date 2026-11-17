@@ -8,8 +8,7 @@ use zarrs::array::{CowBytes, Resources};
 
 use serde::Deserialize;
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, DataType, DataTypeSize, Element, ElementError, ElementOwned,
-    FillValueMetadata,
+    ArrayBuilder, ArrayBytes, DataType, Element, ElementError, ElementOwned, FillValueMetadata,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
@@ -46,6 +45,12 @@ inventory::submit! {
 struct CustomDataTypeFloat8e3m4Element(u8);
 
 /// Implement the core data type extension methods
+impl zarrs_data_type::FixedDataTypeTraits for CustomDataTypeFloat8e3m4 {
+    fn size(&self) -> usize {
+        1
+    }
+}
+
 impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
     fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
@@ -76,8 +81,8 @@ impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
         Ok(FillValueMetadata::from(element.into_f32()))
     }
 
-    fn size(&self) -> zarrs::array::DataTypeSize {
-        DataTypeSize::Fixed(1)
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

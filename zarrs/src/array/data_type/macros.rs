@@ -9,13 +9,19 @@
 /// - `impl_data_type_extension_numeric!(MarkerType, size, rust_type)` - basic implementation
 macro_rules! impl_data_type_extension_numeric {
     ($marker:ty, $size:tt, $rust_type:tt) => {
+        impl zarrs_data_type::FixedDataTypeTraits for $marker {
+            fn size(&self) -> usize {
+                $size
+            }
+        }
+
         impl zarrs_data_type::DataTypeTraits for $marker {
             fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
                 zarrs_metadata::Configuration::default()
             }
 
-            fn size(&self) -> zarrs_metadata::DataTypeSize {
-                zarrs_metadata::DataTypeSize::Fixed($size)
+            fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+                zarrs_data_type::DataType::Fixed(self)
             }
 
             fn fill_value(

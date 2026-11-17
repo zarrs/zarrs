@@ -10,7 +10,7 @@ use std::num::NonZeroU64;
 
 use zarrs_data_type::DataType;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
+use zarrs_metadata::{Configuration, FillValueMetadata};
 use zarrs_plugin::{PluginCreateError, Regex, ZarrVersion};
 
 use zarrs_metadata_ext::data_type::fixed_length_utf32::FixedLengthUTF32DataTypeConfigurationV1;
@@ -196,6 +196,12 @@ impl FixedLengthUTF32DataType {
     }
 }
 
+impl zarrs_data_type::FixedDataTypeTraits for FixedLengthUTF32DataType {
+    fn size(&self) -> usize {
+        self.length_bytes_usize()
+    }
+}
+
 impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
     fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::from(FixedLengthUTF32DataTypeConfigurationV1 {
@@ -203,8 +209,8 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
         })
     }
 
-    fn size(&self) -> DataTypeSize {
-        DataTypeSize::Fixed(self.length_bytes_usize())
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn fill_value(
@@ -315,7 +321,7 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let data_type = DataType::from_metadata(&metadata).unwrap();
         assert!(data_type.is::<FixedLengthUTF32DataType>());
-        assert_eq!(data_type.fixed_size(), Some(16));
+        assert!(matches!(data_type, DataType::Fixed(ref fixed) if fixed.size() == 16));
         assert_eq!(
             json,
             serde_json::to_string(&data_type_metadata(&data_type)).unwrap()

@@ -474,7 +474,8 @@ fn merge_validated_indexer_subchunks(
         let mask = unsafe { ArrayBytesMask::new_unchecked(mask.into_fixed()?) };
         return Ok(data.with_optional_mask(mask));
     }
-    if let Some(element_size) = data_type.fixed_size() {
+    if let DataType::Fixed(fixed) = data_type {
+        let element_size = fixed.size();
         let mut output = vec![0; num_elements * element_size];
         for (bytes, positions) in groups {
             let bytes = bytes.into_fixed()?;

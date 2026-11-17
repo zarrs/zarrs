@@ -18,13 +18,15 @@ zarrs_plugin::impl_extension_aliases!(BytesDataType,
     v2: "|VX", ["|VX"]
 );
 
+impl zarrs_data_type::VariableDataTypeTraits for BytesDataType {}
+
 impl zarrs_data_type::DataTypeTraits for BytesDataType {
     fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        zarrs_metadata::DataTypeSize::Variable
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Variable(self)
     }
 
     fn fill_value(

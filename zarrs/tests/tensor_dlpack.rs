@@ -142,7 +142,10 @@ fn tensor_dlpack_data_types() {
     ];
 
     for (data_type, code, bits) in data_types {
-        let element_size = data_type.fixed_size().unwrap();
+        let element_size = data_type
+            .as_fixed()
+            .expect("expected fixed data type")
+            .size();
         let tensor = Tensor::new(vec![0u8; element_size], data_type.clone(), vec![1]);
         let dlpack = tensor
             .into_dlpack()
@@ -153,7 +156,9 @@ fn tensor_dlpack_data_types() {
             "{data_type} mapped to {dtype:?}"
         );
         // The DLPack element size must match the zarrs in-memory element size
-        assert_eq!(data_type.fixed_size(), Some(dtype.element_size()));
+        assert!(
+            matches!(&data_type, zarrs::array::DataType::Fixed(fixed) if fixed.size() == dtype.element_size())
+        );
         assert!(dlpack.flags().contains(DlpackFlags::READ_ONLY));
         assert!(!dlpack.flags().contains(DlpackFlags::IS_COPIED));
     }

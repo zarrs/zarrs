@@ -98,13 +98,12 @@ fn partial_decode<'a>(
         layout,
         element_size_bits,
         data_type,
+        data_type_size,
         fill_value,
         ..
     } = codec;
     let element_size_bits = *element_size_bits;
-    let data_type_size_dec = data_type.fixed_size().ok_or_else(|| {
-        CodecError::Other("data type must have a fixed size for packbits codec".to_string())
-    })?;
+    let data_type_size_dec = *data_type_size;
     let sizes = codec.sizes(shape)?;
 
     let element_size_bits_usize = usize::try_from(element_size_bits).unwrap();

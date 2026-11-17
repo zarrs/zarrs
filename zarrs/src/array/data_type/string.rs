@@ -11,13 +11,15 @@ zarrs_plugin::impl_extension_aliases!(StringDataType,
     v2: "|O", ["|O"]
 );
 
+impl zarrs_data_type::VariableDataTypeTraits for StringDataType {}
+
 impl zarrs_data_type::DataTypeTraits for StringDataType {
     fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        zarrs_metadata::DataTypeSize::Variable
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Variable(self)
     }
 
     fn fill_value(

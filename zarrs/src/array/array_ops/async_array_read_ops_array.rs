@@ -10,7 +10,7 @@ use super::super::concurrency::concurrency_chunks_and_codec;
 use super::async_array_read_ops_common::{AsyncRetrieveInto, retrieve_multi_chunk_fixed_into};
 use super::{
     Array, ArrayError, ArraySubsetTraits, AsyncArrayReadOps, AsyncReadableStorageTraits, ChunkGrid,
-    CodecOptions, DataType, FromArrayBytes, Indexer, recommended_codec_concurrency,
+    CodecOptions, FromArrayBytes, Indexer, recommended_codec_concurrency,
 };
 use crate::array::{ArrayBytes, ChunkShapeTraits};
 use zarrs_codec::{
@@ -152,11 +152,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                     &codec_concurrency,
                 );
 
-                let bytes = if self.data_type().is_fixed() {
+                let bytes = if let Some(buffers) =
+                    FixedDecodeBuffers::new(self.data_type(), &array_subset_shape)
+                {
                     self.async_retrieve_multi_chunk_fixed(
                         array_subset,
                         &chunks,
-                        self.data_type(),
+                        buffers,
                         chunk_concurrent_limit,
                         options,
                         &resources,
@@ -166,7 +168,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                     self.async_retrieve_multi_chunk_variable(
                         array_subset,
                         &chunks,
-                        self.data_type(),
+                        &array_subset_shape,
                         chunk_concurrent_limit,
                         options,
                         &resources,
@@ -493,7 +495,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         chunks: &dyn ArraySubsetTraits,
-        data_type: &DataType,
+        array_subset_shape: &[u64],
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
         resources: &Resources,
@@ -531,8 +533,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         };
         Ok(merge_chunks(
             chunk_bytes_and_subsets,
-            &array_subset.shape(),
-            data_type,
+            array_subset_shape,
+            self.data_type(),
         )?)
     }
 
@@ -542,13 +544,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         chunks: &dyn ArraySubsetTraits,
-        data_type: &DataType,
+        mut buffers: FixedDecodeBuffers,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let mut buffers = FixedDecodeBuffers::new(data_type, &array_subset.shape())
-            .expect("data_type must have fixed size");
         retrieve_multi_chunk_fixed_into(
             self,
             array_subset,

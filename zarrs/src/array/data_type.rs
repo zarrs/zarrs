@@ -388,7 +388,6 @@ mod tests {
     use half::bf16;
     use zarrs_codec::ArrayBytes;
     use zarrs_data_type::FillValue;
-    use zarrs_metadata::DataTypeSize;
 
     use super::*;
     use crate::array::Element;
@@ -1627,7 +1626,7 @@ mod tests {
             serde_json::to_string(&data_type_metadata(&data_type)).unwrap()
         );
         assert_eq!(data_type.name_v3().unwrap().as_ref(), "r8");
-        assert_eq!(data_type.size(), DataTypeSize::Fixed(1));
+        assert!(matches!(&data_type, DataType::Fixed(fixed) if fixed.size() == 1));
 
         let metadata = serde_json::from_str::<FillValueMetadata>("[7]").unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
@@ -1648,7 +1647,7 @@ mod tests {
             serde_json::to_string(&data_type_metadata(&data_type)).unwrap()
         );
         assert_eq!(data_type.name_v3().unwrap().as_ref(), "r16");
-        assert_eq!(data_type.size(), DataTypeSize::Fixed(2));
+        assert!(matches!(&data_type, DataType::Fixed(fixed) if fixed.size() == 2));
 
         let metadata = serde_json::from_str::<FillValueMetadata>("[0, 255]").unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
@@ -1715,7 +1714,7 @@ mod tests {
         let json = r#""r16""#;
         let metadata = serde_json::from_str::<MetadataV3>(json).unwrap();
         let data_type = DataType::from_metadata(&metadata).unwrap();
-        assert_eq!(data_type.size(), DataTypeSize::Fixed(2));
+        assert!(matches!(&data_type, DataType::Fixed(fixed) if fixed.size() == 2));
     }
 
     #[test]
@@ -1726,7 +1725,7 @@ mod tests {
     }"#;
         let metadata = serde_json::from_str::<MetadataV3>(json).unwrap();
         let data_type = DataType::from_metadata(&metadata).unwrap();
-        assert_eq!(data_type.size(), DataTypeSize::Fixed(2));
+        assert!(matches!(&data_type, DataType::Fixed(fixed) if fixed.size() == 2));
     }
 
     #[test]
@@ -1932,7 +1931,7 @@ mod tests {
             serde_json::to_string(&data_type_metadata(&data_type)).unwrap()
         );
         assert_eq!(data_type.name_v3().unwrap().as_ref(), "string");
-        assert_eq!(data_type.size(), DataTypeSize::Variable);
+        assert!(data_type.is_variable());
 
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""hello world""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
@@ -1969,7 +1968,7 @@ mod tests {
             serde_json::to_string(&data_type_metadata(&data_type)).unwrap()
         );
         assert_eq!(data_type.name_v3().unwrap().as_ref(), "bytes");
-        assert_eq!(data_type.size(), DataTypeSize::Variable);
+        assert!(data_type.is_variable());
 
         let expected_bytes = [0u8, 1, 2, 3];
         let metadata_from_arr: FillValueMetadata = serde_json::from_str(r"[0, 1, 2, 3]").unwrap();
@@ -2002,11 +2001,12 @@ mod tests {
         assert_eq!(data_type.name_v3().unwrap().as_ref(), "zarrs.optional");
         if let Some(opt) = data_type.as_optional() {
             assert!(opt.data_type().is::<Int32DataType>());
-            assert_eq!(opt.data_type().size(), DataTypeSize::Fixed(4));
+            assert!(matches!(opt.data_type(), DataType::Fixed(fixed) if fixed.size() == 4));
         } else {
             panic!("Expected Optional data type");
         }
-        assert_eq!(data_type.size(), DataTypeSize::Fixed(4)); // inner type size (mask stored separately)
+        assert!(data_type.is_optional());
+        assert!(!data_type.is_fixed());
 
         // Test optional with complex configuration (numpy datetime64)
         let json = r#"{"name":"zarrs.optional","configuration":{"name":"numpy.datetime64","configuration":{"unit":"s","scale_factor":1}}}"#;
@@ -2032,11 +2032,12 @@ mod tests {
         let data_type = DataType::from_metadata(&metadata).unwrap();
         if let Some(opt) = data_type.as_optional() {
             assert!(opt.data_type().as_any().is::<StringDataType>());
-            assert_eq!(opt.data_type().size(), DataTypeSize::Variable);
+            assert!(opt.data_type().is_variable());
         } else {
             panic!("Expected Optional data type");
         }
-        assert_eq!(data_type.size(), DataTypeSize::Variable);
+        assert!(data_type.is_optional());
+        assert!(!data_type.is_variable());
 
         // Test metadata roundtrip
         let expected_metadata = data_type_metadata(&data_type);

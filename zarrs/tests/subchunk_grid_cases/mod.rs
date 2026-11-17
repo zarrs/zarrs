@@ -18,8 +18,8 @@ use zarrs::array::codec::{CastValueCodec, ReshapeCodec, SqueezeCodec};
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayToArrayCodecTraits, ChunkGrid, CodecCreateError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, ComputeResources, DataType, DataTypeSize,
-    FillValue, RecommendedConcurrency, UnboundArrayToArrayCodecTraits, data_type,
+    CodecMetadataOptions, CodecOptions, CodecTraits, ComputeResources, DataType, FillValue,
+    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs_codec::{
@@ -368,13 +368,13 @@ impl Case {
     ///
     /// Every case uses a non-zero fill value, so a zeroed chunk is never elided as empty.
     pub(crate) fn zero_chunk_bytes(&self) -> ArrayBytes<'static> {
-        let DataTypeSize::Fixed(element_size) = self.data_type.size() else {
+        let DataType::Fixed(fixed) = &self.data_type else {
             panic!("{}: expected a fixed-size data type", self.name);
         };
         let num_elements: u64 = self.chunk_shape.iter().product();
         ArrayBytes::new_flen(vec![
             0u8;
-            usize::try_from(num_elements).unwrap() * element_size
+            usize::try_from(num_elements).unwrap() * fixed.size()
         ])
     }
 

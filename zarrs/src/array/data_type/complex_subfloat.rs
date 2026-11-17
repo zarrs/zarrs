@@ -5,6 +5,12 @@ use super::macros::register_data_type_plugin;
 /// Macro to implement `DataTypeTraits` for complex subfloat types (microfloat only).
 macro_rules! impl_complex_subfloat_data_type {
     ($marker:ty, $float_type:ty $(, $float8_type:ty)?) => {
+        impl zarrs_data_type::FixedDataTypeTraits for $marker {
+            fn size(&self) -> usize {
+                2
+            }
+        }
+
         impl zarrs_data_type::DataTypeTraits for $marker {
             fn configuration(
                 &self,
@@ -13,8 +19,8 @@ macro_rules! impl_complex_subfloat_data_type {
                 zarrs_metadata::Configuration::default()
             }
 
-            fn size(&self) -> zarrs_metadata::DataTypeSize {
-                zarrs_metadata::DataTypeSize::Fixed(2)
+            fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+                zarrs_data_type::DataType::Fixed(self)
             }
 
             fn fill_value(

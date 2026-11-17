@@ -936,7 +936,7 @@ pub enum CodecError {
     ArraySubsetError(#[from] ArraySubsetError),
     /// Codec create error.
     #[error(transparent)]
-    CodecCreateError(#[from] CodecCreateError),
+    CodecCreateError(#[from] Box<CodecCreateError>),
     /// Missing input cannot be decoded, or partially updated, because the fill value is undefined.
     ///
     /// See [`UnboundArrayToBytesCodecTraits::with_context`].
@@ -944,6 +944,12 @@ pub enum CodecError {
         "missing input cannot be decoded or partially updated because the fill value is undefined"
     )]
     UndefinedFillValue,
+}
+
+impl From<CodecCreateError> for CodecError {
+    fn from(error: CodecCreateError) -> Self {
+        Self::CodecCreateError(Box::new(error))
+    }
 }
 
 impl From<zarrs_data_type::DataTypeCodecError> for CodecError {

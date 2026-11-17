@@ -39,6 +39,7 @@ struct BytesCodecBound {
     endian: Option<Endianness>,
     mode: DecodeMode,
     data_type: DataType,
+    data_type_size: usize,
     /// The `bytes` codec support of `data_type`.
     bytes: BytesDataTypeTraitsArc,
     fill_value: Option<FillValue>,
@@ -129,22 +130,23 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
         fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        if data_type.is_optional() {
+        let DataType::Fixed(fixed) = &data_type else {
             return Err(CodecCreateError::UnsupportedDataType(
                 data_type,
                 Self::aliases_v3().default_name.to_string(),
             ));
-        }
+        };
+        let data_type_size = fixed.size();
         let bytes = data_type.codec_bytes_arc()?;
         let mode = if bytes.is_decode_passthrough(self.endian) {
             DecodeMode::Passthrough
-        } else if data_type.fixed_size().is_some_and(|size| {
+        } else if {
             // Decode one element to check the endianness before a decoder writes to an output.
             matches!(
-                bytes.decode_in_place(&mut vec![0; size], self.endian),
+                bytes.decode_in_place(&mut vec![0; data_type_size], self.endian),
                 Some(Ok(()))
             )
-        }) {
+        } {
             DecodeMode::InPlace
         } else {
             DecodeMode::Decode
@@ -153,25 +155,15 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
             endian: self.endian,
             mode,
             data_type,
+            data_type_size,
             bytes,
             fill_value,
         }))
     }
 }
 
-/// Return the size of `data_type`, which must be fixed-size for the `bytes` codec.
-pub(super) fn fixed_size(data_type: &DataType) -> Result<usize, CodecError> {
-    data_type.fixed_size().ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            BytesCodec::aliases_v3().default_name.to_string(),
-        )
-    })
-}
-
 /// Return the decoded element count and size in bytes of a chunk with `shape`.
-fn decoded_size(data_type: &DataType, shape: &[NonZeroU64]) -> Result<(u64, u64), CodecError> {
-    let data_type_size = fixed_size(data_type)?;
+fn decoded_size(data_type_size: usize, shape: &[NonZeroU64]) -> Result<(u64, u64), CodecError> {
     let num_elements = shape
         .iter()
         .try_fold(1u64, |count, d| count.checked_mul(d.get()))
@@ -184,10 +176,10 @@ fn decoded_size(data_type: &DataType, shape: &[NonZeroU64]) -> Result<(u64, u64)
 
 /// Return the decoded element count and size in bytes of a chunk with `shape`, with the size checked to fit a `usize`.
 pub(super) fn decoded_len(
-    data_type: &DataType,
+    data_type_size: usize,
     shape: &[NonZeroU64],
 ) -> Result<(u64, usize), CodecError> {
-    let (num_elements, num_bytes) = decoded_size(data_type, shape)?;
+    let (num_elements, num_bytes) = decoded_size(data_type_size, shape)?;
     let len = usize::try_from(num_bytes)
         .map_err(|_| CodecError::from("the decoded chunk size in bytes overflows usize"))?;
     Ok((num_elements, len))
@@ -262,9 +254,6 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
     }
 
     fn is_decode_passthrough(&self, _shape: &[NonZeroU64]) -> Result<bool, CodecError> {
-        if !self.data_type.is_fixed() || self.data_type.is_optional() {
-            return Ok(false);
-        }
         Ok(self.mode == DecodeMode::Passthrough)
     }
 
@@ -275,7 +264,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let (num_elements, _) = decoded_len(&self.data_type, shape)?;
+        let (num_elements, _) = decoded_len(self.data_type_size, shape)?;
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
 
@@ -289,7 +278,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         _options: &CodecOptions,
         _resources: &ComputeResources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let (num_elements, _) = decoded_len(&self.data_type, shape)?;
+        let (num_elements, _) = decoded_len(self.data_type_size, shape)?;
         let bytes = if self.mode == DecodeMode::Passthrough {
             bytes
         } else {
@@ -313,6 +302,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
+            self.data_type_size,
             self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
@@ -330,6 +320,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
+            self.data_type_size,
             self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
@@ -348,6 +339,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_handle,
             shape,
             &self.data_type,
+            self.data_type_size,
             self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
@@ -366,6 +358,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             input_output_handle,
             shape,
             &self.data_type,
+            self.data_type_size,
             self.bytes.clone(),
             self.fill_value.as_ref(),
             self.endian,
@@ -380,10 +373,8 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
-        if let ArrayBytesDecodeIntoTarget::Fixed(output) = output_target
-            && self.data_type.is_fixed()
-        {
-            let (num_elements, expected_len) = decoded_len(&self.data_type, shape)?;
+        if let ArrayBytesDecodeIntoTarget::Fixed(output) = output_target {
+            let (num_elements, expected_len) = decoded_len(self.data_type_size, shape)?;
             if output.num_elements() != num_elements {
                 return Err("the decoded element count does not match the output target".into());
             }
@@ -466,7 +457,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        let (_, size) = decoded_size(&self.data_type, shape)?;
+        let (_, size) = decoded_size(self.data_type_size, shape)?;
         Ok(BytesRepresentation::FixedSize(size))
     }
 }

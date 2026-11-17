@@ -180,7 +180,13 @@ mod tests {
         let shape = [NonZeroU64::new(num_elements).unwrap()];
         let codec_configuration: FixedScaleOffsetCodecConfiguration =
             serde_json::from_value(configuration).unwrap();
-        let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap()]);
+        let fill_value = FillValue::new(vec![
+            0;
+            data_type
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size()
+        ]);
         let codec =
             Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
                 .with_context(

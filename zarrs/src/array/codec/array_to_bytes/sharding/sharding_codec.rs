@@ -483,7 +483,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         let shard_shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
 
         // Fixed length data (including optional data with fixed length inner data): decode each subchunk directly into the output
-        if !data_type.is_optional() && data_type.fixed_size() == Some(0) {
+        if matches!(data_type, DataType::Fixed(fixed) if fixed.size() == 0) {
             return Ok(ArrayBytes::new_flen(vec![]));
         }
         if let Some(mut buffers) = FixedDecodeBuffers::new(data_type, shard_shape_u64) {

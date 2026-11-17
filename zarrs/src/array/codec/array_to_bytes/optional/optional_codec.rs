@@ -20,7 +20,7 @@ use zarrs_codec::{
     InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
-use zarrs_metadata::{Configuration, DataTypeSize};
+use zarrs_metadata::Configuration;
 
 /// An `optional` codec implementation.
 #[derive(Debug, Clone)]
@@ -82,10 +82,10 @@ impl OptionalCodecBound {
         mask: &[u8],
         inner_type: &DataType,
     ) -> Result<ArrayBytes<'static>, CodecError> {
-        match dense_data {
-            ArrayBytes::Fixed(bytes) => {
+        match (dense_data, inner_type) {
+            (ArrayBytes::Fixed(bytes), DataType::Fixed(fixed)) => {
                 // Fixed-length: Extract only valid elements based on mask
-                let inner_size = inner_type.fixed_size().unwrap();
+                let inner_size = fixed.size();
                 let mut sparse_bytes = Vec::new();
                 for (i, &mask_byte) in mask.iter().enumerate() {
                     if mask_byte != 0 {
@@ -96,7 +96,7 @@ impl OptionalCodecBound {
                 }
                 Ok(ArrayBytes::new_flen(sparse_bytes))
             }
-            ArrayBytes::Variable(vlen_bytes) => {
+            (ArrayBytes::Variable(vlen_bytes), DataType::Variable(_)) => {
                 let bytes = vlen_bytes.bytes();
                 let offsets = vlen_bytes.offsets();
 
@@ -115,7 +115,7 @@ impl OptionalCodecBound {
                 let sparse_offsets = offsets_from_usize(sparse_offsets)?;
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(sparse_bytes, sparse_offsets) })
             }
-            ArrayBytes::Optional(optional_bytes) => {
+            (ArrayBytes::Optional(optional_bytes), DataType::Optional(inner_opt)) => {
                 // Nested optional: Extract valid elements from both outer and inner masks
                 // Only elements where outer mask is valid should be included
                 // For those elements, preserve their inner mask values
@@ -130,17 +130,15 @@ impl OptionalCodecBound {
                 // SAFETY: selection preserves the source mask's values
                 let sparse_inner_mask = unsafe { ArrayBytesMask::new_unchecked(sparse_inner_mask) };
 
-                // Get the inner-inner type (unwrap the Optional)
-                let inner_opt = inner_type.as_optional().ok_or(CodecError::Other(
-                    "nested optional ArrayBytes requires nested optional DataType".to_string(),
-                ))?;
-
                 // Recursively extract sparse data from the inner data
                 let sparse_inner_data =
                     Self::extract_sparse_data(optional_bytes.data(), mask, inner_opt.data_type())?;
 
                 Ok(sparse_inner_data.with_optional_mask(sparse_inner_mask))
             }
+            _ => Err(CodecError::Other(
+                "optional data type and byte layouts differ".to_string(),
+            )),
         }
     }
 
@@ -151,10 +149,10 @@ impl OptionalCodecBound {
         mask: &[u8],
         inner_type: &DataType,
     ) -> Result<ArrayBytes<'static>, CodecError> {
-        match sparse_data {
-            ArrayBytes::Fixed(sparse_bytes) => {
+        match (sparse_data, inner_type) {
+            (ArrayBytes::Fixed(sparse_bytes), DataType::Fixed(fixed)) => {
                 // Fixed-length: Create dense array with placeholders for invalid elements
-                let inner_size = inner_type.fixed_size().unwrap();
+                let inner_size = fixed.size();
                 let num_elements = mask.len();
                 let mut dense_bytes = vec![0u8; num_elements * inner_size];
                 let mut sparse_idx = 0;
@@ -175,7 +173,7 @@ impl OptionalCodecBound {
 
                 Ok(ArrayBytes::new_flen(dense_bytes))
             }
-            ArrayBytes::Variable(vlen_bytes) => {
+            (ArrayBytes::Variable(vlen_bytes), DataType::Variable(_)) => {
                 let sparse_bytes = vlen_bytes.bytes();
                 let sparse_offsets = vlen_bytes.offsets();
 
@@ -202,15 +200,8 @@ impl OptionalCodecBound {
                 let dense_offsets = offsets_from_usize(dense_offsets)?;
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(dense_bytes, dense_offsets) })
             }
-            ArrayBytes::Optional(sparse_optional_bytes) => {
+            (ArrayBytes::Optional(sparse_optional_bytes), DataType::Optional(inner_opt)) => {
                 // Nested optional: Expand the inner data and then expand the inner mask
-
-                // Get the inner-inner type (unwrap the Optional)
-                let inner_opt = inner_type.as_optional().ok_or_else(|| {
-                    CodecError::Other(
-                        "nested optional ArrayBytes requires nested optional DataType".to_string(),
-                    )
-                })?;
 
                 // Destructure to get owned data and mask
                 let (sparse_inner_data, sparse_inner_mask) = sparse_optional_bytes.into_parts();
@@ -236,37 +227,36 @@ impl OptionalCodecBound {
 
                 Ok(dense_inner_data.with_optional_mask(dense_inner_mask))
             }
+            _ => Err(CodecError::Other(
+                "optional data type and byte layouts differ".to_string(),
+            )),
         }
     }
 
-    /// Creates empty dense data when there are no valid elements.
-    /// The mask contains all zeros, so all elements are invalid/null.
-    fn create_empty_dense_data(
-        mask: &[u8],
+    /// Create dense placeholders for an all-null chunk.
+    fn create_null_dense_data(
+        num_elements: usize,
         inner_type: &DataType,
     ) -> Result<ArrayBytes<'static>, CodecError> {
-        let num_elements = mask.len();
-
-        if inner_type.is_optional() {
-            // Nested optional: create nested structure with all-zero inner mask
-            let inner_opt = inner_type.as_optional().ok_or(CodecError::Other(
-                "nested optional requires nested optional DataType".to_string(),
-            ))?;
-            let inner_data = Self::create_empty_dense_data(mask, inner_opt.data_type())?;
-            let inner_mask = vec![false; num_elements];
-            Ok(inner_data.with_optional_mask(inner_mask))
-        } else {
-            match inner_type.size() {
-                DataTypeSize::Fixed(size) => {
-                    // Fixed-size: create zero-filled buffer
-                    Ok(ArrayBytes::new_flen(vec![0u8; num_elements * size]))
-                }
-                DataTypeSize::Variable => {
-                    // Variable-size: create empty offsets (all elements have zero length)
-                    let offsets = vec![0u32; num_elements + 1];
-                    let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };
-                    Ok(unsafe { ArrayBytes::new_vlen_unchecked(vec![], offsets) })
-                }
+        match inner_type {
+            DataType::Optional(inner_opt) => {
+                let inner_data = Self::create_null_dense_data(num_elements, inner_opt.data_type())?;
+                Ok(inner_data.with_optional_mask(vec![false; num_elements]))
+            }
+            DataType::Fixed(fixed) => {
+                let len = num_elements
+                    .checked_mul(fixed.size())
+                    .ok_or("optional data byte length overflows usize")?;
+                Ok(ArrayBytes::new_flen(vec![0u8; len]))
+            }
+            DataType::Variable(_) => {
+                let len = num_elements
+                    .checked_add(1)
+                    .filter(|&len| len <= isize::MAX as usize / size_of::<u32>())
+                    .ok_or("optional data offset buffer exceeds isize::MAX bytes")?;
+                // SAFETY: len is nonzero and every offset is zero.
+                let offsets = unsafe { ArrayBytesOffsets::new_unchecked(vec![0u32; len]) };
+                Ok(ArrayBytes::new_vlen(vec![], offsets)?)
             }
         }
     }
@@ -316,14 +306,11 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         fill_value: Option<FillValue>,
         codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        if !data_type.is_optional() {
+        let DataType::Optional(inner_type) = &data_type else {
             return Err(CodecCreateError::Other(
                 "optional codec requires an optional data type".to_string(),
             ));
-        }
-        let inner_type = data_type.as_optional().ok_or_else(|| {
-            CodecCreateError::Other("optional codec requires an optional data type".to_string())
-        })?;
+        };
         if let Some(fill_value) = &fill_value
             && data_type.metadata_fill_value(fill_value).is_err()
         {
@@ -483,8 +470,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
             // Expand sparse data to dense format (supports nested optional types)
             Self::expand_to_dense(sparse_data, &mask, opt.data_type())?
         } else {
-            // No valid elements - create empty dense data of the right type/size
-            Self::create_empty_dense_data(&mask, opt.data_type())?
+            Self::create_null_dense_data(mask.len(), opt.data_type())?
         };
 
         // Return ArrayBytes with mask and dense data
@@ -527,14 +513,40 @@ mod tests {
     use zarrs_codec::{CodecOptions, CodecTraits, UnboundArrayToBytesCodecTraits};
 
     #[test]
+    fn codec_optional_decode_all_null_strings() {
+        let data_type = data_type::string().to_optional();
+        let codec = crate::array::codec::default_array_to_bytes_codec(&data_type)
+            .with_context(
+                data_type.clone(),
+                Some(FillValue::from("fill").into_optional()),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+        let shape = [NonZeroU64::new(3).unwrap()];
+        let input =
+            ArrayBytes::new_fill_value(&data_type, 3, &FillValue::new_optional_null()).unwrap();
+        let options = CodecOptions::default();
+        let resources = ComputeResources::default();
+
+        let encoded = codec.encode(input, &shape, &options, &resources).unwrap();
+        let decoded = codec.decode(encoded, &shape, &options, &resources).unwrap();
+        let (data, mask) = decoded.into_optional().unwrap().into_parts();
+        let data = data.into_variable().unwrap();
+        assert_eq!(mask.as_ref(), &[0; 3]);
+        assert!(data.bytes().is_empty());
+        assert!(data.offsets().iter().eq([0; 4]));
+    }
+
+    #[test]
     fn codec_optional_malformed_fill_value() {
         let bind = |data_type: &DataType, fill_value: Vec<u8>| {
             let inner = data_type.as_optional().unwrap().data_type();
-            let data_codecs = if inner.is_fixed() {
-                build_codec_config_for_type(data_type)
-            } else {
-                r#"[{"name": "vlen-utf8"}]"#.to_string()
-            };
+            let data_codecs =
+                if crate::array::array_bytes_internal::optional_innermost(inner).is_fixed() {
+                    build_codec_config_for_type(data_type)
+                } else {
+                    r#"[{"name": "vlen-utf8"}]"#.to_string()
+                };
             let configuration: OptionalCodecConfiguration = serde_json::from_str(&format!(
                 r#"{{"mask_codecs": [{{"name": "packbits"}}], "data_codecs": {data_codecs}}}"#
             ))
@@ -609,20 +621,17 @@ mod tests {
                     }}}}]"#
                 )
             } else {
-                // Non-nested optional inner type - use bytes codec
-                if opt.fixed_size().unwrap() > 1 {
-                    r#"[{"name": "bytes", "configuration": {"endian": "little"}}]"#.to_string()
-                } else {
-                    r#"[{"name": "bytes", "configuration": {}}]"#.to_string()
-                }
+                build_codec_config_for_type(opt.data_type())
             }
+        } else if data_type
+            .as_fixed()
+            .expect("expected fixed data type")
+            .size()
+            > 1
+        {
+            r#"[{"name": "bytes", "configuration": {"endian": "little"}}]"#.to_string()
         } else {
-            // Non-optional type
-            if data_type.fixed_size().unwrap() > 1 {
-                r#"[{"name": "bytes", "configuration": {"endian": "little"}}]"#.to_string()
-            } else {
-                r#"[{"name": "bytes", "configuration": {}}]"#.to_string()
-            }
+            r#"[{"name": "bytes", "configuration": {}}]"#.to_string()
         }
     }
 
@@ -639,7 +648,11 @@ mod tests {
                 inner_array_bytes.with_optional_mask(outer_mask)
             } else {
                 // Innermost optional level - create data and mask
-                let inner_size = opt.fixed_size().unwrap();
+                let inner_size = opt
+                    .data_type()
+                    .as_fixed()
+                    .expect("expected fixed data type")
+                    .size();
                 let mut mask = Vec::new();
                 let mut data = Vec::new();
 
