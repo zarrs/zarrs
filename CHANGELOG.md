@@ -265,6 +265,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification
 - Fix malformed fill values of the `optional` data type being accepted, which bound `data_codecs` with a fill value of the wrong size
 - Fix `r*` (raw bits) fill values whose length differs from the data type size being accepted
+- Compare `r*` (raw bits) data types by width, including when wrapped in optional data types
 
 ### Chunk grids
 

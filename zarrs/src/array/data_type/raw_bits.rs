@@ -208,6 +208,13 @@ impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
         Ok(zarrs_metadata::FillValueMetadata::Array(arr))
     }
 
+    fn eq(&self, other: &dyn zarrs_data_type::DataTypeTraits) -> bool {
+        other
+            .as_any()
+            .downcast_ref::<Self>()
+            .is_some_and(|other| self == other)
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

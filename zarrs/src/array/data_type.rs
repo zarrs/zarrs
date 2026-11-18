@@ -1730,6 +1730,22 @@ mod tests {
     }
 
     #[test]
+    fn raw_bits_equality_compares_width() {
+        let r8 = raw_bits(1);
+        let r16 = raw_bits(2);
+        let parsed_r8 = DataType::from_metadata(&MetadataV3::new("r8")).unwrap();
+        assert_eq!(r8, parsed_r8);
+        assert_ne!(r8, r16);
+
+        let r8 = r8.to_optional();
+        let r16 = r16.to_optional();
+        assert_eq!(r8, parsed_r8.to_optional());
+        assert_ne!(r8, r16);
+        assert_ne!(r16, r8);
+        assert_ne!(r8.to_optional(), r16.to_optional());
+    }
+
+    #[test]
     fn data_type_raw_bits_metadata_fill_value_size() {
         let data_type = raw_bits(2);
         assert!(
