@@ -106,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `[Async]ByteIntervalPartialDecoder` returns `CodecError::InvalidByteRangeError` for a byte range outside of its interval, or an interval end that overflows, instead of panicking or reading bytes outside of its interval
 - `BytesPartialDecoderTraits` for `Mutex<Option<Vec<u8>>>` returns `InvalidByteRangeError` instead of panicking on out-of-bounds suffix, offset, or overflowing byte ranges
 - `ArrayBytes::validate` rejects overflowing fixed byte lengths and optional masks of the wrong length. `ArrayBytesMask::new` rejects mask values other than 0 or 1
+- `ArrayBytes::new_fill_value` returns an error if the element count or a required fill buffer exceeds platform limits
 - `ArrayBytes::is_fill_value` compares variable-length elements individually using their offsets, rather than comparing concatenated bytes
 - `ArrayBytesOptional` equality ignores elements beneath nulls, is symmetric, and no longer panics on malformed masks
 - The default bytes-to-bytes partial encoder replaces the entire chunk, rather than leaving trailing bytes of the existing chunk if the re-encoded chunk is shorter

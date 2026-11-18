@@ -136,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### General
 - **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, validating each optional layer, and `CodecError::CodecCreateError` holds a `Box<CodecCreateError>` to keep array results small
+- Return errors when fill requests exceed platform limits
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
   - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
   - `CodecChain`, `ShardingCodecBuilder`, and `default_array_to_bytes_codec` hold or return unbound codecs (`UnboundArrayTo{Array,Bytes}CodecTraits`), and codec constructors return `CodecCreateError` rather than `PluginCreateError`
@@ -205,7 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *Behavioural change*: Bind `data_codecs` with the unwrapped fill value if it is non-null (e.g. `[42]` -> `42`), rather than a zero fill value
   - This changes the encoded representation if `data_codecs` contain a codec dependent on the fill value (e.g. `sharding_indexed`). Subchunks of zeros omitted by prior versions are decoded as the unwrapped fill value
 - Fix storing and decoding optional masks of the wrong length or with values other than 0/1, which could erase chunks or store values as null; these are now rejected
-- Return an error if the offset buffer size overflows when decoding an all-null variable-length chunk
+- Return an error if the dense data or offset buffer exceeds platform limits when decoding an all-null chunk
 
 #### `vlen`
 - Decoding can reuse shared data and aligned index bytes with pass-through codec chains, and encoding avoids offset-width conversion when the stored width matches `index_data_type`

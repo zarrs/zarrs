@@ -247,6 +247,9 @@ impl OptionalCodecBound {
                 let len = num_elements
                     .checked_mul(fixed.size())
                     .ok_or("optional data byte length overflows usize")?;
+                if len > isize::MAX as usize {
+                    return Err("optional data byte length exceeds isize::MAX".into());
+                }
                 Ok(ArrayBytes::new_flen(vec![0u8; len]))
             }
             DataType::Variable(_) => {
@@ -535,6 +538,14 @@ mod tests {
         assert_eq!(mask.as_ref(), &[0; 3]);
         assert!(data.bytes().is_empty());
         assert!(data.offsets().iter().eq([0; 4]));
+    }
+
+    #[test]
+    fn all_null_dense_data_rejects_unrepresentable_size() {
+        let num_elements = isize::MAX as usize / size_of::<u16>() + 1;
+        assert!(
+            OptionalCodecBound::create_null_dense_data(num_elements, &data_type::uint16()).is_err()
+        );
     }
 
     #[test]

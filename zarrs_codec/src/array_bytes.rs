@@ -155,16 +155,18 @@ impl<'a> ArrayBytes<'a> {
     /// Create a new [`ArrayBytes`] with `num_elements` composed entirely of the `fill_value`.
     ///
     /// # Errors
-    /// Returns [`DataTypeFillValueError`] if the fill value is incompatible with the data type.
-    ///
-    /// # Panics
-    /// Panics if `num_elements` exceeds [`usize::MAX`].
+    /// Returns [`DataTypeFillValueError`] if the fill value is incompatible with the data type,
+    /// the element count exceeds [`usize::MAX`], or a required buffer exceeds [`isize::MAX`] bytes.
     pub fn new_fill_value(
         data_type: &DataType,
         num_elements: u64,
         fill_value: &FillValue,
     ) -> Result<Self, DataTypeFillValueError> {
-        let num_elements = usize::try_from(num_elements).unwrap();
+        let num_elements = usize::try_from(num_elements).map_err(|_| DataTypeFillValueError)?;
+        // Optional masks have one byte per element, including for zero-width data.
+        if num_elements > isize::MAX as usize && data_type.is_optional() {
+            return Err(DataTypeFillValueError);
+        }
         Self::new_fill_value_bytes(data_type, num_elements, fill_value.as_ne_bytes())
     }
 
@@ -174,13 +176,11 @@ impl<'a> ArrayBytes<'a> {
     ) -> Result<Self, DataTypeFillValueError> {
         match data_type {
             DataType::Fixed(fixed) => {
-                let len = num_elements
-                    .checked_mul(fixed.size())
-                    .ok_or(DataTypeFillValueError)?;
+                let len = fill_bytes_len(num_elements, fixed.size())?;
                 Ok(Self::new_flen(vec![0; len]))
             }
             DataType::Variable(_) => {
-                let num_offsets = num_elements.checked_add(1).ok_or(DataTypeFillValueError)?;
+                let num_offsets = fill_offsets_len::<u32>(num_elements)?;
                 // SAFETY: The offset buffer is nonempty and every offset is zero.
                 let offsets = unsafe { ArrayBytesOffsets::new_unchecked(vec![0u32; num_offsets]) };
                 Ok(unsafe {
@@ -207,16 +207,12 @@ impl<'a> ArrayBytes<'a> {
                 if fill_value_bytes.len() != size {
                     return Err(DataTypeFillValueError);
                 }
-                num_elements
-                    .checked_mul(size)
-                    .ok_or(DataTypeFillValueError)?;
+                fill_bytes_len(num_elements, size)?;
                 Ok(Self::new_flen(fill_value_bytes.repeat(num_elements)))
             }
             DataType::Variable(_) => {
-                let num_offsets = num_elements.checked_add(1).ok_or(DataTypeFillValueError)?;
-                num_elements
-                    .checked_mul(fill_value_bytes.len())
-                    .ok_or(DataTypeFillValueError)?;
+                let num_offsets = fill_offsets_len::<usize>(num_elements)?;
+                fill_bytes_len(num_elements, fill_value_bytes.len())?;
                 let mut offsets = Vec::with_capacity(num_offsets);
                 for i in 0..=num_elements {
                     offsets.push(i * fill_value_bytes.len());
@@ -508,6 +504,22 @@ impl<'a> ArrayBytes<'a> {
             }
         }
     }
+}
+
+fn fill_bytes_len(
+    num_elements: usize,
+    element_size: usize,
+) -> Result<usize, DataTypeFillValueError> {
+    num_elements
+        .checked_mul(element_size)
+        .filter(|&len| len <= isize::MAX as usize)
+        .ok_or(DataTypeFillValueError)
+}
+
+fn fill_offsets_len<T>(num_elements: usize) -> Result<usize, DataTypeFillValueError> {
+    let count = num_elements.checked_add(1).ok_or(DataTypeFillValueError)?;
+    std::alloc::Layout::array::<T>(count).map_err(|_| DataTypeFillValueError)?;
+    Ok(count)
 }
 
 fn parse_optional_fill_value(
@@ -1343,6 +1355,56 @@ mod tests {
 
         bytes.validate(u64::MAX, &zero_width).unwrap();
         assert!(bytes.validate(u64::MAX, &nonzero_width).is_err());
+    }
+
+    #[test]
+    fn fill_value_rejects_unrepresentable_buffers() {
+        let fixed = DataType::new(FixedTestDataType(1));
+        let zero_width = DataType::new(FixedTestDataType(0));
+        let variable = DataType::new(VariableTestDataType);
+        let null = FillValue::new_optional_null();
+        let empty = FillValue::from(());
+        let first_oversized = isize::MAX as u64 + 1;
+        let payload_width = 2 * size_of::<usize>();
+
+        let cases = [
+            (fixed, first_oversized, FillValue::from(0u8)),
+            (
+                DataType::new(FixedTestDataType(2)).to_optional(),
+                first_oversized / 2,
+                null.clone(),
+            ),
+            (
+                variable.clone(),
+                isize::MAX as u64 / size_of::<usize>() as u64,
+                empty.clone(),
+            ),
+            (
+                variable.clone(),
+                isize::MAX as u64 / payload_width as u64 + 1,
+                FillValue::new(vec![0; payload_width]),
+            ),
+            (
+                variable.to_optional(),
+                isize::MAX as u64 / size_of::<u32>() as u64,
+                null.clone(),
+            ),
+            (zero_width.to_optional(), first_oversized, null),
+            (
+                zero_width.to_optional().to_optional(),
+                first_oversized,
+                empty.clone().into_optional().into_optional(),
+            ),
+        ];
+        for (data_type, count, fill) in cases {
+            assert!(matches!(
+                ArrayBytes::new_fill_value(&data_type, count, &fill),
+                Err(DataTypeFillValueError)
+            ));
+        }
+
+        let bytes = ArrayBytes::new_fill_value(&zero_width, first_oversized, &empty).unwrap();
+        assert!(bytes.into_fixed().unwrap().is_empty());
     }
 
     #[test]
