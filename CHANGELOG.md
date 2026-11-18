@@ -136,7 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### General
 - **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, validating each optional layer, and `CodecError::CodecCreateError` holds a `Box<CodecCreateError>` to keep array results small
-- Return errors when fill requests exceed platform limits
+- Return errors when fill requests or expected optional mask lengths exceed platform limits
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
   - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
   - `CodecChain`, `ShardingCodecBuilder`, and `default_array_to_bytes_codec` hold or return unbound codecs (`UnboundArrayTo{Array,Bytes}CodecTraits`), and codec constructors return `CodecCreateError` rather than `PluginCreateError`

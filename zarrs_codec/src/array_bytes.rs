@@ -11,7 +11,7 @@ use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError, extract_byte_r
 use crate::small_copy::with_small_len;
 use crate::{
     ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, CodecError, DataType,
-    FillValue, Indexer, IndexerError, InvalidBytesLengthError,
+    FillValue, Indexer, IndexerError, InvalidBytesLengthError, InvalidNumberOfElementsError,
 };
 
 mod array_bytes_offsets;
@@ -759,13 +759,14 @@ fn validate_bytes(
             DataType::Variable(_),
         ) => validate_bytes_vlen(bytes, offsets, num_elements),
         (ArrayBytes::Optional(optional_bytes), DataType::Optional(optional)) => {
-            let mask = optional_bytes.mask();
-            if mask.len() as u64 != num_elements {
-                return Err(InvalidBytesLengthError::new(
-                    mask.len(),
-                    usize::try_from(num_elements).unwrap(),
-                )
-                .into());
+            let mask_len = optional_bytes.mask().len();
+            if mask_len as u64 != num_elements {
+                return Err(match usize::try_from(num_elements) {
+                    Ok(expected_len) => InvalidBytesLengthError::new(mask_len, expected_len).into(),
+                    Err(_) => {
+                        InvalidNumberOfElementsError::new(mask_len as u64, num_elements).into()
+                    }
+                });
             }
             validate_bytes(optional_bytes.data(), num_elements, optional.data_type())
         }
@@ -1405,6 +1406,22 @@ mod tests {
 
         let bytes = ArrayBytes::new_fill_value(&zero_width, first_oversized, &empty).unwrap();
         assert!(bytes.into_fixed().unwrap().is_empty());
+    }
+
+    #[cfg(target_pointer_width = "32")]
+    #[test]
+    fn optional_validation_rejects_unrepresentable_count() {
+        let data_type = DataType::new(FixedTestDataType(0)).to_optional();
+        let empty = ArrayBytes::new_empty(&data_type).unwrap();
+        let count = usize::MAX as u64 + 1;
+        assert!(matches!(
+            empty.validate(count, &data_type),
+            Err(CodecError::InvalidNumberOfElements(_))
+        ));
+        assert!(matches!(
+            ArrayBytes::new_fill_value(&data_type, count, &FillValue::new_optional_null()),
+            Err(DataTypeFillValueError)
+        ));
     }
 
     #[test]
