@@ -36,24 +36,21 @@ pub(crate) fn offsets_from_usize(
     }
 }
 
-/// Count the nesting depth of optional types.
-/// Returns 0 for non-optional types, 1 for `Option<T>`, 2 for `Option<Option<T>>`, etc.
-pub(crate) fn optional_nesting_depth(data_type: &DataType) -> usize {
-    if let Some(inner) = data_type.optional_inner() {
-        1 + optional_nesting_depth(inner)
-    } else {
-        0
+/// The innermost data type and nesting depth of (possibly nested) optional types.
+/// Returns `(data_type, 0)` for non-optional types.
+pub(crate) fn optional_innermost_with_depth(mut data_type: &DataType) -> (&DataType, usize) {
+    let mut depth = 0;
+    while let Some(inner) = data_type.optional_inner() {
+        data_type = inner;
+        depth += 1;
     }
+    (data_type, depth)
 }
 
 /// The innermost data type of (possibly nested) optional types.
 /// Returns `data_type` for non-optional types.
 pub(crate) fn optional_innermost(data_type: &DataType) -> &DataType {
-    let mut data_type = data_type;
-    while let Some(inner) = data_type.optional_inner() {
-        data_type = inner;
-    }
-    data_type
+    optional_innermost_with_depth(data_type).0
 }
 
 /// Output buffers for decoding fixed length data (including optional data with fixed length inner data) into views.
@@ -72,16 +69,31 @@ impl FixedDecodeBuffers {
     /// # Panics
     /// Panics if the number of elements in `shape` exceeds [`usize::MAX`].
     pub(crate) fn new(data_type: &DataType, shape: &[u64]) -> Option<Self> {
-        let data_type_size = optional_innermost(data_type).fixed_size()?;
+        let (DataType::Fixed(fixed), optional_depth) = optional_innermost_with_depth(data_type)
+        else {
+            return None;
+        };
+        Some(Self::with_size_and_depth(
+            fixed.size(),
+            optional_depth,
+            shape,
+        ))
+    }
+
+    pub(crate) fn with_size_and_depth(
+        data_type_size: usize,
+        optional_depth: usize,
+        shape: &[u64],
+    ) -> Self {
         let num_elements = usize::try_from(shape.iter().product::<u64>()).unwrap();
-        Some(Self {
+        Self {
             data: Vec::with_capacity(num_elements * data_type_size),
-            masks: (0..optional_nesting_depth(data_type))
+            masks: (0..optional_depth)
                 .map(|_| Vec::with_capacity(num_elements))
                 .collect(),
             data_type_size,
             shape: shape.to_vec(),
-        })
+        }
     }
 
     /// Return a decode target covering the entire array.
@@ -173,7 +185,8 @@ pub(crate) fn merge_chunks<'a>(
         // SAFETY: the output is zero-initialised and receives only source mask values
         let mask = unsafe { ArrayBytesMask::new_unchecked(mask.into_fixed()?) };
         Ok(data.with_optional_mask(mask))
-    } else if let Some(data_type_size) = data_type.fixed_size() {
+    } else if let DataType::Fixed(fixed) = data_type {
+        let data_type_size = fixed.size();
         let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
         let mut output = vec![0; num_elements * data_type_size];
         let output_slice = UnsafeCellSlice::new(output.as_mut_slice());
@@ -453,13 +466,13 @@ mod tests {
                 data_type::raw_bits(0),
                 FillValue::from(None::<Option<()>>),
                 vec![],
-                vec![0, 1],
+                vec![0, 0],
             ),
             (
                 data_type::string(),
                 FillValue::from(None::<Option<&str>>),
                 vec![],
-                vec![0, 1],
+                vec![0, 0],
             ),
             (
                 data_type::string(),

@@ -238,7 +238,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 &chunk_shape,
                 indexer,
                 &indexer_bytes,
-                self.data_type().size(),
+                self.data_type(),
             )?;
 
             self.store_chunk_with_options(chunk_indices, chunk_bytes_new, options, resources)

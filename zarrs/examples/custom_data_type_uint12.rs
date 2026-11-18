@@ -7,9 +7,7 @@ use std::sync::Arc;
 use zarrs::array::{CowBytes, Resources};
 
 use serde::Deserialize;
-use zarrs::array::{
-    ArrayBuilder, ArrayBytes, DataType, DataTypeSize, Element, ElementError, ElementOwned,
-};
+use zarrs::array::{ArrayBuilder, ArrayBytes, DataType, Element, ElementError, ElementOwned};
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, FillValueMetadata};
 use zarrs::storage::store::MemoryStore;
@@ -46,6 +44,12 @@ inventory::submit! {
 struct CustomDataTypeUInt12Element(u16);
 
 /// Implement the core data type extension methods
+impl zarrs_data_type::FixedDataTypeTraits for CustomDataTypeUInt12 {
+    fn size(&self) -> usize {
+        2
+    }
+}
+
 impl DataTypeTraits for CustomDataTypeUInt12 {
     fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
@@ -77,8 +81,8 @@ impl DataTypeTraits for CustomDataTypeUInt12 {
         Ok(FillValueMetadata::from(element.into_u16()))
     }
 
-    fn size(&self) -> zarrs::array::DataTypeSize {
-        DataTypeSize::Fixed(2)
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

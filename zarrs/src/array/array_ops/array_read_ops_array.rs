@@ -7,8 +7,8 @@ use super::super::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
-    Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkGrid, CodecOptions, DataType,
-    FromArrayBytes, Indexer, ReadableStorageTraits, recommended_codec_concurrency,
+    Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkGrid, CodecOptions, FromArrayBytes,
+    Indexer, ReadableStorageTraits, recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ChunkShapeTraits};
@@ -149,12 +149,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                     &codec_concurrency,
                 );
 
-                // Delegate to appropriate helper based on data type size
-                let bytes = if self.data_type().is_fixed() {
+                let array_subset_shape = array_subset.shape();
+                let bytes = if let Some(buffers) =
+                    FixedDecodeBuffers::new(self.data_type(), &array_subset_shape)
+                {
                     self.retrieve_multi_chunk_fixed(
                         array_subset,
                         &chunks,
-                        self.data_type(),
+                        buffers,
                         chunk_concurrent_limit,
                         options,
                         &resources,
@@ -163,14 +165,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                     self.retrieve_multi_chunk_variable(
                         array_subset,
                         &chunks,
-                        self.data_type(),
+                        &array_subset_shape,
                         chunk_concurrent_limit,
                         options,
                         &resources,
                     )?
                 };
                 bytes.validate(array_subset.num_elements(), self.data_type())?;
-                T::from_array_bytes(bytes.into_owned(), &array_subset.shape(), self.data_type())
+                T::from_array_bytes(bytes.into_owned(), &array_subset_shape, self.data_type())
             }
         }
     }
@@ -456,7 +458,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         chunks: &dyn ArraySubsetTraits,
-        data_type: &DataType,
+        array_subset_shape: &[u64],
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
         resources: &Resources,
@@ -481,8 +483,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(merge_chunks(
             chunk_bytes_and_subsets,
-            &array_subset.shape(),
-            data_type,
+            array_subset_shape,
+            self.data_type(),
         )?)
     }
 
@@ -492,13 +494,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         chunks: &dyn ArraySubsetTraits,
-        data_type: &DataType,
+        mut buffers: FixedDecodeBuffers,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let mut buffers = FixedDecodeBuffers::new(data_type, &array_subset.shape())
-            .expect("data_type must have fixed size");
         retrieve_multi_chunk_fixed_into(
             self,
             array_subset,

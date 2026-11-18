@@ -192,7 +192,12 @@ fn get_vlen_bytes_and_offsets(
         .into_fixed()?;
     let index_data_type = index_codecs.data_type();
     if Endianness::Big.is_native() {
-        index.with_mut(|index| reverse_endianness(index, index_data_type));
+        let crate::array::DataType::Fixed(fixed) = index_data_type else {
+            return Err(CodecError::Other(
+                "vlen index data type must be fixed size".to_string(),
+            ));
+        };
+        index.with_mut(|index| reverse_endianness(index, fixed.size()));
     }
     // The index is retained without copying if it is shared and aligned
     let index = index.into_static();

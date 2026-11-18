@@ -147,13 +147,19 @@ impl RawBitsDataType {
     }
 }
 
+impl zarrs_data_type::FixedDataTypeTraits for RawBitsDataType {
+    fn size(&self) -> usize {
+        self.size_bytes
+    }
+}
+
 impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
     fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        zarrs_metadata::DataTypeSize::Fixed(self.size_bytes)
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn fill_value(

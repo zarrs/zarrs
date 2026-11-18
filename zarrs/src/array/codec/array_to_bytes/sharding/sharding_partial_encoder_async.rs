@@ -451,7 +451,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncShardingPartialEncoder {
                     bytemuck::cast_slice(&update.subchunk_shape),
                     update.indexer.as_ref(),
                     &update.bytes,
-                    data_type.size(),
+                    data_type,
                 )?;
                 if subchunk_updated.is_fill_value(fill_value) {
                     Ok((update.subchunk_index, None))

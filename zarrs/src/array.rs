@@ -1145,7 +1145,11 @@ fn create_codec_chain_from_v2(
             let data_type_size = if blosc_config.shuffle == BloscShuffleModeNumcodecs::NoShuffle {
                 None
             } else {
-                Some(data_type.size())
+                match data_type {
+                    DataType::Fixed(fixed) => Some(DataTypeSize::Fixed(fixed.size())),
+                    DataType::Variable(_) => Some(DataTypeSize::Variable),
+                    DataType::Optional(_) => None,
+                }
             };
 
             let v3_config = codec_blosc_v2_numcodecs_to_v3(&blosc_config, data_type_size);

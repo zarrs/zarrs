@@ -334,7 +334,11 @@ async fn async_retrieve_into_vec(
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let subset = ArraySubset::from(subset.to_vec());
     let num_elements = subset.num_elements_usize();
-    let data_type_size = array.data_type().fixed_size().unwrap();
+    let data_type_size = array
+        .data_type()
+        .as_fixed()
+        .expect("expected fixed data type")
+        .size();
     let shape: Vec<u64> = subset.shape().to_vec();
     let total_bytes = num_elements * data_type_size;
     let mut output = vec![0u8; total_bytes];

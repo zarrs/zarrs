@@ -587,11 +587,17 @@ mod tests {
         let options = CodecOptions::default();
 
         for (source_name, source_dt) in &data_types {
-            let source_size = source_dt.fixed_size().unwrap();
+            let source_size = source_dt
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size();
             let source_trait = source_dt.codec_castvalue().unwrap();
             assert!(source_trait.cast_value_repr().is_some(), "{source_name}");
             for (target_name, target_dt) in &data_types {
-                let target_size = target_dt.fixed_size().unwrap();
+                let target_size = target_dt
+                    .as_fixed()
+                    .expect("expected fixed data type")
+                    .size();
                 let target_trait = target_dt.codec_castvalue().unwrap();
                 let target_is_float = target_name.contains("float");
                 for (rounding_name, rounding) in roundings {

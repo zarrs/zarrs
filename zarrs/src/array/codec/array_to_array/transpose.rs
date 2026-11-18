@@ -79,7 +79,6 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesMask, ArrayBytesOffsets, Codec, CodecError, CodecPluginV3, CodecTraitsV3,
 };
-use zarrs_metadata::DataTypeSize;
 pub use zarrs_metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
@@ -228,8 +227,8 @@ pub(crate) fn apply_permutation<'a>(
     let num_elements = input_shape.iter().product();
     bytes.validate(num_elements, data_type)?;
 
-    match (bytes, data_type.size()) {
-        (ArrayBytes::Variable(vlen_bytes), DataTypeSize::Variable) => {
+    match (bytes, data_type) {
+        (ArrayBytes::Variable(vlen_bytes), DataType::Variable(_)) => {
             let bytes = vlen_bytes.bytes();
             let offsets = vlen_bytes.offsets();
             let shape: Vec<usize> = input_shape
@@ -238,20 +237,16 @@ pub(crate) fn apply_permutation<'a>(
                 .collect();
             Ok(transpose_vlen(bytes, offsets, &shape, permutation.to_vec()))
         }
-        (ArrayBytes::Fixed(bytes), DataTypeSize::Fixed(data_type_size)) => {
+        (ArrayBytes::Fixed(bytes), DataType::Fixed(fixed)) => {
             // For fixed-size types, add an extra dimension for the element bytes
             let mut order_with_bytes = permutation.to_vec();
             order_with_bytes.push(permutation.len());
-            let bytes = transpose_array(&order_with_bytes, input_shape, data_type_size, bytes)
+            let bytes = transpose_array(&order_with_bytes, input_shape, fixed.size(), bytes)
                 .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
             Ok(ArrayBytes::from(bytes))
         }
-        (ArrayBytes::Optional(optional_bytes), _) => {
-            let Some(inner_data_type) = data_type.optional_inner() else {
-                return Err(CodecError::Other(
-                    "dev error: transpose data type mismatch".to_string(),
-                ));
-            };
+        (ArrayBytes::Optional(optional_bytes), DataType::Optional(optional)) => {
+            let inner_data_type = optional.data_type();
             let data = apply_permutation(
                 optional_bytes.data(),
                 input_shape,
@@ -298,7 +293,11 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
         ];
         let fill_value = fill_value.into();
-        let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
+        let size = shape.num_elements_usize()
+            * data_type
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 

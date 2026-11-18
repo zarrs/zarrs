@@ -19,8 +19,7 @@ use zarrs::array::{CowBytes, Resources};
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, DataType, DataTypeSize, Element, ElementError, ElementOwned,
-    FillValueMetadata,
+    ArrayBuilder, ArrayBytes, DataType, Element, ElementError, ElementOwned, FillValueMetadata,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, Endianness};
@@ -173,6 +172,12 @@ inventory::submit! {
 }
 
 /// Implement the core data type extension methods
+impl zarrs_data_type::FixedDataTypeTraits for CustomDataTypeFixedSize {
+    fn size(&self) -> usize {
+        size_of::<CustomDataTypeFixedSizeBytes>()
+    }
+}
+
 impl DataTypeTraits for CustomDataTypeFixedSize {
     fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
@@ -202,8 +207,8 @@ impl DataTypeTraits for CustomDataTypeFixedSize {
         Ok(FillValueMetadata::from(element))
     }
 
-    fn size(&self) -> zarrs::array::DataTypeSize {
-        DataTypeSize::Fixed(size_of::<CustomDataTypeFixedSizeBytes>())
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

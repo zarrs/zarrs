@@ -3,10 +3,9 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use derive_more::{Deref, From};
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
+use zarrs_metadata::{Configuration, FillValueMetadata};
 use zarrs_plugin::{
     ExtensionName, MaybeSend, MaybeSync, PluginCreateError, PluginUnsupportedError, ZarrVersion,
 };
@@ -18,12 +17,38 @@ use crate::{
 };
 
 /// A data type implementing [`DataTypeTraits`].
-#[derive(Debug, Clone, Deref, From)]
-pub struct DataType(Arc<dyn DataTypeTraits>);
+#[derive(Debug, Clone, derive_more::From)]
+pub enum DataType {
+    /// A fixed-size data type.
+    Fixed(Arc<dyn FixedDataTypeTraits>),
+    /// A variable-size data type.
+    Variable(Arc<dyn VariableDataTypeTraits>),
+    /// An optional data type with a validity mask and dense inner data.
+    Optional(Arc<dyn OptionalDataTypeTraits>),
+}
+
+impl std::ops::Deref for DataType {
+    type Target = dyn DataTypeTraits;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Fixed(data_type) => data_type.as_ref(),
+            Self::Variable(data_type) => data_type.as_ref(),
+            Self::Optional(data_type) => data_type.as_ref(),
+        }
+    }
+}
+
+impl AsRef<dyn DataTypeTraits> for DataType {
+    fn as_ref(&self) -> &(dyn DataTypeTraits + 'static) {
+        std::ops::Deref::deref(self)
+    }
+}
 
 impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
-        self.0.eq(other.0.as_ref())
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+            && self.as_ref().eq(other.as_ref())
     }
 }
 
@@ -44,13 +69,19 @@ impl std::fmt::Display for DataType {
 
 impl<T: DataTypeTraits + 'static> From<Arc<T>> for DataType {
     fn from(data_type: Arc<T>) -> Self {
-        Self(data_type)
+        data_type.into_data_type()
+    }
+}
+
+impl From<Arc<dyn DataTypeTraits>> for DataType {
+    fn from(data_type: Arc<dyn DataTypeTraits>) -> Self {
+        data_type.into_data_type()
     }
 }
 
 impl ExtensionName for DataType {
     fn name(&self, version: ZarrVersion) -> Option<Cow<'static, str>> {
-        self.0.name(version)
+        self.as_ref().name(version)
     }
 }
 
@@ -66,8 +97,7 @@ pub enum DataTypeMetadata<'a> {
 impl DataType {
     /// Create a data type.
     pub fn new<T: DataTypeTraits + 'static>(data_type: T) -> Self {
-        let data_type: Arc<dyn DataTypeTraits> = Arc::new(data_type);
-        data_type.into()
+        Arc::new(data_type).into()
     }
 
     /// Create a data type from metadata.
@@ -181,54 +211,76 @@ impl DataType {
     #[must_use]
     pub fn downcast_arc<T: DataTypeTraits>(&self) -> Option<Arc<T>> {
         #[cfg(not(target_arch = "wasm32"))]
+        type ErasedDataType = dyn Any + Send + Sync;
+        #[cfg(target_arch = "wasm32")]
+        type ErasedDataType = dyn Any;
+
+        #[cfg(target_arch = "wasm32")]
+        if !(self.as_ref() as &dyn Any).is::<T>() {
+            return None;
+        }
+
+        let any: Arc<ErasedDataType> = match self {
+            Self::Fixed(data_type) => data_type.clone(),
+            Self::Variable(data_type) => data_type.clone(),
+            Self::Optional(data_type) => data_type.clone(),
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            let any: Arc<dyn Any + Send + Sync> = self.0.clone();
             any.downcast::<T>().ok()
         }
         #[cfg(target_arch = "wasm32")]
         {
-            // `Any` is a supertrait, so this is the type id of the concrete data type rather than one reported by `as_any`
-            if (&*self.0 as &dyn Any).is::<T>() {
-                let ptr = Arc::into_raw(self.0.clone()).cast::<T>();
-                // SAFETY: the concrete type of the allocation is `T`, as checked above, so the pointer to it is a valid `*const T` from `Arc::into_raw` (as in `Arc::downcast`)
-                Some(unsafe { Arc::from_raw(ptr) })
-            } else {
-                None
-            }
+            let ptr = Arc::into_raw(any).cast::<T>();
+            // SAFETY: The check above used the concrete type of this same allocation.
+            Some(unsafe { Arc::from_raw(ptr) })
         }
     }
 
-    /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
-    #[must_use]
-    pub fn fixed_size(&self) -> Option<usize> {
-        match self.size() {
-            DataTypeSize::Fixed(size) => Some(size),
-            DataTypeSize::Variable => None,
-        }
-    }
-
-    /// Returns `true` if the data type has a fixed size.
+    /// Returns `true` for [`DataType::Fixed`].
     #[must_use]
     pub fn is_fixed(&self) -> bool {
-        matches!(self.size(), DataTypeSize::Fixed(_))
+        matches!(self, Self::Fixed(_))
     }
 
-    /// Returns `true` if the data type has a variable size.
+    /// Returns `true` for [`DataType::Variable`].
     #[must_use]
     pub fn is_variable(&self) -> bool {
-        matches!(self.size(), DataTypeSize::Variable)
+        matches!(self, Self::Variable(_))
     }
 
     /// Returns true if this is an optional data type.
     #[must_use]
     pub fn is_optional(&self) -> bool {
-        self.as_ref().as_any().is::<OptionalDataType>()
+        matches!(self, Self::Optional(_))
+    }
+
+    /// Returns the fixed-size traits if this is a fixed-size data type.
+    #[must_use]
+    pub fn as_fixed(&self) -> Option<&dyn FixedDataTypeTraits> {
+        match self {
+            Self::Fixed(data_type) => Some(data_type.as_ref()),
+            Self::Variable(_) | Self::Optional(_) => None,
+        }
+    }
+
+    /// Returns the variable-size traits if this is a variable-size data type.
+    #[must_use]
+    pub fn as_variable(&self) -> Option<&dyn VariableDataTypeTraits> {
+        match self {
+            Self::Variable(data_type) => Some(data_type.as_ref()),
+            Self::Fixed(_) | Self::Optional(_) => None,
+        }
     }
 
     /// Returns the optional type wrapper if this is an optional data type.
     #[must_use]
-    pub fn as_optional(&self) -> Option<&OptionalDataType> {
-        self.downcast_ref::<OptionalDataType>()
+    pub fn as_optional(&self) -> Option<&dyn OptionalDataTypeTraits> {
+        match self {
+            Self::Optional(data_type) => Some(data_type.as_ref()),
+            Self::Fixed(_) | Self::Variable(_) => None,
+        }
     }
 
     /// For optional types: returns the inner data type.
@@ -236,7 +288,7 @@ impl DataType {
     /// Returns `None` if this is not an optional type.
     #[must_use]
     pub fn optional_inner(&self) -> Option<&DataType> {
-        self.as_optional().map(OptionalDataType::data_type)
+        self.as_optional().map(OptionalDataTypeTraits::data_type)
     }
 
     /// Wrap this data type in an optional type.
@@ -284,6 +336,9 @@ pub trait DataTypeTraitsV2 {
 ///
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
 pub trait DataTypeTraits: Any + ExtensionName + Debug + MaybeSend + MaybeSync {
+    /// Wrap this shared instance in its [`DataType`] variant.
+    fn into_data_type(self: Arc<Self>) -> DataType;
+
     /// The configuration of the data type.
     fn configuration(&self, version: ZarrVersion) -> Configuration;
 
@@ -296,12 +351,6 @@ pub trait DataTypeTraits: Any + ExtensionName + Debug + MaybeSend + MaybeSync {
     fn configuration_v2(&self) -> Configuration {
         self.configuration(ZarrVersion::V2)
     }
-
-    /// The size of the data type.
-    ///
-    /// This size may differ from the size in memory of the data type.
-    /// It represents the size of elements passing through array to array and array to bytes codecs in the codec pipeline (i.e., after conversion to [`ArrayBytes`](https://docs.rs/zarrs/latest/zarrs/array/enum.ArrayBytes.html)).
-    fn size(&self) -> DataTypeSize;
 
     /// Create a fill value from metadata.
     ///
@@ -340,7 +389,7 @@ pub trait DataTypeTraits: Any + ExtensionName + Debug + MaybeSend + MaybeSync {
     /// # Errors
     /// Returns a [`DataTypeFillValueError`] if the metadata cannot be created from the fill value.
     ///
-    /// An implementation must return an error if the fill value is invalid for the data type, including if its length differs from a fixed [`size`](Self::size).
+    /// An implementation must return an error if the fill value is invalid for the data type, including if its length differs from a fixed [`size`](FixedDataTypeTraits::size).
     /// Array builders and wrapping data types (e.g. `optional`) rely on this to validate fill values.
     fn metadata_fill_value(
         &self,
@@ -369,5 +418,35 @@ pub trait DataTypeTraits: Any + ExtensionName + Debug + MaybeSend + MaybeSync {
     /// Returns an empty slice by default (no automatic compatibility).
     fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
         &[]
+    }
+}
+
+/// A data type represented by fixed-size element bytes.
+pub trait FixedDataTypeTraits: DataTypeTraits {
+    /// The element size in bytes in the codec pipeline, which may differ from its Rust size.
+    fn size(&self) -> usize;
+}
+
+/// A data type represented by element bytes and variable-length offsets.
+pub trait VariableDataTypeTraits: DataTypeTraits {}
+
+/// A data type represented by dense inner data and one validity mask per optional layer.
+///
+/// Internal fill values are `[0]` for null, or an inner fill value followed by `1` for present.
+pub trait OptionalDataTypeTraits: DataTypeTraits {
+    /// The inner data type.
+    fn data_type(&self) -> &DataType;
+
+    /// Returns whether the fill value is null.
+    fn is_fill_value_null(&self, fill_value: &FillValue) -> bool {
+        fill_value.as_ne_bytes().last() == Some(&0)
+    }
+
+    /// The inner fill value bytes, without the optional suffix.
+    fn fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
+        fill_value
+            .as_ne_bytes()
+            .split_last()
+            .map_or(&[], |(_, inner)| inner)
     }
 }

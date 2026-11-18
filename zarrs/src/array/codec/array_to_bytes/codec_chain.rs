@@ -1462,7 +1462,13 @@ mod tests {
             let bytes = ArrayBytes::new_fill_value(
                 &data_type,
                 2,
-                &FillValue::new(vec![0; data_type.fixed_size().unwrap_or(0)]),
+                &FillValue::new(vec![
+                    0;
+                    data_type.as_fixed().map_or(
+                        0,
+                        zarrs_data_type::FixedDataTypeTraits::size
+                    )
+                ]),
             )
             .unwrap();
             let encoded = codec

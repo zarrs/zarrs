@@ -109,7 +109,7 @@ mod tests {
     use std::sync::Arc;
 
     use zarrs_metadata::v3::MetadataV3;
-    use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
+    use zarrs_metadata::{Configuration, FillValueMetadata};
     use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
     use super::*;
@@ -132,9 +132,15 @@ mod tests {
         }
     }
 
+    impl crate::FixedDataTypeTraits for TestVoidDataType {
+        fn size(&self) -> usize {
+            0
+        }
+    }
+
     impl DataTypeTraits for TestVoidDataType {
-        fn size(&self) -> DataTypeSize {
-            DataTypeSize::Fixed(0)
+        fn into_data_type(self: std::sync::Arc<Self>) -> crate::DataType {
+            crate::DataType::Fixed(self)
         }
 
         fn configuration(&self, _version: ZarrVersion) -> Configuration {
@@ -164,6 +170,28 @@ mod tests {
             self
         }
     }
+
+    #[test]
+    fn downcasts_preserve_the_shared_instance() {
+        let owner = Arc::new(TestVoidDataType);
+        let erased: Arc<dyn DataTypeTraits> = owner.clone();
+        let data_type = DataType::from(erased);
+        assert!(data_type.is::<TestVoidDataType>());
+        assert!(std::ptr::eq(
+            data_type.downcast_ref::<TestVoidDataType>().unwrap(),
+            owner.as_ref()
+        ));
+        assert!(Arc::ptr_eq(
+            &owner,
+            &data_type.downcast_arc::<TestVoidDataType>().unwrap()
+        ));
+        assert!(
+            data_type
+                .downcast_arc::<crate::OptionalDataType>()
+                .is_none()
+        );
+    }
+
     #[test]
     fn data_type_plugin() {
         let mut found = false;
@@ -173,7 +201,10 @@ mod tests {
                 let metadata = MetadataV3::new("zarrs.test_void");
                 let data_type = plugin.create(&metadata).unwrap();
                 assert!(data_type.as_any().is::<TestVoidDataType>());
-                assert_eq!(data_type.size(), DataTypeSize::Fixed(0));
+                assert!(matches!(&data_type, DataType::Fixed(fixed) if fixed.size() == 0));
+                assert_eq!(data_type.as_fixed().unwrap().size(), 0);
+                assert!(data_type.as_variable().is_none());
+                assert!(data_type.as_optional().is_none());
                 assert!(data_type.configuration_v3().is_empty());
                 assert!(data_type.fill_value_v3(&FillValueMetadata::Null).is_ok());
                 assert_eq!(
@@ -185,5 +216,59 @@ mod tests {
             }
         }
         assert!(found);
+    }
+
+    #[derive(Debug)]
+    struct TestVariableDataType;
+
+    zarrs_plugin::impl_extension_aliases!(TestVariableDataType, v3: "zarrs.test_variable");
+
+    impl crate::VariableDataTypeTraits for TestVariableDataType {}
+
+    impl DataTypeTraits for TestVariableDataType {
+        fn into_data_type(self: Arc<Self>) -> DataType {
+            DataType::Variable(self)
+        }
+
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
+            Configuration::default()
+        }
+
+        fn fill_value(
+            &self,
+            _fill_value_metadata: &FillValueMetadata,
+            _version: ZarrVersion,
+        ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+            Ok(FillValue::new(vec![]))
+        }
+
+        fn metadata_fill_value(
+            &self,
+            _fill_value: &FillValue,
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            Ok(FillValueMetadata::Null)
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[test]
+    fn variant_accessors_match_data_type_variant() {
+        let fixed = DataType::new(TestVoidDataType);
+        assert_eq!(fixed.as_fixed().unwrap().size(), 0);
+        assert!(fixed.as_variable().is_none());
+        assert!(fixed.as_optional().is_none());
+
+        let variable = DataType::new(TestVariableDataType);
+        assert!(variable.as_fixed().is_none());
+        assert!(variable.as_variable().is_some());
+        assert!(variable.as_optional().is_none());
+
+        let optional = fixed.to_optional();
+        assert!(optional.as_fixed().is_none());
+        assert!(optional.as_variable().is_none());
+        assert_eq!(optional.as_optional().unwrap().data_type(), &fixed);
     }
 }

@@ -2,7 +2,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs_codec::CowBytes;
 
-use super::bytes_codec::{decoded_len, fixed_size};
+use super::bytes_codec::decoded_len;
 use super::{BytesDataTypeTraitsArc, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
@@ -22,6 +22,7 @@ pub(crate) struct BytesCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
+    data_type_size: usize,
     /// The `bytes` codec support of `data_type`.
     bytes: BytesDataTypeTraitsArc,
     fill_value: Option<FillValue>,
@@ -34,6 +35,7 @@ impl<T: ?Sized> BytesCodecPartial<T> {
         input_output_handle: Arc<T>,
         shape: &[NonZeroU64],
         data_type: &DataType,
+        data_type_size: usize,
         bytes: BytesDataTypeTraitsArc,
         fill_value: Option<&FillValue>,
         endian: Option<Endianness>,
@@ -42,6 +44,7 @@ impl<T: ?Sized> BytesCodecPartial<T> {
             input_output_handle,
             shape: shape.to_vec(),
             data_type: data_type.clone(),
+            data_type_size,
             bytes,
             fill_value: fill_value.cloned(),
             endian,
@@ -79,10 +82,11 @@ impl<T: ?Sized> BytesCodecPartial<T> {
         Ok(self.bytes.encode(bytes, self.endian)?)
     }
 
-    /// Validate `indexer` against the chunk, returning the data type size.
-    fn validate_indexer(&self, indexer: &dyn crate::array::Indexer) -> Result<usize, CodecError> {
-        let data_type_size = fixed_size(&self.data_type)?;
-
+    /// Validate the indexer's dimensionality against the chunk shape.
+    fn validate_indexer_dimensionality(
+        &self,
+        indexer: &dyn crate::array::Indexer,
+    ) -> Result<(), CodecError> {
         if indexer.dimensionality() != self.shape.len() {
             return Err(IndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
@@ -91,18 +95,17 @@ impl<T: ?Sized> BytesCodecPartial<T> {
             .into());
         }
 
-        Ok(data_type_size)
+        Ok(())
     }
 
     /// Pair the `encoded` elements at `indexer` with their byte offsets, for writing in place into an existing chunk.
     fn offset_bytes_in_place<'b>(
         &self,
         indexer: &dyn crate::array::Indexer,
-        data_type_size: usize,
         encoded: &'b [u8],
     ) -> Result<Vec<(u64, CowBytes<'b>)>, CodecError> {
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-        let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
+        let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, self.data_type_size)?;
         Ok(byte_ranges
             .scan(0usize, |offset_in, range_out| {
                 let len = usize::try_from(range_out.end - range_out.start).unwrap();
@@ -119,17 +122,12 @@ impl<T: ?Sized> BytesCodecPartial<T> {
         indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
     ) -> Result<CowBytes<'a>, CodecError> {
-        let (num_elements, _) = decoded_len(&self.data_type, &self.shape)?;
+        let (num_elements, _) = decoded_len(self.data_type_size, &self.shape)?;
         let chunk_bytes =
             ArrayBytes::new_fill_value(&self.data_type, num_elements, self.fill_value()?)?;
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
-        let chunk_bytes = update_array_bytes(
-            chunk_bytes,
-            chunk_shape,
-            indexer,
-            bytes,
-            self.data_type.size(),
-        )?;
+        let chunk_bytes =
+            update_array_bytes(chunk_bytes, chunk_shape, indexer, bytes, &self.data_type)?;
         let chunk_bytes = chunk_bytes.into_fixed().expect("fixed data type");
         self.encode_bytes(chunk_bytes)
     }
@@ -160,12 +158,12 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let data_type_size = self.validate_indexer(indexer)?;
+        self.validate_indexer_dimensionality(indexer)?;
 
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
         // Get byte ranges
         let byte_ranges = indexer
-            .iter_contiguous_byte_ranges(chunk_shape, data_type_size)?
+            .iter_contiguous_byte_ranges(chunk_shape, self.data_type_size)?
             .map(ByteRange::new);
 
         // Decode
@@ -215,13 +213,13 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let data_type_size = self.validate_indexer(indexer)?;
+        self.validate_indexer_dimensionality(indexer)?;
 
         let chunk_shape = bytemuck::must_cast_slice(&self.shape);
 
         // Get byte ranges
         let byte_ranges = indexer
-            .iter_contiguous_byte_ranges(chunk_shape, data_type_size)?
+            .iter_contiguous_byte_ranges(chunk_shape, self.data_type_size)?
             .map(ByteRange::new);
 
         // Decode
@@ -260,7 +258,7 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
-        let data_type_size = self.validate_indexer(indexer)?;
+        self.validate_indexer_dimensionality(indexer)?;
         bytes.validate(indexer.len(), &self.data_type)?;
 
         // An update of the entire chunk replaces it, so the existing chunk is not read.
@@ -280,7 +278,7 @@ where
         // A chunk left holding only the fill value is therefore not erased.
         if self.input_output_handle.exists()? {
             let encoded = self.encode_bytes(bytes.clone().into_fixed()?)?;
-            let offset_bytes = self.offset_bytes_in_place(indexer, data_type_size, &encoded)?;
+            let offset_bytes = self.offset_bytes_in_place(indexer, &encoded)?;
             self.input_output_handle.partial_encode_many(
                 Box::new(offset_bytes.into_iter()),
                 options,
@@ -316,7 +314,7 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
-        let data_type_size = self.validate_indexer(indexer)?;
+        self.validate_indexer_dimensionality(indexer)?;
         bytes.validate(indexer.len(), &self.data_type)?;
 
         // An update of the entire chunk replaces it, so the existing chunk is not read.
@@ -337,7 +335,7 @@ where
         // A chunk left holding only the fill value is therefore not erased.
         if self.input_output_handle.exists().await? {
             let encoded = self.encode_bytes(bytes.clone().into_fixed()?)?;
-            let offset_bytes = self.offset_bytes_in_place(indexer, data_type_size, &encoded)?;
+            let offset_bytes = self.offset_bytes_in_place(indexer, &encoded)?;
             self.input_output_handle
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options, resources)
                 .await

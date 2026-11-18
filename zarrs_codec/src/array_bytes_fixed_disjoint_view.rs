@@ -206,6 +206,27 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         Some(unsafe { self.region_mut(index, self.bytes_in_subset_len) })
     }
 
+    /// Fill every byte in the view with `byte`.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    pub(crate) fn fill_byte(&mut self, byte: u8) {
+        let indices = self.contiguous_linearised_indices();
+        let length = indices.contiguous_elements_usize() * self.data_type_size;
+        if length == 0 {
+            return;
+        }
+
+        let fill = MaybeUninit::new(byte);
+        with_small_len!(length, |length| {
+            for (index, _) in &indices {
+                // SAFETY: every region belongs to the disjoint view and is only accessed here.
+                let target = unsafe { self.region_mut(index, length) };
+                target.fill(fill);
+            }
+        });
+    }
+
     /// Fill the view with the fill value.
     ///
     /// # Errors
@@ -220,6 +241,13 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
                 self.data_type_size,
             ));
         }
+        let Some(&first_byte) = fill_value.first() else {
+            return Ok(());
+        };
+        if fill_value.iter().all(|&byte| byte == first_byte) {
+            self.fill_byte(first_byte);
+            return Ok(());
+        }
 
         let indices = self.contiguous_linearised_indices();
         let length = indices.contiguous_elements_usize() * self.data_type_size;
@@ -227,23 +255,18 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             return Ok(());
         }
 
-        let uniform = fill_value.iter().all(|&byte| byte == fill_value[0]);
         let mut regions = indices.iter();
         let (first_index, _) = regions.next().expect("a nonempty view has a region");
         // SAFETY: this region belongs to the disjoint view and is only accessed here.
         let first = unsafe { self.region_mut(first_index, length) };
-        if uniform {
-            first.fill(MaybeUninit::new(fill_value[0]));
-        } else {
-            // Seed one element, then double the initialised prefix in place.
-            write_copy_of_slice(&mut first[..fill_value.len()], fill_value);
-            let mut written = fill_value.len();
-            while written < length {
-                let count = written.min(length - written);
-                let (prefix, remaining) = first.split_at_mut(written);
-                remaining[..count].copy_from_slice(&prefix[..count]);
-                written += count;
-            }
+        // Seed one element, then double the initialised prefix in place.
+        write_copy_of_slice(&mut first[..fill_value.len()], fill_value);
+        let mut written = fill_value.len();
+        while written < length {
+            let count = written.min(length - written);
+            let (prefix, remaining) = first.split_at_mut(written);
+            remaining[..count].copy_from_slice(&prefix[..count]);
+            written += count;
         }
 
         // Reuse the first filled region rather than constructing a temporary row.
@@ -252,11 +275,7 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
             for (index, _) in regions {
                 // SAFETY: the regions of an array subset are disjoint, including from `first`.
                 let target = unsafe { self.region_mut(index, length) };
-                if uniform {
-                    target.fill(MaybeUninit::new(fill_value[0]));
-                } else {
-                    target.copy_from_slice(first);
-                }
+                target.copy_from_slice(first);
             }
         });
         Ok(())

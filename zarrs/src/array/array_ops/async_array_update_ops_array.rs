@@ -259,7 +259,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 &chunk_shape,
                 indexer,
                 &indexer_bytes,
-                self.data_type().size(),
+                self.data_type(),
             )?;
 
             self.async_store_chunk_with_options(chunk_indices, chunk_bytes_new, options, resources)

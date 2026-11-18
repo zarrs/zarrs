@@ -135,6 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`; `ArrayBytesMask` guarantees optional masks are 0 or 1
 
 #### General
+- **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, validating each optional layer, and `CodecError::CodecCreateError` holds a `Box<CodecCreateError>` to keep array results small
+- Return errors when fill requests or expected optional mask lengths exceed platform limits
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
   - Add `CodecChainBound` and `ArrayOps::codecs_bound` for data type and fill value context-bound codec runtime operations
   - `CodecChain`, `ShardingCodecBuilder`, and `default_array_to_bytes_codec` hold or return unbound codecs (`UnboundArrayTo{Array,Bytes}CodecTraits`), and codec constructors return `CodecCreateError` rather than `PluginCreateError`
@@ -204,6 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - *Behavioural change*: Bind `data_codecs` with the unwrapped fill value if it is non-null (e.g. `[42]` -> `42`), rather than a zero fill value
   - This changes the encoded representation if `data_codecs` contain a codec dependent on the fill value (e.g. `sharding_indexed`). Subchunks of zeros omitted by prior versions are decoded as the unwrapped fill value
 - Fix storing and decoding optional masks of the wrong length or with values other than 0/1, which could erase chunks or store values as null; these are now rejected
+- Return an error if the dense data or offset buffer exceeds platform limits when decoding an all-null chunk
 
 #### `vlen`
 - Decoding can reuse shared data and aligned index bytes with pass-through codec chains, and encoding avoids offset-width conversion when the stored width matches `index_data_type`
@@ -259,8 +262,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Data types
 
-`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): cached codec support; `Any`/`Debug` trait bounds; in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
+`zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): a layout enum and specialized traits; cached codec support; `Any`/`Debug` trait bounds; in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 
+- **Breaking**: `DataType` has `Fixed`, `Variable`, and `Optional` variants backed by specialized traits extending the common `DataTypeTraits`, which requires `into_data_type(self: Arc<Self>)`
+  - Query byte sizes through `FixedDataTypeTraits::size` after matching; remove the common `size`, `DataType::fixed_size`, and optional sizing helpers, and traverse optional layers explicitly when needed
+  - `is_fixed` and `is_variable` classify the variant, and `as_fixed`, `as_variable`, and `as_optional` return their trait objects, allowing external optional implementations
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`
 - Fix `optional` data type metadata without an inner data type `configuration` being rejected, as it is optional in the specification
 - Fix malformed fill values of the `optional` data type being accepted, which bound `data_codecs` with a fill value of the wrong size

@@ -90,42 +90,39 @@ pub use zarrs_codec as api;
 pub fn default_array_to_bytes_codec(
     data_type: &zarrs_data_type::DataType,
 ) -> Arc<dyn zarrs_codec::UnboundArrayToBytesCodecTraits> {
-    // Special handling for optional types
-    if let Some(opt) = data_type.as_optional() {
-        // Create mask codec chain using PackBitsCodec
-        let mask_codec_chain = Arc::new(CodecChain::new(
-            vec![],
-            Arc::new(PackBitsCodec::default()),
-            vec![],
-        ));
-
-        // For data codec chain, recursively handle nested data types
-        let data_codec_chain = Arc::new(CodecChain::new(
-            vec![],
-            default_array_to_bytes_codec(opt.data_type()), // Recursive call handles nested Optional types
-            vec![],
-        ));
-
-        return Arc::new(array_to_bytes::optional::OptionalCodec::new(
-            mask_codec_chain,
-            data_codec_chain,
-        ));
-    }
-
-    // Handle non-optional types based on size
-    if data_type.is_fixed() {
-        Arc::<BytesCodec>::default()
-    } else {
-        // FIXME: Default to VlenCodec if ever stabilised
-        // Variable-sized types
-        use std::any::TypeId;
-        let type_id = data_type.as_any().type_id();
-        if type_id == TypeId::of::<crate::array::data_type::StringDataType>() {
-            Arc::new(VlenUtf8Codec::new())
-        } else if type_id == TypeId::of::<crate::array::data_type::BytesDataType>() {
-            Arc::new(VlenBytesCodec::new())
-        } else {
-            Arc::new(VlenCodec::default())
+    match data_type {
+        zarrs_data_type::DataType::Fixed(_) => Arc::<BytesCodec>::default(),
+        zarrs_data_type::DataType::Variable(variable) => {
+            // FIXME: Default to VlenCodec if ever stabilised.
+            if variable
+                .as_any()
+                .is::<crate::array::data_type::StringDataType>()
+            {
+                Arc::new(VlenUtf8Codec::new())
+            } else if variable
+                .as_any()
+                .is::<crate::array::data_type::BytesDataType>()
+            {
+                Arc::new(VlenBytesCodec::new())
+            } else {
+                Arc::new(VlenCodec::default())
+            }
+        }
+        zarrs_data_type::DataType::Optional(optional) => {
+            let mask_codecs = Arc::new(CodecChain::new(
+                vec![],
+                Arc::new(PackBitsCodec::default()),
+                vec![],
+            ));
+            let data_codecs = Arc::new(CodecChain::new(
+                vec![],
+                default_array_to_bytes_codec(optional.data_type()),
+                vec![],
+            ));
+            Arc::new(array_to_bytes::optional::OptionalCodec::new(
+                mask_codecs,
+                data_codecs,
+            ))
         }
     }
 }

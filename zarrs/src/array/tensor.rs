@@ -31,7 +31,7 @@ pub enum TensorError {
 ///
 /// # Element layout
 /// The [`bytes`](Self::bytes) hold the elements in the same layout as decoded array bytes: the first
-/// element starts at offset zero, each element occupies [`DataType::fixed_size`] bytes in native
+/// element starts at offset zero, each element occupies [`FixedDataTypeTraits::size`](zarrs_data_type::FixedDataTypeTraits::size) bytes in native
 /// endianness, and there is no padding between elements.
 ///
 /// A sub-byte data type (`bool`, `int2`, `int4`, `uint2`, `uint4`, `float4_e2m1fn`,

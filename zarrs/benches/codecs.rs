@@ -213,7 +213,13 @@ fn codec_packbits(c: &mut Criterion) {
         ("bool", data_type::bool(), bool, None),
     ];
     for (label, data_type, bytes, last_bit) in configurations {
-        let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap()]);
+        let fill_value = FillValue::new(vec![
+            0;
+            data_type
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size()
+        ]);
         let codec = std::sync::Arc::new(
             PackBitsCodec::new(PackBitsPaddingEncoding::FirstByte, None, last_bit).unwrap(),
         )

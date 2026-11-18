@@ -44,7 +44,10 @@ fn optional_innermost(data_type: &DataType) -> (&DataType, usize) {
 macro_rules! decode_into_new {
     ($data_type:expr, $subset:expr, |$target:ident| $decode_into:expr) => {{
         let (inner_data_type, depth) = optional_innermost($data_type);
-        let data_type_size = inner_data_type.fixed_size().unwrap();
+        let data_type_size = inner_data_type
+            .as_fixed()
+            .expect("expected fixed data type")
+            .size();
         let shape = $subset.shape().to_vec();
         let num_elements = usize::try_from($subset.num_elements())?;
         let mut data = vec![0u8; num_elements * data_type_size];

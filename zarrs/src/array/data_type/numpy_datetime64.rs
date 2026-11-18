@@ -44,6 +44,12 @@ impl NumpyDateTime64DataType {
     }
 }
 
+impl zarrs_data_type::FixedDataTypeTraits for NumpyDateTime64DataType {
+    fn size(&self) -> usize {
+        8
+    }
+}
+
 impl zarrs_data_type::DataTypeTraits for NumpyDateTime64DataType {
     fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::from(NumpyDateTime64DataTypeConfigurationV1 {
@@ -52,8 +58,8 @@ impl zarrs_data_type::DataTypeTraits for NumpyDateTime64DataType {
         })
     }
 
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        zarrs_metadata::DataTypeSize::Fixed(8)
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn fill_value(

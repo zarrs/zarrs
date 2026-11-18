@@ -476,7 +476,11 @@ fn retrieve_into_vec(
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let subset = ArraySubset::from(subset.to_vec());
     let num_elements = subset.num_elements_usize();
-    let data_type_size = array.data_type().fixed_size().unwrap();
+    let data_type_size = array
+        .data_type()
+        .as_fixed()
+        .expect("expected fixed data type")
+        .size();
     let shape: Vec<u64> = subset.shape().to_vec();
     let total_bytes = num_elements * data_type_size;
     let mut output = vec![0u8; total_bytes];
@@ -574,7 +578,10 @@ fn retrieve_optional_into_vecs(
     let subset = ArraySubset::from(subset.to_vec());
     let num_elements = subset.num_elements_usize();
     let inner_data_type = array.data_type().optional_inner().unwrap();
-    let data_type_size = inner_data_type.fixed_size().unwrap();
+    let data_type_size = inner_data_type
+        .as_fixed()
+        .expect("expected fixed data type")
+        .size();
     let shape: Vec<u64> = subset.shape().to_vec();
     let data_bytes = num_elements * data_type_size;
     let mask_bytes = num_elements; // 1 byte per element

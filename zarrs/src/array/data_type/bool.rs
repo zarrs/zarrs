@@ -13,13 +13,19 @@ zarrs_plugin::impl_extension_aliases!(BoolDataType,
     v2: "|b1", ["|b1"]
 );
 
+impl zarrs_data_type::FixedDataTypeTraits for BoolDataType {
+    fn size(&self) -> usize {
+        1
+    }
+}
+
 impl zarrs_data_type::DataTypeTraits for BoolDataType {
     fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        zarrs_metadata::DataTypeSize::Fixed(1)
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn fill_value(

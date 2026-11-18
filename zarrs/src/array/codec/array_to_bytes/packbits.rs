@@ -936,7 +936,10 @@ mod tests {
         ];
         for data_type in data_types {
             let components = super::pack_bits_components(&data_type)?;
-            let data_type_size = data_type.fixed_size().unwrap();
+            let data_type_size = data_type
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size();
             for _ in 0..20 {
                 let first_bit = rng.range(0..components.component_size_bits);
                 let last_bit = rng.range(first_bit..components.component_size_bits);
@@ -1376,7 +1379,13 @@ mod tests {
             data_type::complex64(),
             data_type::complex_float64(),
         ] {
-            let fill_value = FillValue::new(vec![0; data_type.fixed_size().unwrap()]);
+            let fill_value = FillValue::new(vec![
+                0;
+                data_type
+                    .as_fixed()
+                    .expect("expected fixed data type")
+                    .size()
+            ]);
             let codec = PackBitsCodec::default().bind(
                 data_type.clone(),
                 Some(fill_value),
@@ -1483,7 +1492,11 @@ mod tests {
             (data_type::float32(), FillValue::from(0.0f32)),
             (data_type::uint4(), FillValue::from(0u8)),
         ] {
-            let elements: Vec<u8> = (0..12 * data_type.fixed_size().unwrap())
+            let elements: Vec<u8> = (0..12
+                * data_type
+                    .as_fixed()
+                    .expect("expected fixed data type")
+                    .size())
                 .map(|i| u8::try_from(i % 7).unwrap())
                 .collect();
             for encoding in [
@@ -2145,5 +2158,104 @@ mod tests {
             assert_eq!(bytes, decoded);
         }
         Ok(())
+    }
+
+    #[test]
+    fn codec_packbits_rejects_non_fixed_types_implementing_trait() {
+        use std::any::Any;
+        use std::borrow::Cow;
+        use zarrs_codec::CodecCreateError;
+        use zarrs_data_type::codec_traits::bytes::{
+            BytesCodecEndiannessMissingError, BytesDataTypeTraits,
+        };
+        use zarrs_data_type::{
+            DataType, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits,
+            VariableDataTypeTraits,
+        };
+        use zarrs_metadata::{Configuration, FillValueMetadata};
+        use zarrs_plugin::{ExtensionName, ZarrVersion};
+
+        #[derive(Debug)]
+        struct VariablePackBits;
+
+        impl ExtensionName for VariablePackBits {
+            fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+                Some(Cow::Borrowed("test.variable_packbits"))
+            }
+        }
+
+        impl VariableDataTypeTraits for VariablePackBits {}
+
+        impl DataTypeTraits for VariablePackBits {
+            fn into_data_type(self: Arc<Self>) -> DataType {
+                DataType::Variable(self)
+            }
+
+            fn configuration(&self, _version: ZarrVersion) -> Configuration {
+                Configuration::default()
+            }
+
+            fn fill_value(
+                &self,
+                _metadata: &FillValueMetadata,
+                _version: ZarrVersion,
+            ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+                Ok(FillValue::new(vec![]))
+            }
+
+            fn metadata_fill_value(
+                &self,
+                _fill_value: &FillValue,
+            ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+                Ok(FillValueMetadata::Null)
+            }
+
+            fn as_any(&self) -> &dyn Any {
+                self
+            }
+        }
+
+        impl BytesDataTypeTraits for VariablePackBits {
+            fn encode<'a>(
+                &self,
+                bytes: CowBytes<'a>,
+                _endianness: Option<Endianness>,
+            ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError> {
+                Ok(bytes)
+            }
+
+            fn decode<'a>(
+                &self,
+                bytes: CowBytes<'a>,
+                _endianness: Option<Endianness>,
+            ) -> Result<CowBytes<'a>, BytesCodecEndiannessMissingError> {
+                Ok(bytes)
+            }
+        }
+
+        zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(
+            VariablePackBits,
+            8,
+            unsigned,
+            1
+        );
+
+        let err = PackBitsCodec::default()
+            .with_context(
+                DataType::new(VariablePackBits),
+                None,
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap_err();
+        assert!(matches!(err, CodecCreateError::UnsupportedDataType(..)));
+
+        let err = PackBitsCodec::default()
+            .with_context(
+                data_type::uint8().to_optional(),
+                None,
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap_err();
+        assert!(matches!(err, CodecCreateError::UnsupportedDataType(..)));
     }
 }

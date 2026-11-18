@@ -37,7 +37,6 @@ use std::sync::Arc;
 pub use bytes_codec::BytesCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::DataType;
 use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
 
@@ -70,13 +69,7 @@ impl CodecTraitsV3 for BytesCodec {
 }
 
 /// Reverse the endianness of bytes for a given data type.
-pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
-    // Get the fixed size of the data type. Variable-sized types are not supported.
-    let Some(size) = data_type.fixed_size() else {
-        // Variable-sized data types are rejected outside of this function
-        unreachable!()
-    };
-
+pub(crate) fn reverse_endianness(v: &mut [u8], size: usize) {
     match size {
         // Single-byte types don't need endianness reversal
         1 => {}
@@ -110,7 +103,7 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
 #[cfg(test)]
 #[allow(clippy::cast_possible_truncation)]
 mod tests {
-    use crate::array::Resources;
+    use crate::array::{DataType, Resources};
     use std::num::NonZeroU64;
     use std::sync::Arc;
 
@@ -231,7 +224,11 @@ mod tests {
             NonZeroU64::new(10).unwrap(),
         ]);
         let fill_value = fill_value.into();
-        let size = chunk_shape.num_elements_u64() as usize * data_type.fixed_size().unwrap();
+        let size = chunk_shape.num_elements_u64() as usize
+            * data_type
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size();
         let bytes: ArrayBytes = (0..size).map(|s| s as u8).collect::<Vec<_>>().into();
 
         let codec = Arc::new(BytesCodec::new(endianness)).with_context(

@@ -255,7 +255,15 @@ pub fn codec_metadata_v2_to_v3(
                 //  - resaving the array metadata as v3 will not have optimal blosc encoding parameters
                 zarrs_data_type::DataType::from_metadata(data_type)
                     .ok()
-                    .map(|dt| dt.size())
+                    .and_then(|dt| match dt {
+                        zarrs_data_type::DataType::Fixed(fixed) => {
+                            Some(zarrs_metadata::DataTypeSize::Fixed(fixed.size()))
+                        }
+                        zarrs_data_type::DataType::Variable(_) => {
+                            Some(zarrs_metadata::DataTypeSize::Variable)
+                        }
+                        zarrs_data_type::DataType::Optional(_) => None,
+                    })
             };
 
             let configuration = codec_blosc_v2_numcodecs_to_v3(&blosc, data_type_size);
@@ -415,12 +423,12 @@ pub fn fill_value_metadata_v2_to_v3(
             } else if data_type::RawBitsDataType::matches_name_v3(data_type_name) {
                 let raw_bits_dtype = data_type::RawBitsDataType::create(data_type)
                     .map_err(|e| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
-                FillValueMetadata::from(vec![
-                    0u8;
-                    raw_bits_dtype.fixed_size().ok_or_else(|| {
-                        ArrayMetadataV2ToV3Error::Other("raw bits should be fixed size".to_string())
-                    })?
-                ])
+                let crate::array::DataType::Fixed(fixed) = raw_bits_dtype else {
+                    return Err(ArrayMetadataV2ToV3Error::Other(
+                        "raw bits should be fixed size".to_string(),
+                    ));
+                };
+                FillValueMetadata::from(vec![0u8; fixed.size()])
             } else {
                 // And zero for other data types
                 FillValueMetadata::from(0)

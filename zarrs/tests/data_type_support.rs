@@ -9,7 +9,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::BytesCodec;
 use zarrs::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArraySubset, data_type};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, CodecOptions, CodecSpecificOptions, ComputeResources,
+    ArrayBytesDecodeIntoInput, CodecOptions, CodecSpecificOptions, ComputeResources, Resources,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::codec_traits::bytes::{
@@ -17,9 +17,9 @@ use zarrs_data_type::codec_traits::bytes::{
 };
 use zarrs_data_type::{
     CowBytes, DataType, DataTypeCodecError, DataTypeFillValueError, DataTypeFillValueMetadataError,
-    DataTypeTraits, FillValue,
+    DataTypeTraits, DataTypeTraitsV3, FillValue, OptionalDataType, OptionalDataTypeTraits,
 };
-use zarrs_metadata::{Configuration, DataTypeSize, Endianness, FillValueMetadata};
+use zarrs_metadata::{Configuration, Endianness, FillValueMetadata};
 use zarrs_plugin::{ExtensionName, ZarrVersion};
 
 /// A custom data type whose `bytes` codec support XORs bytes with its mask.
@@ -34,13 +34,19 @@ impl ExtensionName for Custom {
     }
 }
 
+impl zarrs_data_type::FixedDataTypeTraits for Custom {
+    fn size(&self) -> usize {
+        2
+    }
+}
+
 impl DataTypeTraits for Custom {
     fn configuration(&self, _: ZarrVersion) -> Configuration {
         serde_json::Map::from_iter([("mask".into(), self.mask.into())]).into()
     }
 
-    fn size(&self) -> DataTypeSize {
-        DataTypeSize::Fixed(2)
+    fn into_data_type(self: std::sync::Arc<Self>) -> zarrs_data_type::DataType {
+        zarrs_data_type::DataType::Fixed(self)
     }
 
     fn fill_value(
@@ -110,6 +116,172 @@ zarrs_data_type::register_data_type_extension_codec!(
     ProbeDataTypePlugin,
     ProbeDataTypeTraits
 );
+
+#[derive(Debug)]
+struct CustomOptional(DataType);
+
+zarrs_plugin::impl_extension_aliases!(CustomOptional, v3: "test.optional");
+
+impl DataTypeTraits for CustomOptional {
+    fn into_data_type(self: Arc<Self>) -> DataType {
+        DataType::Optional(self)
+    }
+
+    fn configuration(&self, version: ZarrVersion) -> Configuration {
+        OptionalDataType::new(self.0.clone()).configuration(version)
+    }
+
+    fn fill_value(
+        &self,
+        metadata: &FillValueMetadata,
+        version: ZarrVersion,
+    ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+        self.0.to_optional().fill_value(metadata, version)
+    }
+
+    fn metadata_fill_value(
+        &self,
+        fill_value: &FillValue,
+    ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+        self.0.to_optional().metadata_fill_value(fill_value)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl OptionalDataTypeTraits for CustomOptional {
+    fn data_type(&self) -> &DataType {
+        &self.0
+    }
+}
+
+impl DataTypeTraitsV3 for CustomOptional {
+    fn create(
+        metadata: &zarrs_metadata::v3::MetadataV3,
+    ) -> Result<DataType, zarrs_plugin::PluginCreateError> {
+        let optional = OptionalDataType::create(metadata)?;
+        Ok(DataType::new(Self(
+            optional.optional_inner().unwrap().clone(),
+        )))
+    }
+}
+
+inventory::submit! {
+    zarrs_data_type::DataTypePluginV3::new::<CustomOptional>()
+}
+
+#[test]
+fn external_optional_supports_nested_array_operations() {
+    use zarrs::array::{ArrayBuilder, ArraySubset};
+    use zarrs::storage::store::MemoryStore;
+
+    let owner = Arc::new(CustomOptional(DataType::new(CustomOptional(
+        data_type::uint16(),
+    ))));
+    let erased: Arc<dyn DataTypeTraits> = owner.clone();
+    let dtype = DataType::from(erased);
+    assert!(dtype.is_optional());
+    assert!(!dtype.is_fixed());
+    assert!(!dtype.is_variable());
+    assert!(Arc::ptr_eq(
+        &owner,
+        &dtype.downcast_arc::<CustomOptional>().unwrap()
+    ));
+    assert_eq!(dtype.as_optional().unwrap().data_type(), &owner.0);
+    assert!(dtype.downcast_arc::<OptionalDataType>().is_none());
+
+    for fill in [None, Some(None), Some(Some(42u16))] {
+        let array = ArrayBuilder::new(vec![4], vec![2], dtype.clone(), FillValue::from(fill))
+            .build(Arc::new(MemoryStore::new()), "/")
+            .unwrap();
+        let initial: Vec<Option<Option<u16>>> = array
+            .retrieve_array_subset(&array.subset_all(), &Resources::default())
+            .unwrap();
+        assert_eq!(initial, vec![fill; 4]);
+        let values: [Option<Option<u16>>; 4] = [None, Some(None), Some(Some(7)), Some(Some(8))];
+        array
+            .store_array_subset(
+                &array.subset_all(),
+                values.as_slice(),
+                &Resources::default(),
+            )
+            .unwrap();
+        array
+            .store_array_subset(
+                &ArraySubset::new_with_ranges(&[1..3]),
+                &[Some(Some(9u16)), None],
+                &Resources::default(),
+            )
+            .unwrap();
+        let actual: Vec<Option<Option<u16>>> = array
+            .retrieve_array_subset(&array.subset_all(), &Resources::default())
+            .unwrap();
+        assert_eq!(actual, [None, Some(Some(9)), None, Some(Some(8))]);
+        array.store_metadata().unwrap();
+        let reopened = zarrs::array::Array::open(array.storage().clone(), "/").unwrap();
+        assert_eq!(reopened.data_type(), &dtype);
+    }
+}
+
+#[test]
+fn array_bytes_operations_check_layouts_at_every_layer() {
+    use zarrs::array::{ArrayBytesOffsets, ArraySubset, update_array_bytes};
+
+    let types = [
+        data_type::uint8(),
+        data_type::string(),
+        data_type::uint8().to_optional(),
+    ];
+    let bytes = [
+        ArrayBytes::new_flen(vec![7]),
+        ArrayBytes::new_vlen(vec![7], ArrayBytesOffsets::new(vec![0u32, 1]).unwrap()).unwrap(),
+        ArrayBytes::new_flen(vec![7]).with_optional_mask(vec![true]),
+    ];
+    let subset = ArraySubset::new_with_shape([1]);
+    let runs = subset.contiguous_linearised_indices(&[1]).unwrap();
+    let indexer = vec![vec![0]];
+    for (i, dtype) in types.iter().enumerate() {
+        for (j, bytes) in bytes.iter().enumerate() {
+            assert_eq!(bytes.validate(1, dtype).is_ok(), i == j);
+            assert_eq!(bytes.extract_runs(&runs, dtype).is_ok(), i == j);
+            assert_eq!(
+                bytes.extract_array_subset(&indexer, &[1], dtype).is_ok(),
+                i == j
+            );
+            for (k, update) in bytes_for_layouts().iter().enumerate() {
+                assert_eq!(
+                    update_array_bytes(bytes.clone(), &[1], &subset, update, dtype).is_ok(),
+                    i == j && i == k
+                );
+                assert_eq!(
+                    update_array_bytes(bytes.clone(), &[1], &indexer, update, dtype).is_ok(),
+                    i == j && i == k
+                );
+            }
+        }
+    }
+    let nested_type = types[2].to_optional();
+    for wrong in [
+        bytes[2].clone(),
+        bytes[1]
+            .clone()
+            .with_optional_mask(vec![true])
+            .with_optional_mask(vec![true]),
+    ] {
+        assert!(wrong.validate(1, &nested_type).is_err());
+        assert!(wrong.extract_runs(&runs, &nested_type).is_err());
+    }
+
+    fn bytes_for_layouts() -> [ArrayBytes<'static>; 3] {
+        [
+            ArrayBytes::new_flen(vec![8]),
+            ArrayBytes::new_vlen(vec![8], ArrayBytesOffsets::new(vec![0u32, 1]).unwrap()).unwrap(),
+            ArrayBytes::new_flen(vec![8]).with_optional_mask(vec![true]),
+        ]
+    }
+}
 
 #[test]
 fn arc_support_retains_the_configured_instance() {

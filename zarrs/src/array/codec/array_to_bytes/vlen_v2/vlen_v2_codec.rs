@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, DataTypeSize, FillValue};
+use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValue};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
@@ -71,7 +71,7 @@ impl UnboundArrayToBytesCodecTraits for VlenV2Codec {
         fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecCreateError> {
-        if data_type.is_optional() || !matches!(data_type.size(), DataTypeSize::Variable) {
+        if !data_type.is_variable() {
             return Err(CodecCreateError::UnsupportedDataType(
                 data_type,
                 Self::aliases_v3().default_name.to_string(),
@@ -199,12 +199,6 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
         &self,
         _shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        match self.data_type.size() {
-            DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
-            DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
-                self.data_type.clone(),
-                VlenV2Codec::aliases_v3().default_name.to_string(),
-            )),
-        }
+        Ok(BytesRepresentation::UnboundedSize)
     }
 }

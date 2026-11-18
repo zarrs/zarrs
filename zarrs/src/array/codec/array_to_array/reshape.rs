@@ -262,7 +262,11 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
+        let size = shape.num_elements_usize()
+            * data_type
+                .as_fixed()
+                .expect("expected fixed data type")
+                .size();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 

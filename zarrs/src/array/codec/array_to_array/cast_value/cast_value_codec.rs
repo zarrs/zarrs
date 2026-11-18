@@ -406,18 +406,15 @@ pub(super) fn cast_bytes(
     bytes: &[u8],
     context: &CastBytesContext<'_>,
 ) -> Result<Vec<u8>, CodecError> {
-    let source_size = context
-        .source_data_type
-        .fixed_size()
-        .ok_or(CodecError::Other(
-            "cast_value requires fixed-size source data types".to_string(),
-        ))?;
-    let target_size = context
-        .target_data_type
-        .fixed_size()
-        .ok_or(CodecError::Other(
-            "cast_value requires fixed-size target data types".to_string(),
-        ))?;
+    let (DataType::Fixed(source), DataType::Fixed(target)) =
+        (context.source_data_type, context.target_data_type)
+    else {
+        return Err(CodecError::Other(
+            "cast_value requires fixed-size source and target data types".to_string(),
+        ));
+    };
+    let source_size = source.size();
+    let target_size = target.size();
     if !bytes.len().is_multiple_of(source_size) {
         return Err(CodecError::Other(
             "cast_value source bytes are not element aligned".to_string(),

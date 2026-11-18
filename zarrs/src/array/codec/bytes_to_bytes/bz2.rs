@@ -145,7 +145,10 @@ mod tests {
     fn codec_bz2_partial_decode() {
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
         let data_type = data_type::uint16();
-        let data_type_size = data_type.fixed_size().unwrap();
+        let data_type_size = data_type
+            .as_fixed()
+            .expect("expected fixed data type")
+            .size();
         let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
 
@@ -205,7 +208,10 @@ mod tests {
 
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
         let data_type = data_type::uint16();
-        let data_type_size = data_type.fixed_size().unwrap();
+        let data_type_size = data_type
+            .as_fixed()
+            .expect("expected fixed data type")
+            .size();
         let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
 

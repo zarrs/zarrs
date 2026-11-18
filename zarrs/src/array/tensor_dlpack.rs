@@ -114,7 +114,7 @@ fn data_type_to_dlpack(
 
     // Guard against a data type whose in-memory element size disagrees with its `DLPack`
     // descriptor, which would misrepresent the tensor bytes.
-    if data_type.fixed_size() != Some(dtype.element_size()) {
+    if !matches!(data_type, DataType::Fixed(fixed) if fixed.size() == dtype.element_size()) {
         return Err(unsupported());
     }
 

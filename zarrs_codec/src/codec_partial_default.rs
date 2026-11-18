@@ -5,11 +5,11 @@ use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayBytes, ArrayBytesOffsets, ArrayPartialDecoderNoSubchunkingTraits,
-    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape,
-    CodecError, CodecOptions, CowBytes, DataType, Resources,
+    ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, CowBytes,
+    DataType, Resources,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -17,7 +17,6 @@ use crate::{
     AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
     AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits,
 };
-use zarrs_metadata::DataTypeSize;
 use zarrs_storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
 use zarrs_storage::{OffsetBytesIterator, StorageError};
 
@@ -208,13 +207,7 @@ where
                 .decode(chunk_bytes, &shape, options, resources.compute())
                 .map(ArrayBytes::into_owned)
         } else {
-            Ok(match self.decoded_representation.data_type().size() {
-                DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
-                DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0u32]).unwrap())
-                        .unwrap()
-                }
-            })
+            ArrayBytes::new_empty(self.decoded_representation.data_type())
         }
     }
 
@@ -269,7 +262,7 @@ where
                 chunk_shape,
                 indexer,
                 bytes,
-                self.decoded_representation.data_type().size(),
+                self.decoded_representation.data_type(),
             )?
         };
 
@@ -422,7 +415,7 @@ where
                 chunk_shape,
                 indexer,
                 bytes,
-                self.decoded_representation.data_type().size(),
+                self.decoded_representation.data_type(),
             )?
         };
 
@@ -627,13 +620,7 @@ where
                 .decode(chunk_bytes, &shape, options, resources.compute())
                 .map(ArrayBytes::into_owned)
         } else {
-            Ok(match self.decoded_representation.data_type().size() {
-                DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
-                DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0u32]).unwrap())
-                        .unwrap()
-                }
-            })
+            ArrayBytes::new_empty(self.decoded_representation.data_type())
         }
     }
 
@@ -692,7 +679,7 @@ where
                 chunk_shape,
                 indexer,
                 bytes,
-                self.decoded_representation.data_type().size(),
+                self.decoded_representation.data_type(),
             )?
         };
 
@@ -841,7 +828,7 @@ where
                 chunk_shape,
                 indexer,
                 bytes,
-                self.decoded_representation.data_type().size(),
+                self.decoded_representation.data_type(),
             )?
         };
 
