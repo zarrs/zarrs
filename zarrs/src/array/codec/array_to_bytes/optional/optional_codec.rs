@@ -261,6 +261,7 @@ impl OptionalCodecBound {
                 let offsets = unsafe { ArrayBytesOffsets::new_unchecked(vec![0u32; len]) };
                 Ok(ArrayBytes::new_vlen(vec![], offsets)?)
             }
+            _ => Err("unsupported optional payload layout".into()),
         }
     }
 }

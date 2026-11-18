@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `From<CowBytes>` for `ArrayBytes`
 
 ### Changed
+- **Breaking**: `ArrayBytes` and `ArrayBytesDecodeIntoTarget` are non-exhaustive, so downstream matches require a wildcard arm
 - **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, checking fixed, variable, and nested optional layouts against both the original bytes and update bytes
 - **Breaking**: Box `CodecError::CodecCreateError` to retain the error-size limits after `DataType` becomes an enum; conversion from `CodecCreateError` is retained
 - **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `ArrayBytesDecodeIntoInput`, resolving immediate or deferred encoded bytes without cloning them

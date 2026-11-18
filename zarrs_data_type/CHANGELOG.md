@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `FillValue::equals_all_bytes`, which checks bytes against a borrowed fill value byte pattern
 
 ### Changed
-- **Breaking**: Make `DataType` an enum with `Fixed`, `Variable`, and `Optional` variants backed by `FixedDataTypeTraits`, `VariableDataTypeTraits`, and `OptionalDataTypeTraits`, all extending `DataTypeTraits`
+- **Breaking**: Make `DataType` a non-exhaustive enum with `Fixed`, `Variable`, and `Optional` variants backed by `FixedDataTypeTraits`, `VariableDataTypeTraits`, and `OptionalDataTypeTraits`, all extending `DataTypeTraits`
   - `DataTypeTraits` requires `into_data_type(self: Arc<Self>)`, preserving generic construction and the original shared instance
   - Move `size` to `FixedDataTypeTraits`, returning `usize`, and remove `DataType::fixed_size` and `OptionalDataType::{inner_size,is_fixed,fixed_size}`; match the fixed variant to query its size, traversing optional layers explicitly when needed
   - `DataType::{is_fixed,is_variable,is_optional}` classify the variant, `DataType::{as_fixed,as_variable,as_optional}` return the corresponding trait objects, and `Deref` targets `dyn DataTypeTraits`

@@ -53,6 +53,7 @@ fn depth(target: &ArrayBytesDecodeIntoTarget) -> usize {
             assert_eq!(optional.mask().subset(), optional.data().subset());
             1 + depth(optional.data())
         }
+        _ => panic!("unexpected decode target layout"),
     }
 }
 

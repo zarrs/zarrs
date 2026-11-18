@@ -26,8 +26,8 @@ pub(crate) fn to_array_bytes(data: &Data) -> Result<ArrayBytes<'static>, String>
 }
 
 /// Convert from current `zarrs` array bytes.
-pub(crate) fn from_array_bytes(bytes: ArrayBytes<'_>) -> Data {
-    match bytes {
+pub(crate) fn from_array_bytes(bytes: ArrayBytes<'_>) -> Result<Data, String> {
+    Ok(match bytes {
         ArrayBytes::Fixed(bytes) => Data {
             bytes: bytes.into_vec(),
             ..Data::default()
@@ -42,9 +42,10 @@ pub(crate) fn from_array_bytes(bytes: ArrayBytes<'_>) -> Data {
         }
         ArrayBytes::Optional(bytes) => {
             let (data, mask) = bytes.into_parts();
-            let mut data = from_array_bytes(*data);
+            let mut data = from_array_bytes(*data)?;
             data.masks.insert(0, mask.into_bytes().into_vec());
             data
         }
-    }
+        _ => return Err("unsupported array byte layout".into()),
+    })
 }
