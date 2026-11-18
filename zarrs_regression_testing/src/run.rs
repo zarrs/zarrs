@@ -360,5 +360,5 @@ pub(crate) fn read_current(path: &Path, shape: &[u64]) -> Result<Data, String> {
             &Resources::default(),
         )
         .map_err(|err| format!("retrieve array subset: {err}"))?;
-    Ok(from_array_bytes(bytes))
+    from_array_bytes(bytes)
 }

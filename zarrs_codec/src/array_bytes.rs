@@ -57,7 +57,7 @@ pub use array_bytes_mask::{ArrayBytesMask, ArrayBytesMaskCreateError};
 
 /// Fixed or variable length array bytes.
 #[derive(Clone, Debug, PartialEq, Eq, derive_more::From)]
-// #[non_exhaustive]
+#[non_exhaustive]
 pub enum ArrayBytes<'a> {
     /// Bytes for a fixed length array.
     ///
@@ -193,6 +193,7 @@ impl<'a> ArrayBytes<'a> {
                 num_elements,
             )?
             .with_optional_mask(vec![false; num_elements])),
+            _ => Err(DataTypeFillValueError),
         }
     }
 
@@ -235,6 +236,7 @@ impl<'a> ArrayBytes<'a> {
                 )?
                 .with_optional_mask(vec![true; num_elements])),
             },
+            _ => Err(DataTypeFillValueError),
         }
     }
 
@@ -247,6 +249,7 @@ impl<'a> ArrayBytes<'a> {
             DataType::Optional(optional) => {
                 Ok(Self::new_empty(optional.data_type())?.with_optional_mask(Vec::<bool>::new()))
             }
+            _ => Err("unsupported data type layout".into()),
         }
     }
 
@@ -433,6 +436,7 @@ impl<'a> ArrayBytes<'a> {
             (_, DataType::Fixed(_)) => Err(ExpectedFixedLengthBytesError.into()),
             (_, DataType::Variable(_)) => Err(ExpectedVariableLengthBytesError.into()),
             (_, DataType::Optional(_)) => Err(ExpectedOptionalBytesError.into()),
+            _ => Err("unsupported data type layout".into()),
         }
     }
 
@@ -466,6 +470,7 @@ impl<'a> ArrayBytes<'a> {
             (_, DataType::Fixed(_)) => Err(ExpectedFixedLengthBytesError.into()),
             (_, DataType::Variable(_)) => Err(ExpectedVariableLengthBytesError.into()),
             (_, DataType::Optional(_)) => Err(ExpectedOptionalBytesError.into()),
+            _ => Err("unsupported data type layout".into()),
         }
     }
 
@@ -773,6 +778,7 @@ fn validate_bytes(
         (_, DataType::Fixed(_)) => Err(ExpectedFixedLengthBytesError.into()),
         (_, DataType::Variable(_)) => Err(ExpectedVariableLengthBytesError.into()),
         (_, DataType::Optional(_)) => Err(ExpectedOptionalBytesError.into()),
+        _ => Err("unsupported data type layout".into()),
     }
 }
 
@@ -971,6 +977,7 @@ fn update_array_bytes_array_subset<'a>(
         (_, _, DataType::Variable(_)) => Err(ExpectedVariableLengthBytesError.into()),
         (_, _, DataType::Fixed(_)) => Err(ExpectedFixedLengthBytesError.into()),
         (_, _, DataType::Optional(_)) => Err(ExpectedOptionalBytesError.into()),
+        _ => Err("unsupported data type layout".into()),
     }
 }
 
@@ -1053,6 +1060,7 @@ fn update_array_bytes_indexer<'a>(
         (_, _, DataType::Variable(_)) => Err(ExpectedVariableLengthBytesError.into()),
         (_, _, DataType::Fixed(_)) => Err(ExpectedFixedLengthBytesError.into()),
         (_, _, DataType::Optional(_)) => Err(ExpectedOptionalBytesError.into()),
+        _ => Err("unsupported data type layout".into()),
     }
 }
 
@@ -1129,6 +1137,7 @@ fn copy_null_fill_value_into(
         }
         (DataType::Optional(_), ArrayBytesDecodeIntoTarget::Fixed(_))
         | (DataType::Variable(_), _) => Err(ExpectedFixedLengthBytesError.into()),
+        _ => Err("unsupported data type layout".into()),
     }
 }
 
@@ -1167,6 +1176,7 @@ fn copy_fill_value_bytes_into(
         }
         (DataType::Optional(_), ArrayBytesDecodeIntoTarget::Fixed(_))
         | (DataType::Variable(_), _) => Err(ExpectedFixedLengthBytesError.into()),
+        _ => Err("unsupported data type layout".into()),
     }
 }
 

@@ -958,6 +958,12 @@ fn array_metadata(
             zarrs::array::DataType::Fixed(fixed) => break fixed.size(),
             zarrs::array::DataType::Variable(_) => break 1,
             zarrs::array::DataType::Optional(optional) => inner = optional.data_type(),
+            _ => {
+                return Err(format!(
+                    "unsupported data type layout for {kind} {}",
+                    data_type.label
+                ));
+            }
         }
     };
 

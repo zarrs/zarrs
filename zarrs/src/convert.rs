@@ -263,6 +263,7 @@ pub fn codec_metadata_v2_to_v3(
                             Some(zarrs_metadata::DataTypeSize::Variable)
                         }
                         zarrs_data_type::DataType::Optional(_) => None,
+                        _ => None,
                     })
             };
 

@@ -513,6 +513,7 @@ mod tests {
                         );
                     }
                     ArrayBytes::Optional(_) => panic!("unexpected optional layer"),
+                    _ => panic!("unsupported array byte layout"),
                 }
             }
         }

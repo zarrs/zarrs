@@ -124,5 +124,7 @@ pub fn default_array_to_bytes_codec(
                 data_codecs,
             ))
         }
+        // The vlen codec rejects unsupported layouts when bound.
+        _ => Arc::new(VlenCodec::default()),
     }
 }

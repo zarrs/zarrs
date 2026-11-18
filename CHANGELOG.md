@@ -135,6 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`; `ArrayBytesMask` guarantees optional masks are 0 or 1
 
 #### General
+- **Breaking**: `ArrayBytes` and `ArrayBytesDecodeIntoTarget` are non-exhaustive, so downstream matches require a wildcard arm
 - **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, validating each optional layer, and `CodecError::CodecCreateError` holds a `Box<CodecCreateError>` to keep array results small
 - Return errors when fill requests or expected optional mask lengths exceed platform limits
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
@@ -264,7 +265,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 `zarrs_data_type` 0.9.0 → 0.10.0 (**Breaking**): a layout enum and specialized traits; cached codec support; `Any`/`Debug` trait bounds; in-place byte decoding; `CowBytes` encode/decode; `cast_value` codec traits; `PackBitsDataTypeTraits` requires `BytesDataTypeTraits`
 
-- **Breaking**: `DataType` has `Fixed`, `Variable`, and `Optional` variants backed by specialized traits extending the common `DataTypeTraits`, which requires `into_data_type(self: Arc<Self>)`
+- **Breaking**: `DataType` is a non-exhaustive enum with `Fixed`, `Variable`, and `Optional` variants backed by specialized traits extending the common `DataTypeTraits`, which requires `into_data_type(self: Arc<Self>)`
   - Query byte sizes through `FixedDataTypeTraits::size` after matching; remove the common `size`, `DataType::fixed_size`, and optional sizing helpers, and traverse optional layers explicitly when needed
   - `is_fixed` and `is_variable` classify the variant, and `as_fixed`, `as_variable`, and `as_optional` return their trait objects, allowing external optional implementations
 - `FixedLengthUTF32DataType::new` returns an error if `length_bytes` exceeds `usize::MAX`

@@ -109,7 +109,7 @@ use zarrs_plugin::{
 /// A successful decode must initialize every element of the target, including all optional masks.
 /// Mask bytes must use the representation defined by [`ArrayBytesMask`]. Callers may rely on this
 /// contract to adopt decoded masks without checking them again.
-// #[non_exhaustive]
+#[non_exhaustive]
 pub enum ArrayBytesDecodeIntoTarget<'a> {
     /// Target for non-optional (fixed-length) data.
     Fixed(ArrayBytesFixedDisjointView<'a>),

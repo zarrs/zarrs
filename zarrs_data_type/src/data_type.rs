@@ -17,6 +17,7 @@ use crate::{
 };
 
 /// A data type implementing [`DataTypeTraits`].
+#[non_exhaustive]
 #[derive(Debug, Clone, derive_more::From)]
 pub enum DataType {
     /// A fixed-size data type.

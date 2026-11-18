@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Changed
-- Match data types to their array byte layouts when printing elements, and reject unsupported zero-sized elements instead of panicking
+- Match data types to their array byte layouts when printing elements, and return errors for unsupported layouts or zero-sized elements
 
 ### Fixed
 - Report fill-buffer size errors from the array reader when printing array elements

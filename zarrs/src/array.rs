@@ -1149,6 +1149,7 @@ fn create_codec_chain_from_v2(
                     DataType::Fixed(fixed) => Some(DataTypeSize::Fixed(fixed.size())),
                     DataType::Variable(_) => Some(DataTypeSize::Variable),
                     DataType::Optional(_) => None,
+                    _ => None,
                 }
             };
 
