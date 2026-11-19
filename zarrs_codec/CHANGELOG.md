@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `with_optional_mask(s)` return the new `WithOptionalMaskError`, which holds the target and mask(s) and converts to the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`), unless each mask has one byte per element and matches the array shape and subset of the data
 - Add `ArrayBytesFixedDisjointView::data_type_size`
 - Add `ArrayBytes::extract_runs` for extracting fixed, variable-length, and optional elements along contiguous linearised index runs, and `ArrayBytes::extract_runs_into` for copying fixed and optional elements along runs directly into an `ArrayBytesDecodeIntoTarget`
+  - Direct copying enforces the same selection-count limit as extraction, irrespective of the target layout
 - Add `ArrayBytes::with_optional_masks`, with masks ordered from outermost to innermost like `ArrayBytesDecodeIntoTarget::with_optional_masks`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
 - Add `ArrayBytesMask`, an optional validity mask whose bytes are 0 (null) or 1 (present) by construction

@@ -364,6 +364,14 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         if num_elements == 0 || size == 0 {
             return Ok(());
         }
+        // Match extraction's limit even when repeated source runs can be copied directly.
+        if self.bytes_in_subset_len > bytes.len() {
+            return Err(IndexerError::IncompatibleLength(
+                num_elements,
+                (bytes.len() / size) as u64,
+            )
+            .into());
+        }
         let regions = self.contiguous_linearised_indices();
         let region_elements = regions.contiguous_elements();
         // A piece with the length of the shorter of the runs and regions is contiguous in both if it divides the longer.
@@ -916,6 +924,65 @@ mod tests {
         view.fill_elements(&[2, 1], &[]).unwrap();
         assert!(view.copy_elements_from_slice(&[4], &[]).is_err()); // OOB
         assert!(view.fill_elements(&[4], &[]).is_err()); // OOB
+    }
+
+    #[test]
+    fn copy_repeated_runs_matches_extraction_for_all_target_layouts() {
+        let runs =
+            ContiguousLinearisedIndices::new_strided(0, [(3, 0), (2, 1)].into_iter()).unwrap();
+        let cases = [
+            (vec![6], vec![0..6]),
+            (vec![3, 3], vec![0..3, 0..2]),
+            (vec![6, 2], vec![0..6, 0..1]),
+            (vec![2, 4], vec![0..2, 0..3]),
+        ];
+        for size in [0usize, 1, 2, 3, 8] {
+            for source_elements in [2usize, 6] {
+                let source: Vec<u8> = (0..=255).cycle().take(source_elements * size).collect();
+                for (shape, ranges) in &cases {
+                    let subset = ArraySubset::new_with_ranges(ranges);
+                    let len = usize::try_from(shape.iter().product::<u64>()).unwrap() * size;
+                    let mut actual = vec![0xa5; len];
+                    let mut expected = actual.clone();
+                    // SAFETY: each view is the only view of its bytes.
+                    unsafe {
+                        let mut target = crate::ArrayBytesDecodeIntoTarget::Fixed(
+                            ArrayBytesFixedDisjointView::new(
+                                UnsafeCellSlice::new(&mut actual),
+                                size,
+                                shape,
+                                subset.clone(),
+                            )
+                            .unwrap(),
+                        );
+                        let result = crate::ArrayBytes::new_flen(source.as_slice())
+                            .extract_runs_into(&runs, &mut target);
+                        let extracted = extract_runs_fixed(&source, &runs, size);
+                        if size > 0 && source_elements == 2 {
+                            assert!(matches!(
+                                result,
+                                Err(CodecError::IncompatibleIndexer(
+                                    IndexerError::IncompatibleLength(6, 2)
+                                ))
+                            ));
+                            assert!(extracted.is_err());
+                        } else {
+                            result.unwrap();
+                            ArrayBytesFixedDisjointView::new(
+                                UnsafeCellSlice::new(&mut expected),
+                                size,
+                                shape,
+                                subset,
+                            )
+                            .unwrap()
+                            .copy_from_slice(&extracted.unwrap())
+                            .unwrap();
+                        }
+                    }
+                    assert_eq!(actual, expected, "{size} {source_elements} {shape:?}");
+                }
+            }
+        }
     }
 
     #[test]

@@ -2,6 +2,17 @@ use tinyvec::TinyVec;
 
 use super::odometer::{GridDimension, Odometer, unravel};
 
+/// An overflow when constructing strided linearised indices.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum StridedIndicesError {
+    /// The number of elements exceeds [`u64::MAX`].
+    #[error("the number of elements exceeds u64::MAX")]
+    NumElementsOverflow,
+    /// A linearised index exceeds [`u64::MAX`].
+    #[error("linearised indices exceed u64::MAX")]
+    IndexOverflow,
+}
+
 /// The linearised indices of a regular grid of positions in an array, in C order.
 ///
 /// Only the dimensions with more than one position are stored, and adjacent dimensions whose
@@ -90,6 +101,77 @@ impl StridedIndices {
             num_elements,
             first,
             dimensions,
+        }
+    }
+
+    /// No positions.
+    pub(crate) fn empty() -> Self {
+        Self {
+            num_elements: 0,
+            first: 0,
+            dimensions: TinyVec::new(),
+        }
+    }
+
+    /// The linearised indices of a grid of positions from `first`, with the `(count, stride)` of each dimension given
+    /// innermost first.
+    ///
+    /// Dimensions with one position are dropped and adjacent contiguous dimensions are coalesced, as in
+    /// [`new`](Self::new).
+    ///
+    /// # Errors
+    /// Returns an error if a linearised index or the number of positions exceeds [`u64::MAX`].
+    pub(crate) fn from_dimensions_rev(
+        first: u64,
+        dimensions_rev: impl Iterator<Item = (u64, u64)>,
+    ) -> Result<Self, StridedIndicesError> {
+        let mut num_elements = Some(1u64);
+        let mut last = Some(first);
+        let mut dimensions = TinyVec::<[StridedDimension; 4]>::new();
+        for (count, stride) in dimensions_rev {
+            if count == 0 {
+                return Ok(Self::empty());
+            }
+            if count == 1 {
+                continue;
+            }
+            num_elements = num_elements.and_then(|n| n.checked_mul(count));
+            last = (count - 1)
+                .checked_mul(stride)
+                .and_then(|span| last?.checked_add(span));
+            if let Some(inner) = dimensions
+                .last_mut()
+                .filter(|inner| inner.count.checked_mul(inner.stride) == Some(stride))
+            {
+                if let Some(coalesced) = inner.count.checked_mul(count) {
+                    inner.count = coalesced;
+                }
+            } else {
+                dimensions.push(StridedDimension { count, stride });
+            }
+        }
+        let num_elements = num_elements.ok_or(StridedIndicesError::NumElementsOverflow)?;
+        last.ok_or(StridedIndicesError::IndexOverflow)?;
+        dimensions.reverse();
+        Ok(Self {
+            num_elements,
+            first,
+            dimensions,
+        })
+    }
+
+    /// Split off the innermost dimension if its stride is 1, returning the number of contiguous
+    /// elements per remaining position (or 0 if there are no positions).
+    pub(crate) fn take_contiguous_inner(&mut self) -> u64 {
+        if self.num_elements == 0 {
+            return 0;
+        }
+        if let Some(&StridedDimension { count, stride: 1 }) = self.dimensions.last() {
+            self.dimensions.pop();
+            self.num_elements /= count;
+            count
+        } else {
+            1
         }
     }
 

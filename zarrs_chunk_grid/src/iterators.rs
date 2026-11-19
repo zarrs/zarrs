@@ -34,12 +34,14 @@ pub use indices_iterator::{
 pub use linearised_indices_iterator::{
     LinearisedIndices, LinearisedIndicesIntoIterator, LinearisedIndicesIterator,
 };
+pub use strided_indices::StridedIndicesError;
 
 #[cfg(test)]
 mod tests {
     use crate::ArrayIndices;
     use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
+    use super::{ContiguousLinearisedIndices, StridedIndicesError};
     use crate::{ArraySubset, IndexerError};
 
     #[test]
@@ -308,6 +310,26 @@ mod tests {
                     })
                     .collect()
             };
+            // A strided grid with the C-order strides of the array is identical
+            let mut stride = 1;
+            let mut strides = vec![0; dimensionality];
+            for (s, &size) in std::iter::zip(&mut strides, &array_shape).rev() {
+                *s = stride;
+                stride *= size;
+            }
+            let first = if num_elements == 0 {
+                0
+            } else {
+                crate::ravel_indices(region.start(), &array_shape).unwrap()
+            };
+            assert_eq!(
+                ContiguousLinearisedIndices::new_strided(
+                    first,
+                    std::iter::zip(region.shape().iter().copied(), strides.iter().copied())
+                )
+                .unwrap(),
+                contiguous
+            );
             check_double_ended(contiguous.iter(), &expected_runs, || random(2) == 0);
             check_nth(contiguous.iter(), &expected_runs, &mut random);
             check_nth(contiguous.clone().into_iter(), &expected_runs, &mut random);
@@ -325,6 +347,96 @@ mod tests {
             check_double_ended(contiguous.iter(), &expected_runs, || random(2) == 0);
             assert_eq!(contiguous.into_iter().collect::<Vec<_>>(), expected_runs);
         }
+    }
+
+    #[test]
+    fn contiguous_linearised_indices_new_strided() {
+        let runs = |indices: &ContiguousLinearisedIndices| indices.iter().collect::<Vec<_>>();
+        // A 3x4 grid in F order: runs of one element
+        let indices =
+            ContiguousLinearisedIndices::new_strided(0, [(3, 1), (4, 3)].into_iter()).unwrap();
+        assert_eq!(indices.contiguous_elements(), 1);
+        assert_eq!(
+            runs(&indices).iter().map(|&(i, _)| i).collect::<Vec<_>>(),
+            [0, 3, 6, 9, 1, 4, 7, 10, 2, 5, 8, 11]
+        );
+        // Trailing adjacent dimensions form one run
+        let indices =
+            ContiguousLinearisedIndices::new_strided(5, [(2, 12), (3, 4), (4, 1)].into_iter())
+                .unwrap();
+        assert_eq!(runs(&indices), [(5, 24)]);
+        // Dimensions with one element are skipped anywhere
+        let indices = ContiguousLinearisedIndices::new_strided(
+            1,
+            [(2, 100), (1, 7), (3, 1), (1, 0)].into_iter(),
+        )
+        .unwrap();
+        assert_eq!(runs(&indices), [(1, 3), (101, 3)]);
+        // Contiguous outer dimensions coalesce
+        let indices =
+            ContiguousLinearisedIndices::new_strided(0, [(2, 12), (3, 4), (2, 1)].into_iter())
+                .unwrap();
+        assert_eq!(
+            indices,
+            ContiguousLinearisedIndices::new_strided(0, [(6, 4), (2, 1)].into_iter()).unwrap()
+        );
+        assert_eq!(
+            runs(&indices),
+            [(0, 2), (4, 2), (8, 2), (12, 2), (16, 2), (20, 2)]
+        );
+        // Empty grids, including when inner dimensions would otherwise overflow u64::MAX
+        for dimensions in [
+            vec![(2, 1), (0, 5)],
+            vec![(0, 1), (2, 5)],
+            vec![(0, 1), (u64::MAX, 1), (2, 1)],
+            vec![(0, 1), (u64::MAX, u64::MAX)],
+        ] {
+            let indices =
+                ContiguousLinearisedIndices::new_strided(7, dimensions.into_iter()).unwrap();
+            assert!(indices.is_empty());
+            assert_eq!(indices.contiguous_elements(), 0);
+            assert_eq!(
+                indices,
+                ArraySubset::new_with_ranges(&[0..0])
+                    .contiguous_linearised_indices(&[4])
+                    .unwrap()
+            );
+        }
+        // A zero-dimensional grid has one element
+        let indices = ContiguousLinearisedIndices::new_strided(3, std::iter::empty()).unwrap();
+        assert_eq!(runs(&indices), [(3, 1)]);
+    }
+
+    #[test]
+    fn contiguous_linearised_indices_new_strided_num_elements_overflow() {
+        assert_eq!(
+            ContiguousLinearisedIndices::new_strided(0, [(2, 0), (1 << 63, 1)].into_iter()),
+            Err(StridedIndicesError::NumElementsOverflow)
+        );
+    }
+
+    #[test]
+    fn contiguous_linearised_indices_new_strided_index_overflow() {
+        for (first, dimensions) in [
+            (1, vec![(2, u64::MAX)]),
+            (0, vec![(u64::MAX, 2)]),
+            (1, vec![(2, u64::MAX - 1), (2, 1)]),
+        ] {
+            assert_eq!(
+                ContiguousLinearisedIndices::new_strided(first, dimensions.into_iter()),
+                Err(StridedIndicesError::IndexOverflow)
+            );
+        }
+        let indices =
+            ContiguousLinearisedIndices::new_strided(0, [(2, u64::MAX - 1), (2, 1)].into_iter())
+                .unwrap();
+        assert_eq!(
+            indices.iter().collect::<Vec<_>>(),
+            [(0, 2), (u64::MAX - 1, 2)]
+        );
+        let scalar =
+            ContiguousLinearisedIndices::new_strided(u64::MAX, std::iter::empty()).unwrap();
+        assert_eq!(scalar.iter().collect::<Vec<_>>(), [(u64::MAX, 1)]);
     }
 
     /// An empty array subset references no elements, so it is in-bounds irrespective of its start.

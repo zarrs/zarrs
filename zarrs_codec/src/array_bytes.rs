@@ -2284,4 +2284,43 @@ mod tests {
             .unwrap();
         assert!(copy_fill_value_into(&opt_dt, &fill, &mut bad_target).is_err());
     }
+
+    #[test]
+    fn extract_runs_rejects_selecting_more_elements_than_exist() {
+        // A zero stride repeats the first element
+        let repeated = |count: u64| {
+            ContiguousLinearisedIndices::new_strided(0, std::iter::once((count, 0))).unwrap()
+        };
+        let bytes = [1u8, 2, 3, 4];
+        assert_eq!(
+            extract_runs_fixed(&bytes, &repeated(2), 2).unwrap(),
+            [1, 2, 1, 2]
+        );
+        assert!(matches!(
+            extract_runs_fixed(&bytes, &repeated(3), 2),
+            Err(CodecError::IncompatibleIndexer(_))
+        ));
+        // The extracted length would overflow
+        assert!(matches!(
+            extract_runs_fixed(&bytes, &repeated(u64::MAX), 2),
+            Err(CodecError::IncompatibleIndexer(_))
+        ));
+
+        // The extracted bytes exceed the bytes of the elements, which size the output
+        let offsets = ArrayBytesOffsets::new(vec![0u32, 2, 3]).unwrap();
+        let extracted = extract_runs_variable(b"abc", &offsets, &repeated(2)).unwrap();
+        assert_eq!(extracted.bytes().as_ref(), b"abab");
+        assert_eq!(
+            extracted.offsets().iter().collect::<Vec<_>>(),
+            vec![0, 2, 4]
+        );
+        assert!(matches!(
+            extract_runs_variable(b"abc", &offsets, &repeated(3)),
+            Err(CodecError::IncompatibleIndexer(_))
+        ));
+        assert!(matches!(
+            extract_runs_variable(b"abc", &offsets, &repeated(u64::MAX)),
+            Err(CodecError::IncompatibleIndexer(_))
+        ));
+    }
 }
