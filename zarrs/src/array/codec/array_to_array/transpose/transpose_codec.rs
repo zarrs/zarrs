@@ -13,10 +13,10 @@ use crate::array::{
     ArrayBytes, ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue,
 };
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -300,6 +300,18 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
             &inverse_permutation(&self.order.0),
             &self.data_type,
         )
+    }
+
+    fn decode_into_encoded_target<'t>(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        // Encoded dimension `i` is decoded dimension `order[i]`
+        if self.order.0.len() != decoded_shape.len() {
+            return None;
+        }
+        target.permuted_axes(&self.order.0)
     }
 
     fn partial_decoder(
