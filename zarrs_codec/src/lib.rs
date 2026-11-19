@@ -263,6 +263,51 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
         }
     }
 
+    /// Return a target of the same elements with permuted dimensions, see [`ArrayBytesFixedDisjointView::permuted_axes`].
+    ///
+    /// Returns [`None`] if `order` is not a permutation of the dimensions of the target.
+    #[must_use]
+    pub fn permuted_axes(&mut self, order: &[usize]) -> Option<ArrayBytesDecodeIntoTarget<'_>> {
+        self.map_views(&mut |view| view.permuted_axes(order))
+    }
+
+    /// Return a target of the same elements with `shape`, in the same C order, see [`ArrayBytesFixedDisjointView::reshaped`].
+    ///
+    /// Returns [`None`] if the target cannot be reshaped to `shape`.
+    #[must_use]
+    pub fn reshaped(&mut self, shape: &[u64]) -> Option<ArrayBytesDecodeIntoTarget<'_>> {
+        self.map_views(&mut |view| view.reshaped(shape))
+    }
+
+    /// Reborrow this target with a shorter lifetime.
+    #[must_use]
+    pub fn reborrow(&mut self) -> ArrayBytesDecodeIntoTarget<'_> {
+        self.map_views(&mut |view| Some(view.reborrow()))
+            .expect("reborrow is infallible")
+    }
+
+    /// Apply `f` to the data view and every mask view, returning [`None`] if it returns [`None`] for any.
+    fn map_views<'b>(
+        &'b mut self,
+        f: &mut impl for<'c> FnMut(
+            &'c mut ArrayBytesFixedDisjointView<'a>,
+        ) -> Option<ArrayBytesFixedDisjointView<'c>>,
+    ) -> Option<ArrayBytesDecodeIntoTarget<'b>> {
+        match self {
+            Self::Fixed(data) => f(data).map(ArrayBytesDecodeIntoTarget::Fixed),
+            Self::Optional(optional) => {
+                let mask = f(&mut optional.mask)?;
+                let data = optional.data.map_views(f)?;
+                Some(ArrayBytesDecodeIntoTarget::Optional(
+                    ArrayBytesDecodeIntoTargetOptional {
+                        data: Box::new(data),
+                        mask,
+                    },
+                ))
+            }
+        }
+    }
+
     /// Return the number of elements in the target.
     #[must_use]
     pub fn num_elements(&self) -> u64 {

@@ -372,3 +372,67 @@ fn with_optional_masks_returns_inputs_on_error() {
     let mask_shapes: Vec<_> = mask_views.iter().map(|mask| mask.shape()).collect();
     assert_eq!(mask_shapes, [subset.shape(), other.shape()]);
 }
+
+#[test]
+fn transformed_optional_targets_keep_masks_aligned() {
+    let subset = ArraySubset::new_with_ranges(&[1..3, 0..4]);
+    let source_data: Vec<u8> = (10..26).collect();
+    let source_masks = [[1, 0, 1, 1, 0, 0, 1, 0], [0, 1, 1, 0, 1, 0, 0, 1]];
+    // The (row, col) of each element of a C-order source in the transformed target
+    let permuted: Vec<(usize, usize)> = (0..4)
+        .flat_map(|col| (1..3).map(move |row| (row, col)))
+        .collect();
+    let reshaped: Vec<(usize, usize)> = (1..3)
+        .flat_map(|row| (0..4).map(move |col| (row, col)))
+        .collect();
+    for (transform, positions) in [("permuted", permuted), ("reshaped", reshaped)] {
+        for depth_ in [0, 1, 2] {
+            let mut data = [0xa5; 24];
+            let mut masks = vec![[0xa5; 12]; depth_];
+            {
+                let mut target = target(&mut data, &mut masks, &subset);
+                let mut transformed = match transform {
+                    "permuted" => target.permuted_axes(&[1, 0]).unwrap(),
+                    _ => target.reshaped(&[4, 2]).unwrap(),
+                };
+                assert_eq!(depth(&transformed), depth_);
+                assert_eq!(transformed.shape(), [4, 2]);
+                let source = ArrayBytes::new_flen(&source_data).with_optional_masks(
+                    source_masks[..depth_]
+                        .iter()
+                        .map(|mask| ArrayBytesMask::new(mask).unwrap()),
+                );
+                decode_into_array_bytes_target(&source, &mut transformed).unwrap();
+            }
+            let mut expected_data = [0xa5; 24];
+            let mut expected_masks = vec![[0xa5; 12]; depth_];
+            for (k, &(row, col)) in positions.iter().enumerate() {
+                let index = row * 4 + col;
+                expected_data[index * 2..index * 2 + 2]
+                    .copy_from_slice(&source_data[k * 2..k * 2 + 2]);
+                for (expected_mask, mask) in expected_masks.iter_mut().zip(&source_masks) {
+                    expected_mask[index] = mask[k];
+                }
+            }
+            assert_eq!(data, expected_data, "{transform} {depth_}");
+            assert_eq!(masks, expected_masks, "{transform} {depth_}");
+        }
+    }
+
+    // Transforms that are not expressible return `None`
+    let mut data = [0u8; 24];
+    let mut masks = vec![[0u8; 12]; 1];
+    let mut target = target(
+        &mut data,
+        &mut masks,
+        &ArraySubset::new_with_ranges(&[1..3, 1..4]),
+    );
+    assert!(target.permuted_axes(&[0, 0]).is_none());
+    assert!(target.reshaped(&[5]).is_none());
+    // The rows of a region narrower than the array are not uniformly spaced
+    assert!(target.reshaped(&[6]).is_none());
+    assert!(target.reshaped(&[2, 1, 3]).is_some());
+    let mut transposed = target.permuted_axes(&[1, 0]).unwrap();
+    assert!(transposed.reshaped(&[6]).is_none());
+    assert!(transposed.reshaped(&[3, 1, 2]).is_some());
+}

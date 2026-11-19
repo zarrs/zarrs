@@ -24,9 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayToBytesCodecTraits::as_subchunking`, returning the optional `ArrayToBytesCodecSubchunkingTraits` capability for codecs that expose subchunks
   - `decoded_subchunk_grids` resolves ordered subchunk-grid hierarchies, and `subchunk_codecs` returns the shape-independent codec for each level (outermost first)
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
-- Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,shape,subdivide}` to build and subdivide targets without depending on their structure
+- Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,shape,subdivide,permuted_axes,reshaped,reborrow}` to build, subdivide, transform and reborrow targets without depending on their structure
   - `with_optional_mask(s)` return the new `WithOptionalMaskError`, which holds the target and mask(s) and converts to the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`), unless each mask has one byte per element and addresses the same elements of its bytes as the data (the same shape, offset and strides)
-- Add `ArrayBytesFixedDisjointView::{new_strided,offset,strides}` for views of strided grids of elements (e.g. column-major or transposed outputs)
+- Add `ArrayBytesFixedDisjointView::{new_strided,offset,strides}` for views of strided grids of elements (e.g. column-major or transposed outputs), and the safe `ArrayBytesFixedDisjointView::{permuted_axes,reshaped}`, which return a view of the same elements with permuted dimensions or another shape
 - Add `ArrayBytesFixedDisjointView::data_type_size`
 - Add `ArrayBytes::extract_runs` for extracting fixed, variable-length, and optional elements along contiguous linearised index runs, and `ArrayBytes::extract_runs_into` for copying fixed and optional elements along runs directly into an `ArrayBytesDecodeIntoTarget`
   - Direct copying enforces the same selection-count limit as extraction, irrespective of the target layout

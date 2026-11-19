@@ -20,7 +20,8 @@ use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError};
 /// A view is a strided grid of elements: it has a [`shape`](Self::shape), and its elements are addressed in C order of
 /// that shape, at a per-dimension stride (in elements) from the first element in the underlying bytes.
 /// A view of an array subset has the C-order strides of the array, but views can also address elements in other orders,
-/// such as a column-major (F-order) array or an array with permuted axes (see [`new_strided`](Self::new_strided)).
+/// such as a column-major (F-order) array or an array with permuted axes (see [`new_strided`](Self::new_strided),
+/// [`permuted_axes`](Self::permuted_axes) and [`reshaped`](Self::reshaped)).
 ///
 /// The elements of a view must not overlap with the elements of any other created views that reference the same array bytes.
 ///
@@ -86,6 +87,54 @@ fn checked_num_elements(shape: &[u64]) -> Option<u64> {
 /// The element offset of `start` in a grid with `strides` from `offset`.
 fn offset_of(offset: u64, start: &[u64], strides: &[u64]) -> u64 {
     std::iter::zip(start, strides).fold(offset, |offset, (&start, &stride)| offset + start * stride)
+}
+
+/// The strides of a nonempty grid with `shape` and `strides` reshaped to `new_shape` (with the same number of elements),
+/// so that elements keep their C order.
+///
+/// The dimensions are matched in groups with equal numbers of elements. The dimensions of a group with more than one
+/// dimension of the grid are merged, which requires each to step by the extent of the next (`stride == size * stride`).
+/// Returns [`None`] if they do not.
+fn reshaped_strides(shape: &[u64], strides: &[u64], new_shape: &[u64]) -> Option<ArrayIndices> {
+    // Dimensions with one element do not affect the order or position of elements
+    let (sizes, strides): (ArrayIndices, ArrayIndices) = std::iter::zip(shape, strides)
+        .filter(|&(&size, _)| size != 1)
+        .map(|(&size, &stride)| (size, stride))
+        .unzip();
+    let mut new_strides: ArrayIndices = new_shape.iter().map(|_| 0).collect();
+    let (mut i, mut j) = (0, 0);
+    // The products of the sizes in each group are equal and at most the number of elements, so they cannot overflow and
+    // neither group can extend beyond its dimensions
+    while i < sizes.len() && j < new_shape.len() {
+        // The smallest groups of dimensions `i..i_end` and `j..j_end` with the same number of elements
+        let (mut i_end, mut j_end) = (i + 1, j + 1);
+        let (mut count, mut new_count) = (sizes[i], new_shape[j]);
+        while count != new_count {
+            if count < new_count {
+                count *= sizes[i_end];
+                i_end += 1;
+            } else {
+                new_count *= new_shape[j_end];
+                j_end += 1;
+            }
+        }
+        for k in i..i_end - 1 {
+            if sizes[k + 1].checked_mul(strides[k + 1]) != Some(strides[k]) {
+                return None;
+            }
+        }
+        // The new dimensions of the group step through its elements in C order
+        let mut stride = strides[i_end - 1];
+        for k in (j..j_end).rev() {
+            new_strides[k] = stride;
+            if k > j {
+                stride = stride.checked_mul(new_shape[k])?;
+            }
+        }
+        (i, j) = (i_end, j_end);
+    }
+    // Any remaining new dimensions have one element, so their strides are irrelevant
+    Some(new_strides)
 }
 
 impl<'a> ArrayBytesFixedDisjointView<'a> {
@@ -259,6 +308,20 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         )
     }
 
+    /// Reborrow this view for the lifetime of the mutable borrow of `self`.
+    pub(crate) fn reborrow(&mut self) -> ArrayBytesFixedDisjointView<'_> {
+        ArrayBytesFixedDisjointView {
+            bytes: self.bytes,
+            data_type_size: self.data_type_size,
+            offset: self.offset,
+            shape: self.shape.clone(),
+            strides: self.strides.clone(),
+            runs: self.runs.clone(),
+            num_elements: self.num_elements,
+            bytes_in_subset_len: self.bytes_in_subset_len,
+        }
+    }
+
     /// The `length` bytes starting at element `element_index` of the underlying array.
     ///
     /// # Safety
@@ -306,6 +369,52 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
                 self.strides.clone(),
             )
         }
+    }
+
+    /// Return a view of the same elements with permuted dimensions.
+    ///
+    /// Dimension `i` of the returned view is dimension `order[i]` of this view, like [`ndarray::ArrayBase::permuted_axes`].
+    /// Returns [`None`] if `order` is not a permutation of the dimensions of this view.
+    ///
+    /// [`ndarray::ArrayBase::permuted_axes`]: https://docs.rs/ndarray/latest/ndarray/struct.ArrayBase.html#method.permuted_axes
+    #[must_use]
+    pub fn permuted_axes(&mut self, order: &[usize]) -> Option<ArrayBytesFixedDisjointView<'_>> {
+        let dimensionality = self.shape.len();
+        if order.len() != dimensionality
+            || order
+                .iter()
+                .enumerate()
+                .any(|(i, &axis)| axis >= dimensionality || order[..i].contains(&axis))
+        {
+            return None;
+        }
+        let shape = order.iter().map(|&axis| self.shape[axis]).collect();
+        let strides = order.iter().map(|&axis| self.strides[axis]).collect();
+        // SAFETY: the returned view borrows `self` mutably, so this view cannot be accessed while it is live.
+        unsafe { self.with_layout(self.offset, shape, strides) }.ok()
+    }
+
+    /// Return a view of the same elements with `shape`, in the same C order.
+    ///
+    /// Dimensions can always be split, and dimensions with one element inserted or removed.
+    /// Merging dimensions requires the elements of the merged dimensions to be uniformly spaced in the underlying bytes.
+    ///
+    /// Returns [`None`] if `shape` has a different number of elements, or the merged dimensions are not uniformly spaced.
+    #[must_use]
+    pub fn reshaped(&mut self, shape: &[u64]) -> Option<ArrayBytesFixedDisjointView<'_>> {
+        let num_elements = checked_num_elements(shape)?;
+        if num_elements != self.num_elements {
+            return None;
+        }
+        let strides = if shape == self.shape.as_slice() {
+            self.strides.clone()
+        } else if num_elements == 0 {
+            shape.iter().map(|_| 0).collect()
+        } else {
+            reshaped_strides(&self.shape, &self.strides, shape)?
+        };
+        // SAFETY: the returned view borrows `self` mutably, so this view cannot be accessed while it is live.
+        unsafe { self.with_layout(self.offset, shape.iter().copied().collect(), strides) }.ok()
     }
 
     /// Return the size in bytes of each element.
@@ -1172,7 +1281,31 @@ mod tests {
         f
     }
 
-    /// Views with C, F, and subdivided layouts address the elements given by index arithmetic.
+    /// Return true if a strided layout with `shape` addresses the element indices `expected` in C order.
+    fn expressible(expected: &[u64], shape: &[u64]) -> bool {
+        let positions = c_order_indices(shape);
+        let Some(&first) = expected.first() else {
+            return true;
+        };
+        // The stride of each dimension is the step to the next position along it
+        let mut strides = vec![0i128; shape.len()];
+        for (d, stride) in strides.iter_mut().enumerate() {
+            if shape[d] > 1 {
+                let step: u64 = shape[d + 1..].iter().product();
+                *stride = i128::from(expected[usize::try_from(step).unwrap()]) - i128::from(first);
+                if *stride < 0 {
+                    return false;
+                }
+            }
+        }
+        std::iter::zip(&positions, expected).all(|(position, &index)| {
+            std::iter::zip(position, &strides).fold(i128::from(first), |linear, (&i, &stride)| {
+                linear + i128::from(i) * stride
+            }) == i128::from(index)
+        })
+    }
+
+    /// Views with C, F, permuted, reshaped and subdivided layouts address the elements given by index arithmetic.
     #[test]
     fn strided_layouts() {
         let mut state = 0x2545_f491_4f6c_dd1d_u64;
@@ -1255,6 +1388,69 @@ mod tests {
             });
             check_view_operations(&f_view, len, size, &expected_f, &mut random);
 
+            // Permuted axes of a C-order view
+            let mut order: Vec<usize> = (0..dimensionality).collect();
+            for i in (1..dimensionality).rev() {
+                order.swap(i, usize::try_from(random(i as u64 + 1)).unwrap());
+            }
+            let permuted_shape: Vec<u64> = order.iter().map(|&d| subset.shape()[d]).collect();
+            let expected_permuted: Vec<u64> = c_order_indices(&permuted_shape)
+                .iter()
+                .map(|q| {
+                    let mut p = vec![0; dimensionality];
+                    for (i, &d) in order.iter().enumerate() {
+                        p[d] = q[i];
+                    }
+                    c_index(&in_array(&p))
+                })
+                .collect();
+            let permuted_view = view_fn(|bytes| {
+                let mut view = c_view(bytes);
+                let permuted = view.permuted_axes(&order).unwrap();
+                // Rebuild from the parts so that the view outlives the parent
+                unsafe {
+                    ArrayBytesFixedDisjointView::new_strided(
+                        bytes,
+                        size,
+                        permuted.offset,
+                        permuted.shape(),
+                        permuted.strides(),
+                    )
+                    .unwrap()
+                }
+            });
+            check_view_operations(&permuted_view, len, size, &expected_permuted, &mut random);
+
+            // Reshaping keeps the C order, if the layout can express the shape
+            let num_elements = subset.num_elements();
+            for new_shape in [
+                vec![num_elements],
+                [subset.shape(), &[1]].concat(),
+                [&[1], subset.shape()].concat(),
+                subset.shape().iter().rev().copied().collect(),
+            ] {
+                let mut bytes = vec![0; len * size];
+                let bytes = UnsafeCellSlice::new(&mut bytes);
+                for (mut view, expected) in
+                    [(c_view(bytes), &expected_c), (f_view(bytes), &expected_f)]
+                {
+                    let reshaped = view.reshaped(&new_shape);
+                    assert_eq!(reshaped.is_some(), expressible(expected, &new_shape));
+                    let Some(reshaped) = reshaped else {
+                        continue;
+                    };
+                    assert_eq!(reshaped.shape(), new_shape);
+                    let (offset, strides) = (reshaped.offset, reshaped.strides().to_vec());
+                    let reshaped_view = view_fn(|bytes| unsafe {
+                        ArrayBytesFixedDisjointView::new_strided(
+                            bytes, size, offset, &new_shape, &strides,
+                        )
+                        .unwrap()
+                    });
+                    check_view_operations(&reshaped_view, len, size, expected, &mut random);
+                }
+            }
+
             // Subdivisions are relative to the view
             let sub_ranges: Vec<_> = subset
                 .shape()
@@ -1287,6 +1483,52 @@ mod tests {
     /// The C-order linear index of `indices` in `shape`.
     fn c_index_of(indices: &[u64], shape: &[u64]) -> u64 {
         std::iter::zip(indices, shape).fold(0, |linear, (&index, &size)| linear * size + index)
+    }
+
+    #[test]
+    fn reshaped_strides_cases() {
+        // Splitting and inserting or removing dimensions with one element are always valid
+        assert_eq!(
+            reshaped_strides(&[4, 6], &[10, 1], &[2, 2, 1, 3, 2])
+                .unwrap()
+                .as_slice(),
+            [20, 10, 6, 2, 1]
+        );
+        assert_eq!(
+            reshaped_strides(&[1, 4, 1, 3], &[99, 1, 7, 4], &[2, 2, 3])
+                .unwrap()
+                .as_slice(),
+            [2, 1, 4]
+        );
+        // Merging requires uniform spacing
+        assert_eq!(
+            reshaped_strides(&[2, 3, 4], &[12, 4, 1], &[6, 4])
+                .unwrap()
+                .as_slice(),
+            [4, 1]
+        );
+        assert!(reshaped_strides(&[2, 3], &[4, 1], &[6]).is_none());
+        assert!(reshaped_strides(&[3, 2], &[1, 3], &[6]).is_none());
+        assert_eq!(
+            reshaped_strides(&[3, 2], &[1, 3], &[3, 2, 1])
+                .unwrap()
+                .as_slice(),
+            [1, 3, 0]
+        );
+        // Groups that split and merge
+        assert_eq!(
+            reshaped_strides(&[2, 6], &[6, 1], &[4, 3])
+                .unwrap()
+                .as_slice(),
+            [3, 1]
+        );
+        assert!(reshaped_strides(&[2, 6], &[8, 1], &[4, 3]).is_none());
+        assert_eq!(
+            reshaped_strides(&[2, 6], &[8, 1], &[2, 2, 3])
+                .unwrap()
+                .as_slice(),
+            [8, 3, 1]
+        );
     }
 
     #[test]
@@ -1328,6 +1570,10 @@ mod tests {
             }
             .unwrap();
             assert_eq!(sub.num_elements(), 0);
+            assert_eq!(view.permuted_axes(&[1, 2, 0]).unwrap().num_elements(), 0);
+            let reshaped = view.reshaped(&[u64::MAX, 3, 0]).unwrap();
+            assert_eq!(reshaped.shape(), &[u64::MAX, 3, 0]);
+            assert_eq!(reshaped.num_elements(), 0);
         }
         assert_eq!(bytes, vec![7u8; 18]);
     }
