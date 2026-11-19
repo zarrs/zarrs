@@ -14,9 +14,10 @@ pub trait IntoArrayBytes<'a> {
     /// Returns an [`ElementError`] if the conversion fails.
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'a>, ElementError>;
 
-    /// Validate that `self` is compatible with a target of `shape`.
+    /// Validate that `self` has a shape compatible with a target of `shape`.
     ///
-    /// Types without a layout of their own (e.g. slices, [`Vec`] and [`ArrayBytes`]) accept any shape.
+    /// Only types with an inherent multidimensional layout (e.g. `ndarray` arrays and [`Tensor`](super::Tensor)) validate their shape here.
+    /// Types without a shape of their own (e.g. slices, [`Vec`], [`ArrayBytes`], and `&bytes::Bytes`) accept any shape; their element or byte count is validated against the [`DataType`] via [`ArrayBytes::validate`] after conversion.
     ///
     /// # Errors
     /// Returns [`ElementError::IncompatibleShape`] if `self` has a layout with a shape other than `shape`.
