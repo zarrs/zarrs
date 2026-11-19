@@ -12,7 +12,7 @@ use super::{
     Indexer, ReadableStorageTraits, recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
+use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, ElementOrder};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
@@ -37,6 +37,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             bytes,
             bytemuck::must_cast_slice(&chunk_shape),
             self.data_type(),
+            ElementOrder::C,
         )
     }
 
@@ -79,7 +80,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             options,
             resources,
         )?;
-        T::from_array_bytes(bytes, &indexer.output_shape(), self.data_type())
+        T::from_array_bytes(
+            bytes,
+            &indexer.output_shape(),
+            self.data_type(),
+            ElementOrder::C,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -113,7 +119,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             &chunks,
             resources,
         )?;
-        T::from_array_bytes(bytes, &array_subset_shape, self.data_type())
+        T::from_array_bytes(
+            bytes,
+            &array_subset_shape,
+            self.data_type(),
+            ElementOrder::C,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -199,6 +210,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             bytes,
             bytemuck::must_cast_slice(&chunk_shape),
             self.data_type(),
+            ElementOrder::C,
         )
         .map(Some)
     }

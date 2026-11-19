@@ -193,6 +193,7 @@ fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
         fill_value_bytes(array, chunk_shape.num_elements_u64())?,
         bytemuck::must_cast_slice(&chunk_shape),
         array.data_type(),
+        super::ElementOrder::C,
     )
 }
 
@@ -204,7 +205,7 @@ fn into_validated_array_bytes<'a, T: super::IntoArrayBytes<'a>>(
     num_elements: u64,
 ) -> Result<super::ArrayBytes<'a>, ArrayError> {
     data.validate_shape(shape)?;
-    let bytes = data.into_array_bytes(data_type)?;
+    let bytes = data.into_array_bytes(data_type, super::ElementOrder::C)?;
     bytes.validate(num_elements, data_type)?;
     Ok(bytes)
 }

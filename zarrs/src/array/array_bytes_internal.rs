@@ -6,7 +6,8 @@ use std::sync::Arc;
 use itertools::Itertools;
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::{ArraySubset, DataType, Indexer};
+use super::iterators::ContiguousLinearisedIndices;
+use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
     ArrayBytesOffsets, ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
@@ -143,6 +144,56 @@ impl FixedDecodeBuffers {
             }
         });
         ArrayBytes::new_flen(self.data).with_optional_masks(masks)
+    }
+}
+
+/// The elements of `bytes` at a strided grid of element indices, in C order of the grid.
+///
+/// The grid starts at element `offset` and has `shape` and `strides` (in elements).
+///
+/// # Errors
+/// Returns a [`CodecError`] if `bytes` are incompatible with `data_type` or the grid addresses elements beyond them.
+pub(crate) fn extract_strided(
+    bytes: &ArrayBytes<'_>,
+    data_type: &DataType,
+    offset: u64,
+    shape: &[u64],
+    strides: &[u64],
+) -> Result<ArrayBytes<'static>, CodecError> {
+    let empty = shape.contains(&0);
+    let runs = ContiguousLinearisedIndices::new_strided(
+        if empty { 0 } else { offset },
+        std::iter::zip(shape.iter().copied(), strides.iter().copied()),
+    )
+    .map_err(|error| CodecError::Other(error.to_string()))?;
+    bytes.extract_runs(&runs, data_type)
+}
+
+/// Reorder the elements of `bytes`, an array of `shape` with elements in `from` order, to `to` order.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `bytes` are incompatible with `data_type` or `shape`.
+pub(crate) fn reorder<'a>(
+    bytes: ArrayBytes<'a>,
+    data_type: &DataType,
+    shape: &[u64],
+    from: ElementOrder,
+    to: ElementOrder,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    if from == to || !ElementOrder::F.is_reordered(shape) {
+        return Ok(bytes);
+    }
+    bytes.validate(shape.iter().product(), data_type)?;
+    // Gather the elements of the source in the C order of the destination grid
+    match to {
+        ElementOrder::C => extract_strided(&bytes, data_type, 0, shape, &from.strides(shape)),
+        ElementOrder::F => {
+            // The C order of the reversed shape is the F order of `shape`
+            let reversed_shape: ArrayIndices = shape.iter().rev().copied().collect();
+            let mut reversed_strides = from.strides(shape);
+            reversed_strides.reverse();
+            extract_strided(&bytes, data_type, 0, &reversed_shape, &reversed_strides)
+        }
     }
 }
 
@@ -342,6 +393,136 @@ mod tests {
     use super::*;
     use crate::array::{FillValue, data_type};
     use zarrs_codec::copy_fill_value_into;
+
+    #[test]
+    fn reorder_between_element_orders() {
+        // A 2x3 array with elements 0..6 in C order
+        let shape = [2, 3];
+        let c_order = [0u8, 1, 2, 3, 4, 5];
+        let f_order = [0u8, 3, 1, 4, 2, 5];
+        let to_f = |bytes: ArrayBytes<'static>, data_type: &DataType| {
+            reorder(bytes, data_type, &shape, ElementOrder::C, ElementOrder::F).unwrap()
+        };
+        let to_c = |bytes: ArrayBytes<'static>, data_type: &DataType| {
+            reorder(bytes, data_type, &shape, ElementOrder::F, ElementOrder::C).unwrap()
+        };
+
+        // Fixed length
+        let uint8 = data_type::uint8();
+        let f = to_f(ArrayBytes::new_flen(c_order.to_vec()), &uint8);
+        assert_eq!(f, ArrayBytes::new_flen(f_order.to_vec()));
+        assert_eq!(to_c(f, &uint8), ArrayBytes::new_flen(c_order.to_vec()));
+
+        // Fixed length elements of more than one byte
+        let uint16 = data_type::uint16();
+        let bytes = |order: &[u8]| -> Vec<u8> {
+            order
+                .iter()
+                .flat_map(|&e| (u16::from(e) * 257).to_ne_bytes())
+                .collect()
+        };
+        assert_eq!(
+            to_f(ArrayBytes::new_flen(bytes(&c_order)), &uint16),
+            ArrayBytes::new_flen(bytes(&f_order))
+        );
+
+        // Variable length
+        let string = data_type::string();
+        let vlen = |order: &[u8]| {
+            let elements: Vec<String> = order.iter().map(|e| "x".repeat(usize::from(*e))).collect();
+            <String as crate::array::Element>::into_array_bytes(&string, elements).unwrap()
+        };
+        let f = to_f(vlen(&c_order), &string);
+        assert_eq!(f, vlen(&f_order));
+        assert_eq!(to_c(f, &string), vlen(&c_order));
+
+        // Optional
+        let optional = data_type::uint8().to_optional();
+        let mask = |order: &[u8]| order.iter().map(|e| e % 2 == 0).collect::<Vec<bool>>();
+        let opt =
+            |order: &[u8]| ArrayBytes::new_flen(order.to_vec()).with_optional_mask(mask(order));
+        let f = to_f(opt(&c_order), &optional);
+        assert_eq!(f, opt(&f_order));
+        assert_eq!(to_c(f, &optional), opt(&c_order));
+
+        // Arrays with at most one dimension of more than one element are not reordered
+        for shape in [vec![6], vec![1, 6], vec![6, 1], vec![]] {
+            let bytes = ArrayBytes::new_flen(vec![
+                0u8;
+                usize::try_from(shape.iter().product::<u64>())
+                    .unwrap()
+            ]);
+            let reordered = reorder(
+                bytes.clone(),
+                &uint8,
+                &shape,
+                ElementOrder::C,
+                ElementOrder::F,
+            )
+            .unwrap();
+            assert_eq!(reordered, bytes);
+        }
+
+        // Bytes of the wrong length are rejected
+        assert!(
+            reorder(
+                ArrayBytes::new_flen(vec![0u8; 5]),
+                &uint8,
+                &shape,
+                ElementOrder::C,
+                ElementOrder::F
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn extract_strided_elements() {
+        // The column 1 of a 3x4 array, and a 2x2 block in F order of a 3x4 F-order array
+        let bytes = ArrayBytes::new_flen((0u8..12).collect::<Vec<u8>>());
+        let uint8 = data_type::uint8();
+        assert_eq!(
+            extract_strided(&bytes, &uint8, 1, &[3], &[4]).unwrap(),
+            ArrayBytes::new_flen(vec![1u8, 5, 9])
+        );
+        assert_eq!(
+            extract_strided(&bytes, &uint8, 4, &[2, 2], &[1, 3]).unwrap(),
+            ArrayBytes::new_flen(vec![4u8, 7, 5, 8])
+        );
+        // Out of bounds grids are rejected
+        assert!(extract_strided(&bytes, &uint8, 4, &[3], &[4]).is_err());
+        assert!(matches!(
+            extract_strided(&bytes, &uint8, 1, &[2], &[u64::MAX]),
+            Err(CodecError::Other(error)) if error == "linearised indices exceed u64::MAX"
+        ));
+        assert!(matches!(
+            extract_strided(&bytes, &uint8, 0, &[2, 1 << 63], &[0, 1]),
+            Err(CodecError::Other(error)) if error == "the number of elements exceeds u64::MAX"
+        ));
+        let string = data_type::string();
+        let vlen = <String as crate::array::Element>::into_array_bytes(
+            &string,
+            vec!["a".to_string(), "b".to_string()],
+        )
+        .unwrap();
+        assert!(extract_strided(&vlen, &string, 1, &[2], &[1]).is_err());
+        // Empty grids extract nothing
+        assert_eq!(
+            extract_strided(&bytes, &uint8, 99, &[0, 2], &[1, 3]).unwrap(),
+            ArrayBytes::new_flen(Vec::<u8>::new())
+        );
+        assert_eq!(
+            extract_strided(
+                &bytes,
+                &uint8,
+                u64::MAX,
+                &[0, u64::MAX, 2],
+                &[1, u64::MAX, 1]
+            )
+            .unwrap(),
+            ArrayBytes::new_flen(Vec::<u8>::new())
+        );
+    }
 
     #[test]
     fn copy_fill_value_into_matches_materialised_fill() {
