@@ -7,8 +7,8 @@ use rayon::iter::ParallelIterator;
 
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
-    Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubset, ArraySubsetTraits, ChunkCache,
-    ChunkGrid, CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits,
+    Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubset, ArraySubsetTraits, COrderBytes,
+    ChunkCache, ChunkGrid, CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
@@ -20,7 +20,7 @@ use crate::array::chunk_cache::{
     retrieve_chunk_overlap_into,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
-use crate::array::{ArrayBytes, DataType, ElementOrder};
+use crate::array::{ArrayBytes, DataType};
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
@@ -240,19 +240,23 @@ where
         resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
-        let bytes = retrieve_chunk_bytes(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            options,
-            resources,
-        )?;
-        let shape = self.array().chunk_shape(chunk_indices)?;
-        T::from_array_bytes_arc(
-            bytes,
-            bytemuck::must_cast_slice(&shape),
+        let chunk_shape = self.array().chunk_shape(chunk_indices)?;
+        super::retrieve_in_order(
             self.array().data_type(),
-            ElementOrder::C,
+            self.element_order(),
+            bytemuck::must_cast_slice(&chunk_shape),
+            |target| {
+                self.retrieve_chunk_into_with_options(chunk_indices, target, options, resources)
+            },
+            || {
+                retrieve_chunk_bytes(
+                    self.cache(),
+                    self.array(),
+                    chunk_indices,
+                    options,
+                    resources,
+                )
+            },
         )
     }
 
@@ -288,19 +292,29 @@ where
         let options = self.codec_options();
         let chunk_shape = self.array().chunk_shape(chunk_indices)?;
         super::validate_partial_chunk_subset(indexer, bytemuck::must_cast_slice(&chunk_shape))?;
-        let bytes = C::Value::retrieve_partial_chunk_bytes(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            indexer,
-            options,
-            resources,
-        )?;
-        T::from_array_bytes_arc(
-            bytes,
-            &indexer.output_shape(),
+        super::retrieve_in_order(
             self.array().data_type(),
-            ElementOrder::C,
+            super::indexer_element_order(indexer, self.element_order()),
+            &indexer.output_shape(),
+            |target| {
+                self.retrieve_partial_chunk_into_with_options(
+                    chunk_indices,
+                    indexer,
+                    target,
+                    options,
+                    resources,
+                )
+            },
+            || {
+                C::Value::retrieve_partial_chunk_bytes(
+                    self.cache(),
+                    self.array(),
+                    chunk_indices,
+                    indexer,
+                    options,
+                    resources,
+                )
+            },
         )
     }
 
@@ -329,19 +343,21 @@ where
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
         let chunks = super::array_subset_chunks(self, array_subset)?;
-        let bytes = retrieve_array_subset_bytes(
-            self.cache(),
-            self.array(),
-            array_subset,
-            &chunks,
-            options,
-            resources,
-        )?;
-        T::from_array_bytes_arc(
-            bytes,
-            &array_subset.shape(),
+        super::retrieve_in_order(
             self.array().data_type(),
-            ElementOrder::C,
+            self.element_order(),
+            &array_subset.shape(),
+            |target| self.retrieve_array_subset_into(array_subset, target, resources),
+            || {
+                retrieve_array_subset_bytes(
+                    self.cache(),
+                    self.array(),
+                    array_subset,
+                    &chunks,
+                    options,
+                    resources,
+                )
+            },
         )
     }
 
@@ -362,13 +378,13 @@ where
         else {
             return Ok(None);
         };
-        let shape = self.array().chunk_shape(chunk_indices)?;
-        T::from_array_bytes_arc(
-            bytes,
-            bytemuck::must_cast_slice(&shape),
-            self.array().data_type(),
-            ElementOrder::C,
-        )
+        let chunk_shape = self.array().chunk_shape(chunk_indices)?;
+        let shape = bytemuck::must_cast_slice(&chunk_shape);
+        if self.element_order().is_reordered(shape) {
+            super::from_c_order_in_f_order(&bytes, shape, self.array().data_type())
+        } else {
+            bytes.into_elements(shape, self.array().data_type(), self.element_order())
+        }
         .map(Some)
     }
 

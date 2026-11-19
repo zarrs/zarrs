@@ -2,7 +2,7 @@
 use super::{Array, ArrayCreateError};
 use super::{
     ArrayMetadataOptions, ArrayOps, ArrayShape, CodecCreateError, CodecOptions,
-    CodecSpecificOptions, DimensionName, MetadataEraseVersion,
+    CodecSpecificOptions, DimensionName, ElementOrder, MetadataEraseVersion,
 };
 
 /// Mutable array metadata/configuration operations.
@@ -37,6 +37,11 @@ pub trait ArrayMutOps: ArrayOps {
 
     /// Set the metadata options.
     fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self;
+
+    /// Set the order of the elements that array operations decode into and encode from.
+    ///
+    /// Refer to [`element_order`](super::ArrayOps::element_order) for details.
+    fn set_element_order(&mut self, element_order: ElementOrder) -> &mut Self;
 
     /// Set the metadata erase version.
     fn set_metadata_erase_version(

@@ -454,6 +454,8 @@ pub struct Array<TStorage: ?Sized> {
     codec_options: CodecOptions,
     /// Preferred minimum concurrency for multi-chunk operations.
     chunk_concurrent_minimum: usize,
+    /// The order of the elements that array operations decode into and encode from.
+    element_order: ElementOrder,
     metadata_options: ArrayMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
 }
@@ -477,6 +479,7 @@ impl<TStorage: ?Sized> Clone for Array<TStorage> {
             metadata: self.metadata.clone(),
             codec_options: self.codec_options,
             chunk_concurrent_minimum: self.chunk_concurrent_minimum,
+            element_order: self.element_order,
             metadata_options: self.metadata_options,
             metadata_erase_version: self.metadata_erase_version,
         }
@@ -503,6 +506,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             metadata: self.metadata.clone(),
             codec_options: self.codec_options,
             chunk_concurrent_minimum: self.chunk_concurrent_minimum,
+            element_order: self.element_order,
             metadata_options: self.metadata_options,
             metadata_erase_version: self.metadata_erase_version,
         }
@@ -634,6 +638,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             metadata: Arc::new(ArrayMetadata::V3(v3)),
             codec_options,
             chunk_concurrent_minimum,
+            element_order: ElementOrder::C,
             metadata_options,
             metadata_erase_version,
         })
@@ -738,6 +743,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             dimension_names: None,
             codec_options,
             chunk_concurrent_minimum,
+            element_order: ElementOrder::C,
             metadata: Arc::new(ArrayMetadata::V2(v2)),
             metadata_options,
             metadata_erase_version,

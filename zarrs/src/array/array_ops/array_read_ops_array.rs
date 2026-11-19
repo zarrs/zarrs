@@ -12,7 +12,7 @@ use super::{
     Indexer, ReadableStorageTraits, recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
-use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, ElementOrder};
+use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
@@ -31,13 +31,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
         let chunk_shape = self.chunk_shape(chunk_indices)?;
-        let bytes =
-            self.retrieve_chunk_with_shape(chunk_indices, &chunk_shape, options, resources)?;
-        T::from_array_bytes(
-            bytes,
-            bytemuck::must_cast_slice(&chunk_shape),
+        super::retrieve_in_order(
             self.data_type(),
-            ElementOrder::C,
+            self.element_order(),
+            bytemuck::must_cast_slice(&chunk_shape),
+            |target| {
+                self.retrieve_chunk_into_with_options(chunk_indices, target, options, resources)
+            },
+            || self.retrieve_chunk_with_shape(chunk_indices, &chunk_shape, options, resources),
         )
     }
 
@@ -73,18 +74,29 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         let options = self.codec_options();
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         super::validate_partial_chunk_subset(indexer, bytemuck::must_cast_slice(&chunk_shape))?;
-        let bytes = self.retrieve_partial_chunk_with_shape(
-            chunk_indices,
-            &chunk_shape,
-            indexer,
-            options,
-            resources,
-        )?;
-        T::from_array_bytes(
-            bytes,
-            &indexer.output_shape(),
+        super::retrieve_in_order(
             self.data_type(),
-            ElementOrder::C,
+            super::indexer_element_order(indexer, self.element_order()),
+            &indexer.output_shape(),
+            |target| {
+                self.retrieve_partial_chunk_into_with_shape(
+                    chunk_indices,
+                    &chunk_shape,
+                    indexer,
+                    target,
+                    options,
+                    resources,
+                )
+            },
+            || {
+                self.retrieve_partial_chunk_with_shape(
+                    chunk_indices,
+                    &chunk_shape,
+                    indexer,
+                    options,
+                    resources,
+                )
+            },
         )
     }
 
@@ -113,17 +125,19 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     ) -> Result<T, ArrayError> {
         let chunks = super::array_subset_chunks(self, array_subset)?;
         let array_subset_shape = array_subset.shape();
-        let bytes = self.retrieve_array_subset_c_order(
-            array_subset,
-            &array_subset_shape,
-            &chunks,
-            resources,
-        )?;
-        T::from_array_bytes(
-            bytes,
-            &array_subset_shape,
+        super::retrieve_in_order(
             self.data_type(),
-            ElementOrder::C,
+            self.element_order(),
+            &array_subset_shape,
+            |target| self.retrieve_array_subset_into(array_subset, target, resources),
+            || {
+                self.retrieve_array_subset_c_order(
+                    array_subset,
+                    &array_subset_shape,
+                    &chunks,
+                    resources,
+                )
+            },
         )
     }
 
@@ -203,14 +217,19 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         let Some(chunk_encoded) = self.retrieve_encoded_chunk(chunk_indices)? else {
             return Ok(None);
         };
+        let options = self.codec_options();
         let chunk_shape = self.chunk_shape(chunk_indices)?;
-        let bytes =
-            self.decode_chunk(chunk_encoded, &chunk_shape, self.codec_options(), resources)?;
-        T::from_array_bytes(
-            bytes,
-            bytemuck::must_cast_slice(&chunk_shape),
+        // One retrieval decodes the chunk, and takes it so that its bytes can be decoded in place if they are unique
+        let chunk_encoded = std::cell::Cell::new(Some(chunk_encoded));
+        let take_encoded = || chunk_encoded.take().expect("one retrieval");
+        super::retrieve_in_order(
             self.data_type(),
-            ElementOrder::C,
+            self.element_order(),
+            bytemuck::must_cast_slice(&chunk_shape),
+            |target| {
+                self.decode_chunk_into(take_encoded(), &chunk_shape, target, options, resources)
+            },
+            || self.decode_chunk(take_encoded(), &chunk_shape, options, resources),
         )
         .map(Some)
     }
@@ -601,6 +620,42 @@ mod tests {
     use super::*;
     use crate::array::{ArrayBuilder, ArraySubset, ChunkGridDecodedRef, data_type};
     use zarrs_storage::store::MemoryStore;
+
+    /// Reads in F order return F-ordered elements, including the fill value of missing chunks.
+    #[test]
+    fn retrieve_labels_f_order() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::array::{ElementOrder, Tensor};
+        let store = Arc::new(MemoryStore::default());
+        let array = ArrayBuilder::new(vec![2, 9], vec![2, 3], data_type::uint8(), 0u8)
+            .build(store, "/array")?;
+        let c_order: Vec<u8> = (1..13).collect();
+        array.store_array_subset(&[0..2, 0..6], &c_order, &Resources::default())?;
+        let array = array.with_element_order(ElementOrder::F);
+        let resources = Resources::default();
+
+        let tensor: Tensor<'static> = array.retrieve_chunk(&[0, 1], &resources)?;
+        assert_eq!(tensor.order(), ElementOrder::F);
+        assert_eq!(tensor.as_parts().0, [4, 10, 5, 11, 6, 12]);
+        let tensor: Tensor<'static> = array.retrieve_chunk(&[0, 2], &resources)?;
+        assert_eq!(tensor.order(), ElementOrder::F);
+        assert_eq!(tensor.as_parts().0, [0; 6]);
+        let tensor: Tensor<'static> = array.retrieve_array_subset(&[0..2, 1..5], &resources)?;
+        assert_eq!(tensor.order(), ElementOrder::F);
+        assert_eq!(tensor.as_parts().0, [2, 8, 3, 9, 4, 10, 5, 11]);
+        let tensor: Tensor<'static> = array.retrieve_partial_chunk(
+            &[0, 0],
+            &ArraySubset::new_with_ranges(&[0..2, 1..3]),
+            &resources,
+        )?;
+        assert_eq!(tensor.order(), ElementOrder::F);
+        assert_eq!(tensor.as_parts().0, [2, 8, 3, 9]);
+
+        // The C and F orders of a single row coincide
+        let tensor: Tensor<'static> = array.retrieve_array_subset(&[1..2, 1..5], &resources)?;
+        assert_eq!(tensor.order(), ElementOrder::F);
+        assert_eq!(tensor.as_parts().0, [8, 9, 10, 11]);
+        Ok(())
+    }
 
     fn array_read_ops_subchunks_impl(sharded: bool) -> Result<(), Box<dyn std::error::Error>> {
         let store = Arc::new(MemoryStore::default());
