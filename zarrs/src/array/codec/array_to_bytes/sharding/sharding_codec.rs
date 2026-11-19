@@ -671,7 +671,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
     ) -> Result<(), CodecError> {
         let encoded_shard = input.into_bytes(options, resources)?;
         let shard_shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
-        if output_target.subset().shape() != shard_shape_u64 {
+        if output_target.shape() != shard_shape_u64 {
             // Subchunks are placed by their position in the shard, which needs a target with the shard shape
             let decoded = self.decode(encoded_shard, shape, options, resources)?;
             return decode_into_array_bytes_target(&decoded, output_target);
