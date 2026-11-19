@@ -7,8 +7,9 @@ use rayon::iter::ParallelIterator;
 
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
-    Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkCache, ChunkGrid,
-    CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits, recommended_codec_concurrency,
+    Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubset, ArraySubsetTraits, ChunkCache,
+    ChunkGrid, CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits,
+    recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{
@@ -23,10 +24,14 @@ use crate::array::{ArrayBytes, DataType};
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
+/// Retrieve `array_subset`, which spans `chunks`, with elements in C order.
+///
+/// `chunks` are the chunks intersecting `array_subset` (see [`array_subset_chunks`](super::array_subset_chunks)).
 fn retrieve_array_subset_bytes<TStorage, C>(
     cache: &C,
     array: &Array<TStorage>,
     array_subset: &dyn ArraySubsetTraits,
+    chunks: &ArraySubset,
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
@@ -34,18 +39,6 @@ where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: ChunkCache + ?Sized,
 {
-    if array_subset.dimensionality() != array.dimensionality() {
-        return Err(ArrayError::InvalidArraySubset(
-            Box::new(array_subset.to_array_subset()),
-            array.shape().to_vec(),
-        ));
-    }
-    let Some(chunks) = array.chunks_in_array_subset(array_subset)? else {
-        return Err(ArrayError::InvalidArraySubset(
-            Box::new(array_subset.to_array_subset()),
-            array.shape().to_vec(),
-        ));
-    };
     match chunks.num_elements_usize() {
         0 => fill_value_bytes(array, array_subset.num_elements()),
         1 => {
@@ -77,7 +70,7 @@ where
                     cache,
                     array,
                     array_subset,
-                    &chunks,
+                    chunks,
                     fixed.size(),
                     optional_depth,
                     chunk_concurrent_limit,
@@ -89,7 +82,7 @@ where
                     cache,
                     array,
                     array_subset,
-                    &chunks,
+                    chunks,
                     chunk_concurrent_limit,
                     options,
                     &resources,
@@ -292,6 +285,8 @@ where
         resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
+        let chunk_shape = self.array().chunk_shape(chunk_indices)?;
+        super::validate_partial_chunk_subset(indexer, bytemuck::must_cast_slice(&chunk_shape))?;
         let bytes = C::Value::retrieve_partial_chunk_bytes(
             self.cache(),
             self.array(),
@@ -327,10 +322,12 @@ where
         resources: &Resources,
     ) -> Result<T, ArrayError> {
         let options = self.codec_options();
+        let chunks = super::array_subset_chunks(self, array_subset)?;
         let bytes = retrieve_array_subset_bytes(
             self.cache(),
             self.array(),
             array_subset,
+            &chunks,
             options,
             resources,
         )?;
