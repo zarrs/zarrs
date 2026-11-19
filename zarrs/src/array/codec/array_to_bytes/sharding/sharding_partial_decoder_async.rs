@@ -21,7 +21,7 @@ use crate::array::{
     ChunkGrid, ChunkShape, CodecChainBound, CowBytes, DataType, Indexer, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
     AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
     AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
     ExpectedOptionalBytesError, InvalidNumberOfElementsError, copy_fill_value_into,
@@ -251,7 +251,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
@@ -373,7 +373,7 @@ async fn partial_decode_fixed_array_subset_into(
     array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
     resources: &Resources,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
     let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs
@@ -810,7 +810,7 @@ async fn partial_decode_fixed_indexer_into(
     indexer: &dyn Indexer,
     options: &CodecOptions,
     resources: &Resources,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
     let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs
@@ -861,7 +861,7 @@ async fn partial_decode_fixed_indexer_into(
         };
     }
 
-    let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target else {
+    let ArrayBytesTarget::Fixed(output_view) = output_target else {
         return Err(ExpectedOptionalBytesError.into());
     };
     futures::stream::iter(groups)

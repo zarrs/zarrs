@@ -13,8 +13,8 @@ use zarrs::array::{
 };
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
-    CodecOptions, CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesMask, ArrayBytesTarget, CodecOptions,
+    CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
 };
 
 const SHAPE: [u64; 2] = [8, 6];
@@ -73,7 +73,7 @@ macro_rules! decode_into_new {
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let mut $target = ArrayBytesDecodeIntoTarget::from(data_view)
+            let mut $target = ArrayBytesTarget::from(data_view)
                 .with_optional_masks(mask_views)
                 .unwrap();
             $decode_into?;

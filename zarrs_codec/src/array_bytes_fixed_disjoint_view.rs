@@ -1658,7 +1658,7 @@ mod tests {
                     let mut expected = actual.clone();
                     // SAFETY: each view is the only view of its bytes.
                     unsafe {
-                        let mut target = crate::ArrayBytesDecodeIntoTarget::Fixed(
+                        let mut target = crate::ArrayBytesTarget::Fixed(
                             ArrayBytesFixedDisjointView::new(
                                 UnsafeCellSlice::new(&mut actual),
                                 size,

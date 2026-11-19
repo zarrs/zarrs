@@ -15,7 +15,7 @@ use crate::array::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits};
+use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits};
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
 use zarrs_storage::ReadableStorageTraits;
@@ -104,7 +104,7 @@ fn decode_encoded_into<TStorage>(
     array: &Array<TStorage>,
     encoded: &ChunkCacheTypeEncoded,
     chunk_shape: &ChunkShape,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<(), ArrayError>
@@ -133,7 +133,7 @@ fn partial_decode_encoded_into<TStorage>(
     encoded: ChunkCacheTypeEncoded,
     chunk_shape: &ChunkShape,
     indexer: &dyn Indexer,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<(), ArrayError>
@@ -213,7 +213,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>
@@ -239,7 +239,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>
@@ -361,7 +361,7 @@ impl SealedAsync for ChunkCacheTypeEncoded {
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>
@@ -387,7 +387,7 @@ impl SealedAsync for ChunkCacheTypeEncoded {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>

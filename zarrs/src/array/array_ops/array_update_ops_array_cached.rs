@@ -9,7 +9,7 @@ use super::{
 };
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, CodecError,
 };
 use zarrs_storage::StorageError;
@@ -61,7 +61,7 @@ where
     fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {

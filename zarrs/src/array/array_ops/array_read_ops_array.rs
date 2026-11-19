@@ -16,7 +16,7 @@ use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     InvalidNumberOfElementsError, copy_fill_value_into,
 };
 use zarrs_storage::Bytes;
@@ -46,7 +46,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     pub fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.retrieve_chunk_into_with_options(
@@ -105,7 +105,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.retrieve_partial_chunk_into_with_options(
@@ -238,7 +238,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     pub fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         super::array_read_ops_common::retrieve_array_subset_into(
@@ -383,7 +383,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     pub(in crate::array) fn retrieve_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -462,7 +462,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -486,7 +486,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_shape: &[NonZeroU64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {

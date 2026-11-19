@@ -4,7 +4,7 @@ use crate::array::{
     ArrayError, ArrayIndices, ArrayOps, ArraySubset, ArraySubsetTraits, DataType, Indexer,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
+    ArrayBytesTarget, CodecError, CodecOptions, InvalidNumberOfElementsError, Resources,
     copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::MaybeSync;
@@ -26,7 +26,7 @@ pub(super) trait AsyncRetrieveInto {
     async fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
@@ -35,7 +35,7 @@ pub(super) trait AsyncRetrieveInto {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
@@ -45,7 +45,7 @@ pub(super) async fn retrieve_array_subset_into<A, R>(
     array: &A,
     retrieve: &R,
     array_subset: &dyn ArraySubsetTraits,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
     chunk_concurrent_minimum: usize,
     options: &CodecOptions,
     resources: &Resources,
@@ -159,12 +159,12 @@ pub(super) async fn retrieve_multi_chunk_fixed_into<'a, A, F, Fut>(
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
-    output_target: &ArrayBytesDecodeIntoTarget<'a>,
+    output_target: &ArrayBytesTarget<'a>,
     retrieve_chunk_overlap_into: F,
 ) -> Result<(), ArrayError>
 where
     A: ArrayOps + MaybeSync,
-    F: Fn(ArrayIndices, ArraySubset, ArraySubset, ArrayBytesDecodeIntoTarget<'a>) -> Fut,
+    F: Fn(ArrayIndices, ArraySubset, ArraySubset, ArrayBytesTarget<'a>) -> Fut,
     Fut: Future<Output = Result<(), ArrayError>>,
 {
     let array_subset_start = array_subset.start();

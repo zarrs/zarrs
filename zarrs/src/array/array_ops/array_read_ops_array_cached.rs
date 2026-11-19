@@ -21,7 +21,7 @@ use crate::array::chunk_cache::{
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, DataType};
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
 /// Retrieve `array_subset`, which spans `chunks`, with elements in C order.
@@ -193,7 +193,7 @@ where
     pub(in crate::array) fn retrieve_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -211,7 +211,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -264,7 +264,7 @@ where
     pub fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.retrieve_chunk_into_with_options(
@@ -323,7 +323,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.retrieve_partial_chunk_into_with_options(
@@ -437,7 +437,7 @@ where
     pub fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         super::array_read_ops_common::retrieve_array_subset_into(

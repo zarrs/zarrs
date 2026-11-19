@@ -10,8 +10,8 @@ use super::{
 use crate::array::chunk_cache::AsyncChunkCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderSubchunkingTraits,
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, CodecError,
+    ArrayBytesTarget, AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
+    AsyncArrayPartialEncoderTraits, CodecError,
 };
 use zarrs_storage::StorageError;
 
@@ -68,7 +68,7 @@ where
     async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {

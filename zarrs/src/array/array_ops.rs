@@ -60,7 +60,7 @@
 use std::sync::Arc;
 
 use super::array_bytes_internal::{FixedDecodeBuffers, reordered};
-use zarrs_codec::ArrayBytesDecodeIntoTarget;
+use zarrs_codec::ArrayBytesTarget;
 
 use super::chunk_cache::ChunkCache;
 use super::{
@@ -258,7 +258,7 @@ fn retrieve_in_order<T, B>(
     data_type: &DataType,
     order: ElementOrder,
     shape: &[u64],
-    retrieve_into: impl FnOnce(&mut ArrayBytesDecodeIntoTarget<'_>) -> Result<(), ArrayError>,
+    retrieve_into: impl FnOnce(&mut ArrayBytesTarget<'_>) -> Result<(), ArrayError>,
     retrieve_c_order: impl FnOnce() -> Result<B, ArrayError>,
 ) -> Result<T, ArrayError>
 where
@@ -285,7 +285,7 @@ async fn async_retrieve_in_order<T, B>(
     data_type: &DataType,
     order: ElementOrder,
     shape: &[u64],
-    retrieve_into: impl AsyncFnOnce(&mut ArrayBytesDecodeIntoTarget<'_>) -> Result<(), ArrayError>,
+    retrieve_into: impl AsyncFnOnce(&mut ArrayBytesTarget<'_>) -> Result<(), ArrayError>,
     retrieve_c_order: impl AsyncFnOnce() -> Result<B, ArrayError>,
 ) -> Result<T, ArrayError>
 where

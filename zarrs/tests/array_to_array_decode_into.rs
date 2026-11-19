@@ -8,7 +8,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::CodecChain;
 use zarrs::array::{DataType, FillValue, data_type};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayToBytesCodecTraits,
     CodecOptions, CodecSpecificOptions, ComputeResources, decode_into_array_bytes_target,
 };
 use zarrs_metadata::v3::MetadataV3;
@@ -107,7 +107,7 @@ impl Buffers {
         }
     }
 
-    fn target(&mut self, layout: &Layout) -> ArrayBytesDecodeIntoTarget<'_> {
+    fn target(&mut self, layout: &Layout) -> ArrayBytesTarget<'_> {
         // SAFETY: each view is the only view of its buffer.
         let view = |bytes, size| unsafe {
             ArrayBytesFixedDisjointView::new_strided(
@@ -120,7 +120,7 @@ impl Buffers {
             .unwrap()
         };
         let masks: Vec<_> = self.masks.iter_mut().map(|mask| view(mask, 1)).collect();
-        ArrayBytesDecodeIntoTarget::from(view(&mut self.data, self.size))
+        ArrayBytesTarget::from(view(&mut self.data, self.size))
             .with_optional_masks(masks)
             .unwrap()
     }

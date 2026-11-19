@@ -9,8 +9,8 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use super::iterators::ContiguousLinearisedIndices;
 use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer, IndexerError};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
-    ArrayBytesOffsets, ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesMask, ArrayBytesOffsets,
+    ArrayBytesOffsetsCreateError, ArrayBytesTarget, ArrayBytesVariableLength, CodecError,
 };
 
 pub(crate) fn offsets_from_usize(
@@ -101,7 +101,7 @@ impl FixedDecodeBuffers {
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the views cannot be created.
-    pub(crate) fn target(&mut self) -> Result<ArrayBytesDecodeIntoTarget<'_>, CodecError> {
+    pub(crate) fn target(&mut self) -> Result<ArrayBytesTarget<'_>, CodecError> {
         self.target_in_order(ElementOrder::C)
     }
 
@@ -112,7 +112,7 @@ impl FixedDecodeBuffers {
     pub(crate) fn target_in_order(
         &mut self,
         order: ElementOrder,
-    ) -> Result<ArrayBytesDecodeIntoTarget<'_>, CodecError> {
+    ) -> Result<ArrayBytesTarget<'_>, CodecError> {
         let strides = order.strides(&self.shape);
         let data_view = unsafe {
             // SAFETY: the view is the only view of the data, and distinct indices of a compact layout address distinct elements
@@ -138,14 +138,14 @@ impl FixedDecodeBuffers {
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(ArrayBytesDecodeIntoTarget::Fixed(data_view).with_optional_masks(mask_views)?)
+        Ok(ArrayBytesTarget::Fixed(data_view).with_optional_masks(mask_views)?)
     }
 
     /// Convert the buffers into array bytes.
     ///
     /// # Safety
     /// Every element of the target returned by [`target`](Self::target) or [`target_in_order`](Self::target_in_order) must have been written,
-    /// following the [output requirements](ArrayBytesDecodeIntoTarget#output-requirements).
+    /// following the [output requirements](ArrayBytesTarget#output-requirements).
     pub(crate) unsafe fn into_array_bytes(mut self) -> ArrayBytes<'static> {
         let num_elements = usize::try_from(self.shape.iter().product::<u64>()).unwrap();
         unsafe { self.data.set_len(num_elements * self.data_type_size) };
@@ -664,7 +664,7 @@ mod tests {
                                 .unwrap()
                             })
                             .collect();
-                        let mut target = ArrayBytesDecodeIntoTarget::from(data_view)
+                        let mut target = ArrayBytesTarget::from(data_view)
                             .with_optional_masks(mask_views)
                             .unwrap();
                         if direct {

@@ -8,7 +8,7 @@ use crate::array::{
     CodecOptions, Indexer, Resources,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
+    ArrayBytesTarget, CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
 };
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
@@ -44,7 +44,7 @@ pub(super) fn validate_chunk_indices<TStorage: ?Sized>(
 
 /// Return an error if `output_target` does not have `expected` elements.
 pub(super) fn validate_target_num_elements(
-    output_target: &ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &ArrayBytesTarget<'_>,
     expected: u64,
 ) -> Result<(), CodecError> {
     if output_target.num_elements() != expected {
@@ -59,7 +59,7 @@ pub(super) fn validate_partial_chunk_indexer<TStorage: ?Sized>(
     array: &Array<TStorage>,
     chunk_indices: &[u64],
     indexer: &dyn Indexer,
-    output_target: &ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &ArrayBytesTarget<'_>,
 ) -> Result<ChunkShape, ArrayError> {
     let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
     let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
@@ -73,7 +73,7 @@ pub(super) fn validate_partial_chunk_indexer<TStorage: ?Sized>(
 
 pub(super) fn copy_array_fill_value_into(
     array: &Array<impl ?Sized>,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), ArrayError> {
     copy_fill_value_into(array.data_type(), array.fill_value(), output_target)
         .map_err(ArrayError::CodecError)
@@ -151,7 +151,7 @@ pub(crate) fn retrieve_chunk_overlap_into<TStorage, C>(
     chunk_indices: &[u64],
     chunk_subset: &ArraySubset,
     overlap: &dyn ArraySubsetTraits,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<(), ArrayError>
@@ -248,7 +248,7 @@ pub(crate) async fn async_retrieve_chunk_overlap_into<TStorage, C>(
     chunk_indices: &[u64],
     chunk_subset: &ArraySubset,
     overlap: &dyn ArraySubsetTraits,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<(), ArrayError>
@@ -328,7 +328,7 @@ impl zarrs_codec::AsyncArrayPartialDecoderTraits for SyncPartialDecoderAsAsync {
     async fn partial_decode_into(
         &self,
         indexer: &dyn crate::array::Indexer,
-        output_target: &mut zarrs_codec::ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut zarrs_codec::ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {

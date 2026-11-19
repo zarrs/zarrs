@@ -2,7 +2,7 @@
 use super::ArrayReadOps;
 use super::{ArrayError, ArrayOps, ArraySubsetTraits, ChunkGrid, FromArrayBytes, Indexer};
 use std::sync::Arc;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, Resources};
+use zarrs_codec::{ArrayBytesTarget, AsyncArrayPartialDecoderTraits, Resources};
 use zarrs_storage::Bytes;
 
 /// Asynchronous array read operations.
@@ -24,7 +24,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
@@ -55,7 +55,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
@@ -170,7 +170,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 

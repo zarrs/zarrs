@@ -12,7 +12,7 @@ use zarrs::array::{
 };
 use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 use zarrs::metadata_ext::codec::vlen::VlenIndexLocation;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
+use zarrs_codec::{ArrayBytesFixedDisjointView, ArrayBytesTarget, CodecOptions};
 
 #[allow(clippy::single_range_in_vec_init)]
 #[rustfmt::skip]
@@ -350,7 +350,7 @@ async fn async_retrieve_into_vec(
             // SAFETY: single view, no overlap
             ArrayBytesFixedDisjointView::new(output_slice, data_type_size, &shape, full_subset)?
         };
-        let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
+        let mut target = ArrayBytesTarget::Fixed(view);
         array
             .async_retrieve_array_subset_into(&subset, &mut target, &Resources::default())
             .await?;
@@ -398,7 +398,7 @@ async fn array_async_read_into(array: &Array<AsyncStore>) -> Result<(), Box<dyn 
     let view = unsafe {
         ArrayBytesFixedDisjointView::new(slice, 1, &shape_1d, full).unwrap()
     };
-    let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
+    let mut target = ArrayBytesTarget::Fixed(view);
     assert!(array.async_retrieve_array_subset_into(&subset_1d, &mut target, &Resources::default()).await.is_err());
 
     Ok(())

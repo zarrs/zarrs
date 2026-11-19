@@ -6,7 +6,7 @@ use zarrs_data_type::{DataType, FillValue};
 
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
+    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesTarget, ArrayCodecTraits,
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef,
     CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
@@ -220,10 +220,10 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// The decoded representation shape and dimensionality does not need to match the output target, but the number of elements must match.
     /// Chunk elements are written to the subset of the output in C order.
     ///
-    /// For optional data types, wrap the data target in one [`ArrayBytesDecodeIntoTarget::Optional`] layer per optional nesting level (see [`ArrayBytesDecodeIntoTarget::with_optional_mask`]).
+    /// For optional data types, wrap the data target in one [`ArrayBytesTarget::Optional`] layer per optional nesting level (see [`ArrayBytesTarget::with_optional_mask`]).
     /// For non-optional data types, convert a fixed view into a target using `.into()`.
     ///
-    /// Implementations must satisfy the target's [output requirements](ArrayBytesDecodeIntoTarget#output-requirements).
+    /// Implementations must satisfy the target's [output requirements](ArrayBytesTarget#output-requirements).
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded representation does not match the number of elements in the output target.
@@ -231,7 +231,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {

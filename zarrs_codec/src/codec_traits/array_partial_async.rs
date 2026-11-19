@@ -6,8 +6,8 @@ use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::StorageError;
 
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits, CodecError,
-    CodecOptions, InvalidNumberOfElementsError, Resources, decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesTarget, ArrayPartialDecoderNoSubchunkingTraits, CodecError, CodecOptions,
+    InvalidNumberOfElementsError, Resources, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an asynchronous partial array decoder.
@@ -114,14 +114,14 @@ pub trait AsyncArrayPartialDecoderTraits:
     /// Extracted elements from the `indexer` are written as ordered by the indexer.
     /// For an [`ArraySubset`](zarrs_chunk_grid::ArraySubset), that is C order.
     ///
-    /// Implementations must satisfy the target's [output requirements](ArrayBytesDecodeIntoTarget#output-requirements).
+    /// Implementations must satisfy the target's [output requirements](ArrayBytesTarget#output-requirements).
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the number of elements in `indexer` does not match the number of elements in `output_target`.
     async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {

@@ -1,7 +1,7 @@
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, InvalidBytesLengthError,
+    ArrayBytesDecodeIntoInput, ArrayBytesTarget, InvalidBytesLengthError,
     decode_into_array_bytes_target,
 };
 
@@ -355,14 +355,14 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         &self,
         input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         let bytes = input.into_bytes(options, resources)?;
         // Decompress directly into an output that is one contiguous region
         // SAFETY: `decompress_into` only writes initialised bytes, and initialises all of `output` if it returns `true`.
-        if let ArrayBytesDecodeIntoTarget::Fixed(output) = output_target
+        if let ArrayBytesTarget::Fixed(output) = output_target
             && let Some(output) = unsafe { output.as_mut_slice() }
             && self.decompress_into(&bytes, shape, output)?
         {

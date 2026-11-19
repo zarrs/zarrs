@@ -336,7 +336,7 @@ fn codec_shuffle(c: &mut Criterion) {
 
 fn decode_into_bench(c: &mut Criterion, name: &str, codec: zarrs::array::codec::CodecChain) {
     use unsafe_cell_slice::UnsafeCellSlice;
-    use zarrs::array::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView};
+    use zarrs::array::{ArrayBytesFixedDisjointView, ArrayBytesTarget};
 
     let shape = [std::num::NonZeroU64::new(32_768).unwrap()];
     let values: Vec<f32> = (0..32_768).map(|i| (i % 31) as f32 * 0.25).collect();
@@ -388,7 +388,7 @@ fn decode_into_bench(c: &mut Criterion, name: &str, codec: zarrs::array::codec::
                     .decode_into(
                         encoded.clone().into(),
                         &shape,
-                        &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                        &mut ArrayBytesTarget::Fixed(view),
                         &options,
                         &resources,
                     )
@@ -403,7 +403,7 @@ fn decode_into_bench(c: &mut Criterion, name: &str, codec: zarrs::array::codec::
 fn codec_bytes_decode_into_strided(c: &mut Criterion) {
     use criterion::BatchSize;
     use unsafe_cell_slice::UnsafeCellSlice;
-    use zarrs::array::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView};
+    use zarrs::array::{ArrayBytesFixedDisjointView, ArrayBytesTarget};
 
     const NUM_ELEMENTS: u64 = 32_768;
     let endianness = if cfg!(target_endian = "little") {
@@ -451,7 +451,7 @@ fn codec_bytes_decode_into_strided(c: &mut Criterion) {
                 .decode_into(
                     input.into(),
                     &shape,
-                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &mut ArrayBytesTarget::Fixed(view),
                     &options,
                     &resources,
                 )
@@ -502,7 +502,7 @@ fn a2a_decode_into_bench_with(
 ) {
     use unsafe_cell_slice::UnsafeCellSlice;
     use zarrs::array::codec::CodecChain;
-    use zarrs::array::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView};
+    use zarrs::array::{ArrayBytesFixedDisjointView, ArrayBytesTarget};
 
     let shape: Vec<std::num::NonZeroU64> = decoded_shape
         .iter()
@@ -587,7 +587,7 @@ fn a2a_decode_into_bench_with(
                         .decode_into(
                             encoded.clone().into(),
                             &shape,
-                            &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                            &mut ArrayBytesTarget::Fixed(view),
                             &options,
                             &resources,
                         )

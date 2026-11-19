@@ -15,9 +15,9 @@ use zarrs::array::codec::array_to_bytes::sharding::{
 };
 use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
-    ArrayCached, ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps,
-    ArrayWriteOps, ChunkGridDecodedRef, CodecOptions, data_type,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
+    ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
+    ChunkGridDecodedRef, CodecOptions, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -160,7 +160,7 @@ fn retrieve_into<A: ArrayReadOps>(
             // SAFETY: this is the only view over output and covers it exactly.
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
-        let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
+        let mut target = ArrayBytesTarget::Fixed(view);
         if let Some(chunk_indices) = chunk_indices {
             array.retrieve_partial_chunk_into(
                 chunk_indices,
@@ -191,7 +191,7 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
         };
         array.retrieve_chunk_into(
             chunk_indices,
-            &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+            &mut ArrayBytesTarget::Fixed(view),
             &Resources::default(),
         )?;
     }
@@ -1489,7 +1489,7 @@ mod async_cached {
         AsyncChunkCachePartialDecoderLruChunkLimit,
     };
     use zarrs::array::{
-        Array, ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
+        Array, ArrayBuilder, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
         ArraySubset, AsyncArrayReadOps, data_type,
     };
     use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -1553,7 +1553,7 @@ mod async_cached {
             array
                 .async_retrieve_array_subset_into(
                     subset,
-                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &mut ArrayBytesTarget::Fixed(view),
                     &Resources::default(),
                 )
                 .await?;

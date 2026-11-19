@@ -23,7 +23,7 @@ use zarrs::array::codec::{Crc32cCodec, ShardingCodecBuilder, ZstdCodec};
 use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
 use zarrs::storage::ReadableWritableListableStorageTraits;
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
+use zarrs_codec::{ArrayBytesFixedDisjointView, ArrayBytesTarget, CodecOptions};
 
 /// 100 000 chunks of 64 bytes.
 fn many_small_chunks(c: &mut Criterion) {
@@ -124,7 +124,7 @@ fn single_chunk(c: &mut Criterion) {
                 array
                     .retrieve_array_subset_into(
                         &array.subset_all(),
-                        &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                        &mut ArrayBytesTarget::Fixed(view),
                         &Resources::default(),
                     )
                     .unwrap();

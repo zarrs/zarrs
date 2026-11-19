@@ -18,7 +18,7 @@ use crate::array::{
     DataType, Indexer, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
     BytesPartialDecoderTraits, CodecError, CodecOptions, ExpectedOptionalBytesError,
     InvalidNumberOfElementsError, copy_fill_value_into, decode_into_array_bytes_target,
@@ -221,7 +221,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
@@ -339,7 +339,7 @@ fn partial_decode_fixed_array_subset_into(
     array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
     resources: &Resources,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
     let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs
@@ -569,7 +569,7 @@ fn partial_decode_fixed_indexer_into(
     indexer: &dyn Indexer,
     options: &CodecOptions,
     resources: &Resources,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
     let data_type = inner_codecs.data_type();
     let fill_value = inner_codecs
@@ -613,7 +613,7 @@ fn partial_decode_fixed_indexer_into(
         };
     }
 
-    let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target else {
+    let ArrayBytesTarget::Fixed(output_view) = output_target else {
         return Err(ExpectedOptionalBytesError.into());
     };
     let decoded = groups

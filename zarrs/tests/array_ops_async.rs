@@ -10,7 +10,7 @@ use zarrs::array::codec::array_to_bytes::sharding::{
     AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
 };
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget,
     ArrayMetadataOptions, ArraySubset, AsyncArrayReadOps, AsyncArrayUpdateOps, CodecOptions,
     FillValue, data_type,
 };
@@ -73,7 +73,7 @@ async fn retrieve_into<A: AsyncArrayReadOps>(
             // SAFETY: this is the only view over output and covers it exactly.
             ArrayBytesFixedDisjointView::new(output_slice, 1, &shape, full_subset)?
         };
-        let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
+        let mut target = ArrayBytesTarget::Fixed(view);
         if let Some(chunk_indices) = chunk_indices {
             array
                 .async_retrieve_partial_chunk_into(
@@ -109,7 +109,7 @@ async fn retrieve_chunk_into<A: AsyncArrayReadOps>(
         array
             .async_retrieve_chunk_into(
                 chunk_indices,
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &Resources::default(),
             )
             .await?;

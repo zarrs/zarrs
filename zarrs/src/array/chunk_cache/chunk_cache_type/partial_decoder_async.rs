@@ -11,7 +11,7 @@ use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubset, ChunkShapeTraits, CodecOptions, Indexer, Resources,
     chunk_shape_to_array_shape,
 };
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::AsyncReadableStorageTraits;
 
 impl ChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
@@ -115,7 +115,7 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
         cache: &C,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>
@@ -147,7 +147,7 @@ impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
         array: &Array<TStorage>,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>

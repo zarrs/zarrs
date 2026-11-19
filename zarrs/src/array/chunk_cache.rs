@@ -136,7 +136,7 @@ mod chunk_cache_type_sealed {
         AsyncArrayPartialDecoderTraits, AsyncChunkCache, AsyncReadableStorageTraits,
         ChunkCacheTypeAsyncPartialDecoder,
     };
-    use zarrs_codec::ArrayBytesDecodeIntoTarget;
+    use zarrs_codec::ArrayBytesTarget;
 
     pub trait Sealed {}
 
@@ -189,7 +189,7 @@ mod chunk_cache_type_sealed {
             cache: &C,
             array: &Array<TStorage>,
             chunk_indices: &[u64],
-            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            output_target: &mut ArrayBytesTarget<'_>,
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError>
@@ -202,7 +202,7 @@ mod chunk_cache_type_sealed {
             array: &Array<TStorage>,
             chunk_indices: &[u64],
             indexer: &dyn Indexer,
-            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            output_target: &mut ArrayBytesTarget<'_>,
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError>
@@ -258,7 +258,7 @@ mod chunk_cache_type_sealed {
             cache: &C,
             array: &Array<TStorage>,
             chunk_indices: &[u64],
-            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            output_target: &mut ArrayBytesTarget<'_>,
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError>
@@ -271,7 +271,7 @@ mod chunk_cache_type_sealed {
             array: &Array<TStorage>,
             chunk_indices: &[u64],
             indexer: &dyn Indexer,
-            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            output_target: &mut ArrayBytesTarget<'_>,
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError>

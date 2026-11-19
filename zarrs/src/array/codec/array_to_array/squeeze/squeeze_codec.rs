@@ -7,7 +7,7 @@ use zarrs_plugin::ZarrVersion;
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
@@ -321,8 +321,8 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
     fn encoded_target<'t>(
         &self,
         decoded_shape: &[NonZeroU64],
-        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        target: &'t mut ArrayBytesTarget<'_>,
+    ) -> Option<ArrayBytesTarget<'t>> {
         // Squeezing keeps elements in C order
         let encoded_shape: ArrayIndices = super::squeeze_dims(
             decoded_shape.iter().map(|size| size.get()),
