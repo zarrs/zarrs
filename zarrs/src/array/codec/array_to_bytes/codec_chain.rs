@@ -11,13 +11,13 @@ use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, CowBytes, DataType, FillValue,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
-    ArrayToBytesCodecTraits, BytesDecodeSource, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
+    BytesDecodeInput, BytesDecodeSource, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
     UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
@@ -405,7 +405,7 @@ impl CodecChainBound {
         &self,
         index: usize,
         array_representations: &ArrayRepresentations,
-        input: ArrayBytesDecodeIntoInput<'_>,
+        input: BytesDecodeInput<'_>,
         target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
@@ -443,7 +443,7 @@ impl CodecChainBound {
     /// Decode into `target` through the bytes-to-bytes and array-to-bytes codecs, where `shape` is the decoded shape of the array-to-bytes codec.
     fn decode_into_array_to_bytes(
         &self,
-        input: ArrayBytesDecodeIntoInput<'_>,
+        input: BytesDecodeInput<'_>,
         shape: &[NonZeroU64],
         target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
@@ -461,7 +461,7 @@ impl CodecChainBound {
                 resources,
             )?;
             // Leave placement of the final decode to the array-to-bytes receiver.
-            ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+            BytesDecodeInput::Deferred(BytesDecodeSource::new(
                 last.as_ref(),
                 bytes,
                 representations[0],
@@ -717,7 +717,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn decode_into(
         &self,
-        input: ArrayBytesDecodeIntoInput<'_>,
+        input: BytesDecodeInput<'_>,
         shape: &[NonZeroU64],
         output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,

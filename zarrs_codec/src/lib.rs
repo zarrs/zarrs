@@ -60,8 +60,8 @@ pub use recommended_concurrency::RecommendedConcurrency;
 mod bytes_representation;
 pub use bytes_representation::BytesRepresentation;
 
-mod array_bytes_decode_into_input;
-pub use array_bytes_decode_into_input::{ArrayBytesDecodeIntoInput, BytesDecodeSource};
+mod bytes_decode_input;
+pub use bytes_decode_input::{BytesDecodeInput, BytesDecodeSource};
 
 mod array_bytes;
 pub use array_bytes::{

@@ -6,8 +6,8 @@ use zarrs_data_type::{DataType, FillValue};
 
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesTarget, ArrayCodecTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, BytesDecodeInput, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef,
     CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
     ComputeResources, CowBytes, Resources, decode_into_array_bytes_target,
@@ -229,7 +229,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded representation does not match the number of elements in the output target.
     fn decode_into(
         &self,
-        input: ArrayBytesDecodeIntoInput<'_>,
+        input: BytesDecodeInput<'_>,
         shape: &[NonZeroU64],
         output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,

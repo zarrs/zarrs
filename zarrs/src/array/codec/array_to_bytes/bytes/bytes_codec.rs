@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToBytesCodecTraits, BytesDecodeInput, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
@@ -366,7 +366,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 
     fn decode_into(
         &self,
-        input: ArrayBytesDecodeIntoInput<'_>,
+        input: BytesDecodeInput<'_>,
         shape: &[NonZeroU64],
         output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
@@ -384,7 +384,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                 && dst.len() == expected_len
             {
                 let dst = match input {
-                    ArrayBytesDecodeIntoInput::Deferred(source)
+                    BytesDecodeInput::Deferred(source)
                         if source.decoded_representation()
                             == &BytesRepresentation::FixedSize(expected_len as u64) =>
                     {
@@ -392,8 +392,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
                         // SAFETY: a successful `decode_into` initialises all of `dst`.
                         unsafe { crate::slice_assume_init_mut(dst) }
                     }
-                    input @ (ArrayBytesDecodeIntoInput::Bytes(_)
-                    | ArrayBytesDecodeIntoInput::Deferred(_)) => {
+                    input @ (BytesDecodeInput::Bytes(_) | BytesDecodeInput::Deferred(_)) => {
                         let bytes = input.into_bytes(options, resources)?;
                         if bytes.len() != expected_len {
                             return Err(
@@ -468,7 +467,7 @@ mod tests {
     use unsafe_cell_slice::UnsafeCellSlice;
     fn decode_into_view(
         codec: &Arc<dyn ArrayToBytesCodecTraits>,
-        input: ArrayBytesDecodeIntoInput<'_>,
+        input: BytesDecodeInput<'_>,
         chunk_shape: &[NonZeroU64],
         array_shape: &[u64],
     ) -> (Vec<u16>, Result<(), CodecError>) {
@@ -720,7 +719,7 @@ mod tests {
                 BytesRepresentation::FixedSize(8),
                 BytesRepresentation::BoundedSize(8),
             ] {
-                let input = ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                let input = BytesDecodeInput::Deferred(BytesDecodeSource::new(
                     &producer,
                     compressed.clone(),
                     representation,

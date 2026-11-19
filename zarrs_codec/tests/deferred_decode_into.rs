@@ -186,14 +186,14 @@ fn resources() -> ComputeResources {
 #[test]
 fn immediate_retains_borrowed_and_unique_owned_bytes() {
     let borrowed = [1, 2, 3];
-    let result = ArrayBytesDecodeIntoInput::from(CowBytes::Borrowed(&borrowed))
+    let result = BytesDecodeInput::from(CowBytes::Borrowed(&borrowed))
         .into_bytes(&options(), &resources())
         .unwrap();
     assert!(matches!(result, CowBytes::Borrowed(_)));
     assert_eq!(result.as_ptr(), borrowed.as_ptr());
     let owned = vec![1, 2, 3];
     let pointer = owned.as_ptr();
-    let result = ArrayBytesDecodeIntoInput::from(CowBytes::from(owned))
+    let result = BytesDecodeInput::from(CowBytes::from(owned))
         .into_bytes(&options(), &resources())
         .unwrap()
         .into_vec();
@@ -213,7 +213,7 @@ fn deferred_routes_forward_representation_and_options() {
         BytesRepresentation::FixedSize(3)
     );
     assert_eq!(
-        &*ArrayBytesDecodeIntoInput::Deferred(source)
+        &*BytesDecodeInput::Deferred(source)
             .into_bytes(&options(), &resources())
             .unwrap(),
         &[1, 2, 3]
@@ -246,7 +246,7 @@ fn default_receiver_preserves_unique_allocation_and_checks_target_length() {
             };
             let producer = Producer::default();
             let input = if deferred {
-                ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                BytesDecodeInput::Deferred(BytesDecodeSource::new(
                     &producer,
                     bytes.into(),
                     BytesRepresentation::FixedSize(3),
@@ -314,7 +314,7 @@ fn producer_errors_and_output_length_errors_do_not_retry() {
         BytesRepresentation::FixedSize(3),
     );
     assert!(
-        ArrayBytesDecodeIntoInput::Deferred(source)
+        BytesDecodeInput::Deferred(source)
             .into_bytes(&options(), &resources())
             .is_err()
     );
