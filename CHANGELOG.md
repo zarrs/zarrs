@@ -154,6 +154,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fix `Array::with_codec_specific_options()` to refresh decoded subchunk grids consistently with `ArrayMutOps::set_codec_specific_options()`
 - Cache data type support when binding `bytes`, `packbits`, `bitround`, and `cast_value`, and re-export their `{Codec}DataTypeTraitsArc` aliases
 - Copy small contiguous regions and elements directly when extracting array subsets and writing or filling output views
+  - Direct run copying enforces the same selection-count limit as extraction, irrespective of the target layout
 - Map ascending element positions in output views by stepping through their contiguous regions, rather than unravelling each position
 - Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
 - Re-export `ArrayBytesDecodeIntoTargetOptional`, `ArrayBytesMask[CreateError]`, `IncompatibleOptionalMaskError`, and `WithOptionalMaskError` from `zarrs::array`
@@ -280,6 +281,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 `zarrs_chunk_grid` 0.5.1 → 0.6.0 (**Breaking**): inline `ArrayIndices`/`ArraySubset` (≤4 dimensions); `ChunkGridCreateError`; `Indexer::validate`; zero-sized dimensions are no longer _unlimited_
 
+- Add `ContiguousLinearisedIndices::new_strided` for arbitrary element strides, returning `StridedIndicesError` on element-count or index overflow
 - **Breaking**: `ArrayIndices` holds up to four indices inline, so chunk grid lookups, chunk cache keys and the indices of planned chunks do not allocate
   - `unravel_index` is re-exported from `zarrs_chunk_grid`, and returns `None` rather than panicking for a shape with a zero-sized dimension
 - *Behavioural change*: Chunk grids no longer support out-of-bounds operations or unlimited dimensions; resize before extending arrays
