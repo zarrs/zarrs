@@ -8,7 +8,7 @@ use crate::array::codec::default_array_to_bytes_codec;
 use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, Element, data_type};
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayBytesTarget, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits,
     CodecCreateError, CodecMetadataOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
     PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToBytesCodecTraits,
 };
@@ -450,7 +450,7 @@ fn sharding_indexer_batches() {
                 decoder
                     .partial_decode_into(
                         &indices,
-                        &mut ArrayBytesDecodeIntoTarget::Fixed(fixed_view(
+                        &mut ArrayBytesTarget::Fixed(fixed_view(
                             &mut output,
                             &output_shape,
                             subset,
@@ -530,7 +530,7 @@ async fn async_sharding_indexer_batches() {
                 decoder
                     .partial_decode_into(
                         &indices,
-                        &mut ArrayBytesDecodeIntoTarget::Fixed(fixed_view(
+                        &mut ArrayBytesTarget::Fixed(fixed_view(
                             &mut output,
                             &output_shape,
                             subset,

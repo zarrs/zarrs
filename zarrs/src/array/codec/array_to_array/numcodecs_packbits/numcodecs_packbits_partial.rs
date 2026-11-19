@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayPartialDecoderSubchunkingTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes,
-    InvalidBytesLengthError, Resources,
+    ArrayBytes, ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes, InvalidBytesLengthError,
+    Resources,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -315,7 +315,7 @@ impl<T: ArrayPartialDecoderTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Size
     fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
@@ -380,7 +380,7 @@ impl<T: AsyncArrayPartialDecoderTraits + ?Sized, D: AsyncArrayPartialDecoderTrai
     async fn partial_decode_into(
         &self,
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {

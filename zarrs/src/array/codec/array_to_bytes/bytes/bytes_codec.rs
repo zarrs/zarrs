@@ -3,13 +3,12 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
-    decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoInput, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
@@ -369,11 +368,11 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         &self,
         input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
-        if let ArrayBytesDecodeIntoTarget::Fixed(output) = output_target {
+        if let ArrayBytesTarget::Fixed(output) = output_target {
             let (num_elements, expected_len) = decoded_len(self.data_type_size, shape)?;
             if output.num_elements() != num_elements {
                 return Err("the decoded element count does not match the output target".into());

@@ -60,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - With `ElementOrder::F`, fixed-length reads decode directly into column-major output (zero-copy through `transpose` chains such as Zarr V2 `"order": "F"`), variable-length reads reorder after decoding, and multi-chunk stores gather each chunk directly
   - `*_into` methods are unaffected, as the output target specifies its own layout
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants, which accept `&dyn Indexer`
-- **Breaking**: `[Async]ArrayReadOps::[async_]retrieve_{chunk,partial_chunk,array_subset}_into` take `&mut ArrayBytesDecodeIntoTarget`
+- **Breaking**: Rename `ArrayBytesDecodeIntoTarget` to `ArrayBytesTarget`, and `[Async]ArrayReadOps::[async_]retrieve_{chunk,partial_chunk,array_subset}_into` take `&mut ArrayBytesTarget`
 - **Breaking**: `[Async]ArrayWriteOps::erase_chunks` and `[Async]ArrayReadOps::retrieve_encoded_chunks` accept `&dyn Indexer`, validate the chunks against the chunk grid, and return an `ArrayError` instead of a `StorageError`, as do `erase_chunk` and `retrieve_encoded_chunk`
   - *Behavioural change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
   - `[async_]erase_chunks` limit the number of concurrent erases to the concurrent target of the array, rather than being unbounded
@@ -148,7 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable, strided decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`; `ArrayBytesMask` guarantees optional masks are 0 or 1
 
 #### General
-- **Breaking**: `ArrayBytes` and `ArrayBytesDecodeIntoTarget` are non-exhaustive, so downstream matches require a wildcard arm
+- **Breaking**: `ArrayBytes` and `ArrayBytesTarget` are non-exhaustive, so downstream matches require a wildcard arm
 - **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, validating each optional layer, and `CodecError::CodecCreateError` holds a `Box<CodecCreateError>` to keep array results small
 - Return errors when fill requests or expected optional mask lengths exceed platform limits
 - **Breaking**: Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
@@ -168,7 +168,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Direct run copying enforces the same selection-count limit as extraction, irrespective of the target layout
 - Map ascending element positions in output views by stepping through their contiguous regions, rather than unravelling each position
 - Add pure element, subset, and chunk-local subchunk grid mappings for built-in array-to-array codecs
-- Re-export `ArrayBytesDecodeIntoTargetOptional`, `ArrayBytesMask[CreateError]`, `IncompatibleOptionalMaskError`, and `WithOptionalMaskError` from `zarrs::array`
+- Re-export `ArrayBytesTargetOptional`, `ArrayBytesMask[CreateError]`, `IncompatibleOptionalMaskError`, and `WithOptionalMaskError` from `zarrs::array`
 - Decode through codec chains directly into output views, forwarding deferred decoding through transparent nested chains
 - Decode through `bitround`, `reshape`, `squeeze` and `transpose` codecs directly into output views by remapping the view to the encoded shape, rather than decoding into an intermediate buffer and copying
   - e.g. a `transpose` chain decodes straight into a column-major output, and a trailing squeezed dimension no longer needs a copy

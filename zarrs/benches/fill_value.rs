@@ -8,7 +8,7 @@ use criterion::{
 use std::hint::black_box;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, FillValue,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArraySubset, FillValue,
     copy_fill_value_into, data_type,
 };
 
@@ -167,7 +167,7 @@ fn fill_output(c: &mut Criterion) {
                                     .unwrap()
                                 })
                                 .collect();
-                            let mut target = ArrayBytesDecodeIntoTarget::from(data_view)
+                            let mut target = ArrayBytesTarget::from(data_view)
                                 .with_optional_masks(mask_views)
                                 .unwrap();
                             copy_fill_value_into(

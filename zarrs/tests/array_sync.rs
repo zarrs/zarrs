@@ -8,8 +8,7 @@ use zarrs::array::Resources;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
-    IncompatibleOptionalMaskError,
+    ArrayBytesFixedDisjointView, ArrayBytesTarget, CodecOptions, IncompatibleOptionalMaskError,
 };
 
 #[allow(clippy::single_range_in_vec_init)]
@@ -492,7 +491,7 @@ fn retrieve_into_vec(
             // SAFETY: single view, no overlap
             ArrayBytesFixedDisjointView::new(output_slice, data_type_size, &shape, full_subset)?
         };
-        let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
+        let mut target = ArrayBytesTarget::Fixed(view);
         array.retrieve_array_subset_into(&subset, &mut target, &Resources::default())?;
     }
 
@@ -538,7 +537,7 @@ fn array_sync_read_into(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::e
     let view = unsafe {
         ArrayBytesFixedDisjointView::new(slice, 1, &shape_1d, full).unwrap()
     };
-    let mut target = ArrayBytesDecodeIntoTarget::Fixed(view);
+    let mut target = ArrayBytesTarget::Fixed(view);
     assert!(array.retrieve_array_subset_into(&subset_1d, &mut target, &Resources::default()).is_err());
 
     Ok(())
@@ -608,7 +607,7 @@ fn retrieve_optional_into_vecs(
             ArrayBytesFixedDisjointView::new(mask_slice, 1, &shape, full_subset)?
         };
 
-        let mut target = ArrayBytesDecodeIntoTarget::from(data_view)
+        let mut target = ArrayBytesTarget::from(data_view)
             .with_optional_mask(mask_view)
             .map_err(IncompatibleOptionalMaskError::from)?;
         array.retrieve_array_subset_into(&subset, &mut target, &Resources::default())?;

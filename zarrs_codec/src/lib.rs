@@ -110,28 +110,28 @@ use zarrs_plugin::{
 /// Mask bytes must use the representation defined by [`ArrayBytesMask`]. Callers may rely on this
 /// contract to adopt decoded masks without checking them again.
 #[non_exhaustive]
-pub enum ArrayBytesDecodeIntoTarget<'a> {
+pub enum ArrayBytesTarget<'a> {
     /// Target for non-optional (fixed-length) data.
     Fixed(ArrayBytesFixedDisjointView<'a>),
 
     /// Target for optional data (nested data target + mask view).
     ///
-    /// Created with [`with_optional_mask`](ArrayBytesDecodeIntoTarget::with_optional_mask), which validates the mask against the data.
-    Optional(ArrayBytesDecodeIntoTargetOptional<'a>),
+    /// Created with [`with_optional_mask`](ArrayBytesTarget::with_optional_mask), which validates the mask against the data.
+    Optional(ArrayBytesTargetOptional<'a>),
 }
 
 /// An optional decode target composed of a data target and a validity mask view.
 ///
 /// The fields are private so that the mask always covers the same elements as the data.
-pub struct ArrayBytesDecodeIntoTargetOptional<'a> {
-    data: Box<ArrayBytesDecodeIntoTarget<'a>>,
+pub struct ArrayBytesTargetOptional<'a> {
+    data: Box<ArrayBytesTarget<'a>>,
     mask: ArrayBytesFixedDisjointView<'a>,
 }
 
-impl<'a> ArrayBytesDecodeIntoTargetOptional<'a> {
+impl<'a> ArrayBytesTargetOptional<'a> {
     /// Return the target for the inner data.
     #[must_use]
-    pub fn data(&self) -> &ArrayBytesDecodeIntoTarget<'a> {
+    pub fn data(&self) -> &ArrayBytesTarget<'a> {
         &self.data
     }
 
@@ -143,17 +143,12 @@ impl<'a> ArrayBytesDecodeIntoTargetOptional<'a> {
 
     /// Consume self and return the data target and mask view.
     #[must_use]
-    pub fn into_parts(
-        self,
-    ) -> (
-        Box<ArrayBytesDecodeIntoTarget<'a>>,
-        ArrayBytesFixedDisjointView<'a>,
-    ) {
+    pub fn into_parts(self) -> (Box<ArrayBytesTarget<'a>>, ArrayBytesFixedDisjointView<'a>) {
         (self.data, self.mask)
     }
 }
 
-impl<'a> ArrayBytesDecodeIntoTarget<'a> {
+impl<'a> ArrayBytesTarget<'a> {
     /// Wrap the target in an [`Optional`](Self::Optional) layer with `mask` as its validity mask.
     ///
     /// The target becomes the inner data and `mask` the outermost mask, like [`ArrayBytes::with_optional_mask`].
@@ -220,7 +215,7 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
 
     /// Wrap the target in an [`Optional`](Self::Optional) layer with a validated `mask`.
     fn wrap_optional_mask(self, mask: ArrayBytesFixedDisjointView<'a>) -> Self {
-        Self::Optional(ArrayBytesDecodeIntoTargetOptional {
+        Self::Optional(ArrayBytesTargetOptional {
             data: Box::new(self),
             mask,
         })
@@ -255,7 +250,7 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
             Self::Fixed(data) => Ok(Self::Fixed(unsafe { data.subdivide(subset) }?)),
             Self::Optional(optional) => {
                 let mask = unsafe { optional.mask.subdivide(subset.clone()) }?;
-                Ok(Self::Optional(ArrayBytesDecodeIntoTargetOptional {
+                Ok(Self::Optional(ArrayBytesTargetOptional {
                     data: Box::new(unsafe { optional.data.subdivide(subset) }?),
                     mask,
                 }))
@@ -267,7 +262,7 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
     ///
     /// Returns [`None`] if `order` is not a permutation of the dimensions of the target.
     #[must_use]
-    pub fn permuted_axes(&mut self, order: &[usize]) -> Option<ArrayBytesDecodeIntoTarget<'_>> {
+    pub fn permuted_axes(&mut self, order: &[usize]) -> Option<ArrayBytesTarget<'_>> {
         self.map_views(&mut |view| view.permuted_axes(order))
     }
 
@@ -275,13 +270,13 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
     ///
     /// Returns [`None`] if the target cannot be reshaped to `shape`.
     #[must_use]
-    pub fn reshaped(&mut self, shape: &[u64]) -> Option<ArrayBytesDecodeIntoTarget<'_>> {
+    pub fn reshaped(&mut self, shape: &[u64]) -> Option<ArrayBytesTarget<'_>> {
         self.map_views(&mut |view| view.reshaped(shape))
     }
 
     /// Reborrow this target with a shorter lifetime.
     #[must_use]
-    pub fn reborrow(&mut self) -> ArrayBytesDecodeIntoTarget<'_> {
+    pub fn reborrow(&mut self) -> ArrayBytesTarget<'_> {
         self.map_views(&mut |view| Some(view.reborrow()))
             .expect("reborrow is infallible")
     }
@@ -292,18 +287,16 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
         f: &mut impl for<'c> FnMut(
             &'c mut ArrayBytesFixedDisjointView<'a>,
         ) -> Option<ArrayBytesFixedDisjointView<'c>>,
-    ) -> Option<ArrayBytesDecodeIntoTarget<'b>> {
+    ) -> Option<ArrayBytesTarget<'b>> {
         match self {
-            Self::Fixed(data) => f(data).map(ArrayBytesDecodeIntoTarget::Fixed),
+            Self::Fixed(data) => f(data).map(ArrayBytesTarget::Fixed),
             Self::Optional(optional) => {
                 let mask = f(&mut optional.mask)?;
                 let data = optional.data.map_views(f)?;
-                Some(ArrayBytesDecodeIntoTarget::Optional(
-                    ArrayBytesDecodeIntoTargetOptional {
-                        data: Box::new(data),
-                        mask,
-                    },
-                ))
+                Some(ArrayBytesTarget::Optional(ArrayBytesTargetOptional {
+                    data: Box::new(data),
+                    mask,
+                }))
             }
         }
     }
@@ -315,7 +308,7 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
     }
 }
 
-/// A validity mask view is incompatible with the data of an [`ArrayBytesDecodeIntoTarget`].
+/// A validity mask view is incompatible with the data of an [`ArrayBytesTarget`].
 #[derive(Clone, Debug, Display, Error)]
 pub enum IncompatibleOptionalMaskError {
     /// The mask does not have one byte per element.
@@ -345,7 +338,7 @@ pub enum IncompatibleOptionalMaskError {
     },
 }
 
-/// The error returned by [`ArrayBytesDecodeIntoTarget::with_optional_mask`] and [`with_optional_masks`](ArrayBytesDecodeIntoTarget::with_optional_masks), holding the target and mask(s) that were passed in.
+/// The error returned by [`ArrayBytesTarget::with_optional_mask`] and [`with_optional_masks`](ArrayBytesTarget::with_optional_masks), holding the target and mask(s) that were passed in.
 pub struct WithOptionalMaskError<'a, M = ArrayBytesFixedDisjointView<'a>>(
     Box<WithOptionalMaskErrorInner<'a, M>>,
 );
@@ -353,16 +346,12 @@ pub struct WithOptionalMaskError<'a, M = ArrayBytesFixedDisjointView<'a>>(
 /// Boxed to keep the error small.
 struct WithOptionalMaskErrorInner<'a, M> {
     error: IncompatibleOptionalMaskError,
-    target: ArrayBytesDecodeIntoTarget<'a>,
+    target: ArrayBytesTarget<'a>,
     masks: M,
 }
 
 impl<'a, M> WithOptionalMaskError<'a, M> {
-    fn new(
-        error: IncompatibleOptionalMaskError,
-        target: ArrayBytesDecodeIntoTarget<'a>,
-        masks: M,
-    ) -> Self {
+    fn new(error: IncompatibleOptionalMaskError, target: ArrayBytesTarget<'a>, masks: M) -> Self {
         Self(Box::new(WithOptionalMaskErrorInner {
             error,
             target,
@@ -380,7 +369,7 @@ impl<'a, M> WithOptionalMaskError<'a, M> {
 
     /// Consume self and return the target and mask(s) that were passed in.
     #[must_use]
-    pub fn into_parts(self) -> (ArrayBytesDecodeIntoTarget<'a>, M) {
+    pub fn into_parts(self) -> (ArrayBytesTarget<'a>, M) {
         (self.0.target, self.0.masks)
     }
 }
@@ -419,7 +408,7 @@ impl From<IncompatibleOptionalMaskError> for CodecError {
     }
 }
 
-impl<'a> From<ArrayBytesFixedDisjointView<'a>> for ArrayBytesDecodeIntoTarget<'a> {
+impl<'a> From<ArrayBytesFixedDisjointView<'a>> for ArrayBytesTarget<'a> {
     fn from(view: ArrayBytesFixedDisjointView<'a>) -> Self {
         Self::Fixed(view)
     }

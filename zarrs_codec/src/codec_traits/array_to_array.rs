@@ -7,7 +7,7 @@ use zarrs_metadata::ChunkShape;
 
 use crate::codec_partial_default::ArrayToArrayCodecPartialDefault;
 use crate::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
     ChunkGridEncodedRef, CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions,
     CodecTraits, ComputeResources, Resources,
@@ -315,7 +315,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecGeometryTraits + core::fmt::
 
     /// Return a target for the encoded representation that places each element where [`decode`](Self::decode) would place it in `target`.
     ///
-    /// A codec that does not change the bytes of elements on decode, and only reorders or relabels them (e.g. `reshape` or `transpose`), can express its decode as a view transform of the target (see [`ArrayBytesDecodeIntoTarget::reshaped`] and [`ArrayBytesDecodeIntoTarget::permuted_axes`]).
+    /// A codec that does not change the bytes of elements on decode, and only reorders or relabels them (e.g. `reshape` or `transpose`), can express its decode as a view transform of the target (see [`ArrayBytesTarget::reshaped`] and [`ArrayBytesTarget::permuted_axes`]).
     /// A codec chain then decodes the encoded representation directly into the returned target, skipping this codec's [`decode`](Self::decode).
     ///
     /// `target` has the `decoded_shape`, and the returned target must have the encoded shape and the encoded data type.
@@ -323,8 +323,8 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecGeometryTraits + core::fmt::
     fn encoded_target<'t>(
         &self,
         decoded_shape: &[NonZeroU64],
-        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        target: &'t mut ArrayBytesTarget<'_>,
+    ) -> Option<ArrayBytesTarget<'t>> {
         _ = decoded_shape;
         _ = target;
         None

@@ -9,8 +9,8 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::chunk_cache::ChunkCachePartialDecoderLruChunkLimit;
 use zarrs::array::codec::BitroundCodec;
 use zarrs::array::{
-    ArrayBuilder, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCached,
-    ArraySubset, Resources, data_type,
+    ArrayBuilder, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached, ArraySubset,
+    Resources, data_type,
 };
 use zarrs::storage::store::MemoryStore;
 
@@ -25,7 +25,7 @@ fn builder() -> ArrayBuilder {
 fn output_target<'a>(
     output: &'a mut [f32],
     shape: &'a [u64],
-) -> Result<ArrayBytesDecodeIntoTarget<'a>, Box<dyn Error>> {
+) -> Result<ArrayBytesTarget<'a>, Box<dyn Error>> {
     // SAFETY: this is the only view of output and covers it exactly.
     let view = unsafe {
         ArrayBytesFixedDisjointView::new(
@@ -35,7 +35,7 @@ fn output_target<'a>(
             ArraySubset::new_with_shape(shape),
         )?
     };
-    Ok(ArrayBytesDecodeIntoTarget::Fixed(view))
+    Ok(ArrayBytesTarget::Fixed(view))
 }
 
 #[test]

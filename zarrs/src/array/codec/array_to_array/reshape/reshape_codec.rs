@@ -10,7 +10,7 @@ use crate::array::{
     unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
@@ -270,8 +270,8 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
     fn encoded_target<'t>(
         &self,
         decoded_shape: &[NonZeroU64],
-        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        target: &'t mut ArrayBytesTarget<'_>,
+    ) -> Option<ArrayBytesTarget<'t>> {
         // Reshaping keeps elements in C order
         let encoded_shape = super::get_encoded_shape(&self.shape, decoded_shape).ok()?;
         target.reshaped(bytemuck::must_cast_slice(&encoded_shape))

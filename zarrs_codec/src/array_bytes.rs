@@ -10,8 +10,8 @@ use zarrs_storage::byte_range::{ByteRange, InvalidByteRangeError, extract_byte_r
 
 use crate::small_copy::with_small_len;
 use crate::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArraySubset, CodecError, DataType,
-    FillValue, Indexer, IndexerError, InvalidBytesLengthError, InvalidNumberOfElementsError,
+    ArrayBytesFixedDisjointView, ArrayBytesTarget, ArraySubset, CodecError, DataType, FillValue,
+    Indexer, IndexerError, InvalidBytesLengthError, InvalidNumberOfElementsError,
 };
 
 mod array_bytes_offsets;
@@ -138,7 +138,7 @@ impl<'a> ArrayBytes<'a> {
 
     /// Wrap the array bytes in one optional layer per mask, with `masks` ordered from outermost to innermost.
     ///
-    /// Like [`ArrayBytesDecodeIntoTarget::with_optional_masks`](crate::ArrayBytesDecodeIntoTarget::with_optional_masks).
+    /// Like [`ArrayBytesTarget::with_optional_masks`](crate::ArrayBytesTarget::with_optional_masks).
     #[must_use]
     pub fn with_optional_masks<I>(self, masks: I) -> Self
     where
@@ -490,21 +490,21 @@ impl<'a> ArrayBytes<'a> {
     pub fn extract_runs_into(
         &self,
         runs: &ContiguousLinearisedIndices,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
     ) -> Result<(), CodecError> {
         match (self, output_target) {
-            (ArrayBytes::Fixed(bytes), ArrayBytesDecodeIntoTarget::Fixed(view)) => {
+            (ArrayBytes::Fixed(bytes), ArrayBytesTarget::Fixed(view)) => {
                 view.copy_runs_from_slice(bytes, runs)
             }
-            (ArrayBytes::Optional(optional), ArrayBytesDecodeIntoTarget::Optional(target)) => {
+            (ArrayBytes::Optional(optional), ArrayBytesTarget::Optional(target)) => {
                 optional.data().extract_runs_into(runs, &mut target.data)?;
                 target.mask.copy_runs_from_slice(optional.mask(), runs)
             }
             (ArrayBytes::Variable(..), _) => Err(ExpectedFixedLengthBytesError.into()),
-            (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(_)) => {
+            (ArrayBytes::Fixed(_), ArrayBytesTarget::Optional(_)) => {
                 Err(ExpectedOptionalBytesError.into())
             }
-            (ArrayBytes::Optional(..), ArrayBytesDecodeIntoTarget::Fixed(_)) => {
+            (ArrayBytes::Optional(..), ArrayBytesTarget::Fixed(_)) => {
                 Err(ExpectedFixedLengthBytesError.into())
             }
         }
@@ -1103,27 +1103,27 @@ pub fn update_array_bytes<'a>(
 /// # Errors
 /// Returns a [`CodecError`] if
 ///  - `data_type` is variable-sized,
-///  - the structure of `output_target` does not match `data_type` (one [`ArrayBytesDecodeIntoTarget::Optional`] layer per optional nesting level), or
+///  - the structure of `output_target` does not match `data_type` (one [`ArrayBytesTarget::Optional`] layer per optional nesting level), or
 ///  - `fill_value` is incompatible with `data_type`.
 pub fn copy_fill_value_into(
     data_type: &DataType,
     fill_value: &FillValue,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
     copy_fill_value_bytes_into(data_type, fill_value.as_ne_bytes(), output_target)
 }
 
 fn copy_null_fill_value_into(
     data_type: &DataType,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
     match (data_type, output_target) {
-        (DataType::Optional(optional), ArrayBytesDecodeIntoTarget::Optional(optional_target)) => {
+        (DataType::Optional(optional), ArrayBytesTarget::Optional(optional_target)) => {
             copy_null_fill_value_into(optional.data_type(), &mut optional_target.data)?;
             optional_target.mask.fill_byte(0);
             Ok(())
         }
-        (DataType::Fixed(fixed), ArrayBytesDecodeIntoTarget::Fixed(view)) => {
+        (DataType::Fixed(fixed), ArrayBytesTarget::Fixed(view)) => {
             if view.data_type_size() != fixed.size() {
                 return Err(
                     InvalidBytesLengthError::new(fixed.size(), view.data_type_size()).into(),
@@ -1132,11 +1132,12 @@ fn copy_null_fill_value_into(
             view.fill_byte(0);
             Ok(())
         }
-        (DataType::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(_)) => {
+        (DataType::Fixed(_), ArrayBytesTarget::Optional(_)) => {
             Err(ExpectedOptionalBytesError.into())
         }
-        (DataType::Optional(_), ArrayBytesDecodeIntoTarget::Fixed(_))
-        | (DataType::Variable(_), _) => Err(ExpectedFixedLengthBytesError.into()),
+        (DataType::Optional(_), ArrayBytesTarget::Fixed(_)) | (DataType::Variable(_), _) => {
+            Err(ExpectedFixedLengthBytesError.into())
+        }
         _ => Err("unsupported data type layout".into()),
     }
 }
@@ -1144,10 +1145,10 @@ fn copy_null_fill_value_into(
 fn copy_fill_value_bytes_into(
     data_type: &DataType,
     fill_value_bytes: &[u8],
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
     match (data_type, output_target) {
-        (DataType::Optional(optional), ArrayBytesDecodeIntoTarget::Optional(optional_target)) => {
+        (DataType::Optional(optional), ArrayBytesTarget::Optional(optional_target)) => {
             match parse_optional_fill_value(fill_value_bytes)? {
                 None => {
                     copy_null_fill_value_into(optional.data_type(), &mut optional_target.data)?;
@@ -1164,45 +1165,43 @@ fn copy_fill_value_bytes_into(
             }
             Ok(())
         }
-        (DataType::Fixed(fixed), ArrayBytesDecodeIntoTarget::Fixed(view)) => {
+        (DataType::Fixed(fixed), ArrayBytesTarget::Fixed(view)) => {
             if fill_value_bytes.len() != fixed.size() {
                 return Err(DataTypeFillValueError.into());
             }
             view.fill(fill_value_bytes)?;
             Ok(())
         }
-        (DataType::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(_)) => {
+        (DataType::Fixed(_), ArrayBytesTarget::Optional(_)) => {
             Err(ExpectedOptionalBytesError.into())
         }
-        (DataType::Optional(_), ArrayBytesDecodeIntoTarget::Fixed(_))
-        | (DataType::Variable(_), _) => Err(ExpectedFixedLengthBytesError.into()),
+        (DataType::Optional(_), ArrayBytesTarget::Fixed(_)) | (DataType::Variable(_), _) => {
+            Err(ExpectedFixedLengthBytesError.into())
+        }
         _ => Err("unsupported data type layout".into()),
     }
 }
 
 /// Helper function to decode `ArrayBytes` into a target, handling mask and data separately.
 ///
-/// This function handles the common pattern of decoding `ArrayBytes` into an `ArrayBytesDecodeIntoTarget`,
+/// This function handles the common pattern of decoding `ArrayBytes` into an `ArrayBytesTarget`,
 /// properly handling optional data types.
 ///
 /// # Errors
 /// Returns a [`CodecError`] if the bytes are incompatible with the target.
 pub fn decode_into_array_bytes_target(
     bytes: &ArrayBytes,
-    target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), CodecError> {
     match (bytes, target) {
         // Fixed source → Fixed target
-        (ArrayBytes::Fixed(data_bytes), ArrayBytesDecodeIntoTarget::Fixed(data)) => {
+        (ArrayBytes::Fixed(data_bytes), ArrayBytesTarget::Fixed(data)) => {
             data.copy_from_slice(data_bytes)?;
             Ok(())
         }
 
         // Optional source → Optional target (recursive)
-        (
-            ArrayBytes::Optional(optional_bytes),
-            ArrayBytesDecodeIntoTarget::Optional(optional_target),
-        ) => {
+        (ArrayBytes::Optional(optional_bytes), ArrayBytesTarget::Optional(optional_target)) => {
             // Recursively decode the inner data
             decode_into_array_bytes_target(optional_bytes.data(), &mut optional_target.data)?;
             // Decode the mask
@@ -1214,10 +1213,10 @@ pub fn decode_into_array_bytes_target(
 
         // Type mismatches
         (ArrayBytes::Variable(..), _) => Err(ExpectedFixedLengthBytesError.into()),
-        (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(_)) => {
+        (ArrayBytes::Fixed(_), ArrayBytesTarget::Optional(_)) => {
             Err(ExpectedOptionalBytesError.into())
         }
-        (ArrayBytes::Optional(..), ArrayBytesDecodeIntoTarget::Fixed(_)) => {
+        (ArrayBytes::Optional(..), ArrayBytesTarget::Fixed(_)) => {
             Err(ExpectedFixedLengthBytesError.into())
         }
     }
@@ -1912,7 +1911,7 @@ mod tests {
             ));
             let mut data = [0];
             let mut mask = [0];
-            let mut target = ArrayBytesDecodeIntoTarget::from(view(&mut data, 1))
+            let mut target = ArrayBytesTarget::from(view(&mut data, 1))
                 .with_optional_mask(view(&mut mask, 1))
                 .unwrap();
             assert!(copy_fill_value_into(&opt_u8, &fill, &mut target).is_err());
@@ -1945,7 +1944,7 @@ mod tests {
 
         let mut data = [];
         let mut mask = [0];
-        let mut target = ArrayBytesDecodeIntoTarget::from(view(&mut data, 0))
+        let mut target = ArrayBytesTarget::from(view(&mut data, 0))
             .with_optional_mask(view(&mut mask, 1))
             .unwrap();
         copy_fill_value_into(&opt_fixed0, &fill, &mut target).unwrap();
@@ -2184,7 +2183,7 @@ mod tests {
         let mut inner_mask = [0];
         let mut outer_mask = [0];
 
-        let mut target = ArrayBytesDecodeIntoTarget::Fixed(view(&mut data));
+        let mut target = ArrayBytesTarget::Fixed(view(&mut data));
         assert!(matches!(
             copy_fill_value_into(&optional, &null, &mut target),
             Err(CodecError::ExpectedFixedLengthBytes(_))
@@ -2246,7 +2245,7 @@ mod tests {
             )
             .unwrap()
         };
-        let mut target = ArrayBytesDecodeIntoTarget::from(data_view)
+        let mut target = ArrayBytesTarget::from(data_view)
             .with_optional_masks([outer_mask_view, inner_mask_view])
             .unwrap();
         copy_fill_value_into(&nested_dt, &fill, &mut target).unwrap();
@@ -2279,7 +2278,7 @@ mod tests {
             )
             .unwrap()
         };
-        let mut bad_target = ArrayBytesDecodeIntoTarget::from(bad_view)
+        let mut bad_target = ArrayBytesTarget::from(bad_view)
             .with_optional_mask(bad_mask_view)
             .unwrap();
         assert!(copy_fill_value_into(&opt_dt, &fill, &mut bad_target).is_err());

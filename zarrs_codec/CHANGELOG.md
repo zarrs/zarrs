@@ -24,14 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayToBytesCodecTraits::as_subchunking`, returning the optional `ArrayToBytesCodecSubchunkingTraits` capability for codecs that expose subchunks
   - `decoded_subchunk_grids` resolves ordered subchunk-grid hierarchies, and `subchunk_codecs` returns the shape-independent codec for each level (outermost first)
 - Add `ArrayBytesFixedDisjointView::{copy_elements_from_slice,fill_elements}` for scattering elements into a view
-- Add `ArrayBytesDecodeIntoTarget::{with_optional_mask,with_optional_masks,shape,subdivide,permuted_axes,reshaped,reborrow}` to build, subdivide, transform and reborrow targets without depending on their structure
+- Add `ArrayBytesTarget::{with_optional_mask,with_optional_masks,shape,subdivide,permuted_axes,reshaped,reborrow}` to build, subdivide, transform and reborrow targets without depending on their structure
   - `with_optional_mask(s)` return the new `WithOptionalMaskError`, which holds the target and mask(s) and converts to the new `IncompatibleOptionalMaskError` (`CodecError::IncompatibleOptionalMask`), unless each mask has one byte per element and addresses the same elements of its bytes as the data (the same shape, offset and strides)
 - Add `ArrayToArrayCodecTraits::encoded_target` (default `None`), which lets a codec that only reorders or relabels elements on decode express its decode as a transform of the output target, so a codec chain decodes the encoded representation directly into it
 - Add `ArrayBytesFixedDisjointView::{new_strided,offset,strides}` for views of strided grids of elements (e.g. column-major or transposed outputs), and the safe `ArrayBytesFixedDisjointView::{permuted_axes,reshaped}`, which return a view of the same elements with permuted dimensions or another shape
 - Add `ArrayBytesFixedDisjointView::data_type_size`
-- Add `ArrayBytes::extract_runs` for extracting fixed, variable-length, and optional elements along contiguous linearised index runs, and `ArrayBytes::extract_runs_into` for copying fixed and optional elements along runs directly into an `ArrayBytesDecodeIntoTarget`
+- Add `ArrayBytes::extract_runs` for extracting fixed, variable-length, and optional elements along contiguous linearised index runs, and `ArrayBytes::extract_runs_into` for copying fixed and optional elements along runs directly into an `ArrayBytesTarget`
   - Direct copying enforces the same selection-count limit as extraction, irrespective of the target layout
-- Add `ArrayBytes::with_optional_masks`, with masks ordered from outermost to innermost like `ArrayBytesDecodeIntoTarget::with_optional_masks`
+- Add `ArrayBytes::with_optional_masks`, with masks ordered from outermost to innermost like `ArrayBytesTarget::with_optional_masks`
 - Add `ArrayBytesOffsets{Slice,Iter,RangesIter}` and `ArrayBytesOffsetsElement`, and implement `IntoIterator` for `&ArrayBytesOffsets` and `&ArrayBytesOffsetsSlice`
 - Add `ArrayBytesMask`, an optional validity mask whose bytes are 0 (null) or 1 (present) by construction
   - `ArrayBytesMask::new` checks raw bytes once, returning the new `ArrayBytesMaskCreateError` (`CodecError::ArrayBytesMaskCreate`), and `From<Vec<bool>>`/`From<&[bool]>` convert without copying or checking
@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `From<CowBytes>` for `ArrayBytes`
 
 ### Changed
-- **Breaking**: `ArrayBytes` and `ArrayBytesDecodeIntoTarget` are non-exhaustive, so downstream matches require a wildcard arm
+- **Breaking**: `ArrayBytes` and `ArrayBytesTarget` are non-exhaustive, so downstream matches require a wildcard arm
 - **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, checking fixed, variable, and nested optional layouts against both the original bytes and update bytes
 - **Breaking**: Box `CodecError::CodecCreateError` to retain the error-size limits after `DataType` becomes an enum; conversion from `CodecCreateError` is retained
 - **Breaking**: `ArrayToBytesCodecTraits::decode_into` accepts `ArrayBytesDecodeIntoInput`, resolving immediate or deferred encoded bytes without cloning them
@@ -82,9 +82,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `shape()` returns the shape of the view rather than of the underlying array, and `subset()` is removed
   - `subdivide` takes a subset relative to the view rather than to the underlying array
   - `new` no longer borrows `shape` for the lifetime of the view
-- **Breaking**: `ArrayBytesDecodeIntoTarget` variants own their `ArrayBytesFixedDisjointView`s rather than borrowing them, and `From<ArrayBytesFixedDisjointView>` replaces `From<&mut ArrayBytesFixedDisjointView>`
-  - `ArrayBytesDecodeIntoTarget::Optional` holds the new `ArrayBytesDecodeIntoTargetOptional`, which can only be created with `with_optional_mask` and has read-only `data`/`mask` accessors and `into_parts`
-  - `ArrayToBytesCodecTraits::decode_into`, `[Async]ArrayPartialDecoderTraits::partial_decode_into`, `copy_fill_value_into`, and `decode_into_array_bytes_target` take `&mut ArrayBytesDecodeIntoTarget`, so targets are not moved through each layer of decoding
+- **Breaking**: Rename `ArrayBytesDecodeIntoTarget` to `ArrayBytesTarget`; its variants own their `ArrayBytesFixedDisjointView`s rather than borrowing them, and `From<ArrayBytesFixedDisjointView>` replaces `From<&mut ArrayBytesFixedDisjointView>`
+  - `ArrayBytesTarget::Optional` holds the new `ArrayBytesTargetOptional`, which can only be created with `with_optional_mask` and has read-only `data`/`mask` accessors and `into_parts`
+  - `ArrayToBytesCodecTraits::decode_into`, `[Async]ArrayPartialDecoderTraits::partial_decode_into`, `copy_fill_value_into`, and `decode_into_array_bytes_target` take `&mut ArrayBytesTarget`, so targets are not moved through each layer of decoding
 - **Breaking**: Bump `zarrs_chunk_grid` to 0.6.0, `zarrs_data_type` to 0.10.0, and `zarrs_storage` to 0.5.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - The default array-to-array and array-to-bytes partial encoders do not read the existing chunk if the update replaces the entire chunk

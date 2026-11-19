@@ -11,14 +11,14 @@ use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, CowBytes, DataType, FillValue,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeSource,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
-    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoInput, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ArrayToBytesCodecTraits, BytesDecodeSource, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -406,7 +406,7 @@ impl CodecChainBound {
         index: usize,
         array_representations: &ArrayRepresentations,
         input: ArrayBytesDecodeIntoInput<'_>,
-        target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
@@ -445,7 +445,7 @@ impl CodecChainBound {
         &self,
         input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
-        target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
@@ -719,7 +719,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         &self,
         input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {

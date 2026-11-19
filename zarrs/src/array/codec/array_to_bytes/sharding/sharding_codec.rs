@@ -33,13 +33,13 @@ use crate::array::{
     CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayCodecTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecSubchunkingTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
-    copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesDecodeIntoInput, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -665,7 +665,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         &self,
         input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
@@ -673,7 +673,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
             codec: &ShardingCodecBound,
             encoded_shard: &zarrs_codec::CowBytes<'_>,
             shape: &[NonZeroU64],
-            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            output_target: &mut ArrayBytesTarget<'_>,
             options: CodecOptions,
             resources: &ComputeResources,
         ) -> Result<(), CodecError> {

@@ -13,10 +13,10 @@ use crate::array::{
     ArrayBytes, ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
+    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
@@ -305,8 +305,8 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
     fn encoded_target<'t>(
         &self,
         decoded_shape: &[NonZeroU64],
-        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        target: &'t mut ArrayBytesTarget<'_>,
+    ) -> Option<ArrayBytesTarget<'t>> {
         // Encoded dimension `i` is decoded dimension `order[i]`
         if self.order.0.len() != decoded_shape.len() {
             return None;

@@ -6,7 +6,7 @@ use super::{
 use crate::IntoConcurrentLimitIterator;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError, Resources};
+use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits, CodecError, Resources};
 use zarrs_storage::{Bytes, MaybeSync};
 
 /// Synchronous array read operations.
@@ -48,7 +48,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
@@ -111,7 +111,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
@@ -279,7 +279,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
     fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 

@@ -13,8 +13,8 @@ use zarrs::array::{
 };
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
-    CodecOptions, CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesMask, ArrayBytesTarget, CodecOptions,
+    CodecSpecificOptions, Resources, UnboundArrayToBytesCodecTraits,
 };
 
 const ARRAY_SHAPE: [u64; 2] = [8, 8];
@@ -58,7 +58,7 @@ impl LayoutBuffers {
         }
     }
 
-    fn target(&mut self) -> ArrayBytesDecodeIntoTarget<'_> {
+    fn target(&mut self) -> ArrayBytesTarget<'_> {
         // SAFETY: each view is the only view of its buffer.
         let data_view = unsafe {
             ArrayBytesFixedDisjointView::new(
@@ -85,7 +85,7 @@ impl LayoutBuffers {
                 .unwrap()
             })
             .collect();
-        ArrayBytesDecodeIntoTarget::from(data_view)
+        ArrayBytesTarget::from(data_view)
             .with_optional_masks(mask_views)
             .unwrap()
     }

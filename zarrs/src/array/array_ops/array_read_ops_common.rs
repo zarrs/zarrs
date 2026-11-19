@@ -8,7 +8,7 @@ use crate::array::{
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes,
+    ArrayBytesTarget, ArrayToBytesCodecTraits, CodecError, CodecOptions, CowBytes,
     InvalidNumberOfElementsError, Resources, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::{Bytes, MaybeSend, MaybeSync};
@@ -23,7 +23,7 @@ use super::recommended_codec_concurrency;
 pub(super) fn retrieve_array_subset_into<A, RetrieveChunkInto, RetrieveChunkSubsetInto>(
     array: &A,
     array_subset: &dyn ArraySubsetTraits,
-    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &mut ArrayBytesTarget<'_>,
     chunk_concurrent_minimum: usize,
     options: &CodecOptions,
     resources: &Resources,
@@ -34,14 +34,14 @@ where
     A: ArrayOps + MaybeSync,
     RetrieveChunkInto: for<'a> Fn(
         &[u64],
-        &mut ArrayBytesDecodeIntoTarget<'a>,
+        &mut ArrayBytesTarget<'a>,
         &CodecOptions,
         &Resources,
     ) -> Result<(), ArrayError>,
     RetrieveChunkSubsetInto: for<'a> Fn(
             &[u64],
             &dyn Indexer,
-            &mut ArrayBytesDecodeIntoTarget<'a>,
+            &mut ArrayBytesTarget<'a>,
             &CodecOptions,
             &Resources,
         ) -> Result<(), ArrayError>
@@ -100,13 +100,11 @@ where
                     element_size: usize,
                     optional_depth: usize,
                     subset_shape: &[u64],
-                    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+                    output_target: &mut ArrayBytesTarget<'_>,
                     retrieve: F,
                 ) -> Result<(), ArrayError>
                 where
-                    F: for<'t, 'd> FnOnce(
-                        &'t mut ArrayBytesDecodeIntoTarget<'d>,
-                    ) -> Result<(), ArrayError>,
+                    F: for<'t, 'd> FnOnce(&'t mut ArrayBytesTarget<'d>) -> Result<(), ArrayError>,
                 {
                     if output_target.shape() == subset_shape {
                         return retrieve(output_target);
@@ -169,7 +167,7 @@ pub(super) fn retrieve_multi_chunk_fixed_into<A, RetrieveChunkOverlapInto>(
     array_subset: &dyn ArraySubsetTraits,
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
-    output_target: &ArrayBytesDecodeIntoTarget<'_>,
+    output_target: &ArrayBytesTarget<'_>,
     options: &CodecOptions,
     resources: &Resources,
     retrieve_chunk_overlap_into: &RetrieveChunkOverlapInto,
@@ -180,7 +178,7 @@ where
             &[u64],
             &ArraySubset,
             &ArraySubset,
-            &mut ArrayBytesDecodeIntoTarget<'a>,
+            &mut ArrayBytesTarget<'a>,
             &CodecOptions,
             &Resources,
         ) -> Result<(), ArrayError>
@@ -242,7 +240,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         &self,
         chunk_encoded: Bytes,
         chunk_shape: &[NonZeroU64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {

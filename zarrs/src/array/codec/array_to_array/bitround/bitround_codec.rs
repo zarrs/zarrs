@@ -9,7 +9,7 @@ use super::{
 use crate::array::{DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
     CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
@@ -202,8 +202,8 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
     fn encoded_target<'t>(
         &self,
         _decoded_shape: &[NonZeroU64],
-        target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Option<ArrayBytesDecodeIntoTarget<'t>> {
+        target: &'t mut ArrayBytesTarget<'_>,
+    ) -> Option<ArrayBytesTarget<'t>> {
         // Decoding is the identity
         Some(target.reborrow())
     }

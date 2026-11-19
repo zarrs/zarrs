@@ -3,7 +3,7 @@
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::ArraySubset;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesMask, ArrayBytesTarget,
     IncompatibleOptionalMaskError, decode_into_array_bytes_target,
 };
 
@@ -14,7 +14,7 @@ fn target<'a>(
     data: &'a mut [u8; 24],
     masks: &'a mut [[u8; 12]],
     subset: &ArraySubset,
-) -> ArrayBytesDecodeIntoTarget<'a> {
+) -> ArrayBytesTarget<'a> {
     // SAFETY: each view is the only view of its backing buffer.
     let data_view = unsafe {
         ArrayBytesFixedDisjointView::new(UnsafeCellSlice::new(data), 2, &SHAPE, subset.clone())
@@ -35,7 +35,7 @@ fn target<'a>(
             .unwrap()
         })
         .collect();
-    ArrayBytesDecodeIntoTarget::from(data_view)
+    ArrayBytesTarget::from(data_view)
         .with_optional_masks(mask_views)
         .unwrap()
 }
@@ -46,10 +46,10 @@ fn source<'a>(data: &'a [u8], masks: &'a [[u8; 4]]) -> ArrayBytes<'a> {
         .with_optional_masks(masks.iter().map(|mask| ArrayBytesMask::new(mask).unwrap()))
 }
 
-fn depth(target: &ArrayBytesDecodeIntoTarget) -> usize {
+fn depth(target: &ArrayBytesTarget) -> usize {
     match target {
-        ArrayBytesDecodeIntoTarget::Fixed(_) => 0,
-        ArrayBytesDecodeIntoTarget::Optional(optional) => {
+        ArrayBytesTarget::Fixed(_) => 0,
+        ArrayBytesTarget::Optional(optional) => {
             assert_eq!(optional.mask().shape(), optional.data().shape());
             1 + depth(optional.data())
         }
@@ -190,7 +190,7 @@ fn with_optional_mask_validates_the_mask() {
     let mask_slice = UnsafeCellSlice::new(&mut mask);
     let wide_mask_slice = UnsafeCellSlice::new(&mut wide_mask);
     let outer_mask_slice = UnsafeCellSlice::new(&mut outer_mask);
-    let data_target = |subset: ArraySubset| -> ArrayBytesDecodeIntoTarget<'_> {
+    let data_target = |subset: ArraySubset| -> ArrayBytesTarget<'_> {
         // SAFETY: views of the same buffer are never live at the same time.
         unsafe { ArrayBytesFixedDisjointView::new(data_slice, 2, &SHAPE, subset) }
             .unwrap()
@@ -207,7 +207,7 @@ fn with_optional_mask_validates_the_mask() {
     };
 
     // Return the error kind, checking that the target and mask are returned unchanged
-    let err = |target: ArrayBytesDecodeIntoTarget<'_>, mask: ArrayBytesFixedDisjointView<'_>| {
+    let err = |target: ArrayBytesTarget<'_>, mask: ArrayBytesFixedDisjointView<'_>| {
         let (target_depth, target_shape) = (depth(&target), target.shape().to_vec());
         let (mask_shape, mask_strides) = (mask.shape().to_vec(), mask.strides().to_vec());
         let error = target.with_optional_mask(mask).map(|_| ()).unwrap_err();
@@ -277,7 +277,7 @@ fn with_optional_mask_validates_the_mask() {
     .unwrap();
     // SAFETY: the target is the only view of its buffer.
     let mut row = [0u8; 24];
-    let row_target: ArrayBytesDecodeIntoTarget<'_> = unsafe {
+    let row_target: ArrayBytesTarget<'_> = unsafe {
         ArrayBytesFixedDisjointView::new(
             UnsafeCellSlice::new(&mut row),
             2,
@@ -358,7 +358,7 @@ fn with_optional_masks_returns_inputs_on_error() {
         })
         .collect();
 
-    let error = ArrayBytesDecodeIntoTarget::from(data_view)
+    let error = ArrayBytesTarget::from(data_view)
         .with_optional_masks(mask_views)
         .map(|_| ())
         .unwrap_err();

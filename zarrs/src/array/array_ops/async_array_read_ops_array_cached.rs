@@ -19,7 +19,7 @@ use crate::array::chunk_cache::{
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayIndices, DataType};
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
 /// Retrieve `array_subset`, which spans `chunks`, with elements in C order.
@@ -205,7 +205,7 @@ where
     pub(in crate::array) async fn async_retrieve_chunk_into_with_options(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -224,7 +224,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -251,7 +251,7 @@ where
     async fn retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -268,7 +268,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -328,7 +328,7 @@ where
     pub async fn async_retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_chunk_into_with_options(
@@ -391,7 +391,7 @@ where
         &self,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_partial_chunk_into_with_options(
@@ -518,7 +518,7 @@ where
     pub async fn async_retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         super::async_array_read_ops_common::retrieve_array_subset_into(
@@ -776,7 +776,7 @@ mod tests {
             cached
                 .async_retrieve_array_subset_into(
                     &subset,
-                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &mut ArrayBytesTarget::Fixed(view),
                     &Resources::default(),
                 )
                 .await

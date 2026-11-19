@@ -10,7 +10,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::{BytesCodec, CodecChain};
 use zarrs::array::{ArraySubset, Endianness, data_type};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView,
+    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesFixedDisjointView, ArrayBytesTarget,
     ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecDecodeInto,
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
     CodecTraits, ComputeResources, CowBytes, Resources, UnboundArrayToBytesCodecTraits,
@@ -233,7 +233,7 @@ fn run(chain: &dyn ArrayToBytesCodecTraits, padded: bool) -> (Vec<u8>, usize) {
             .decode_into(
                 ArrayBytesDecodeIntoInput::from(encoded),
                 &shape,
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &options,
                 &ComputeResources::default(),
             )
@@ -411,7 +411,7 @@ impl ArrayToBytesCodecTraits for PlacingReceiverBound {
         &self,
         input: ArrayBytesDecodeIntoInput<'_>,
         shape: &[NonZeroU64],
-        output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+        output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
@@ -542,7 +542,7 @@ fn producer_error_and_malformed_length_are_not_retried() {
                     .decode_into(
                         CowBytes::Borrowed(&[1, 2, 3]).into(),
                         &shape,
-                        &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                        &mut ArrayBytesTarget::Fixed(view),
                         &CodecOptions::default(),
                         &ComputeResources::default(),
                     )
@@ -677,7 +677,7 @@ fn unknown_receiver_default_resolves_owned_producer_without_reallocating() {
                         BytesRepresentation::FixedSize(8),
                     )),
                     &shape,
-                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &mut ArrayBytesTarget::Fixed(view),
                     &options,
                     &ComputeResources::default(),
                 )
@@ -776,7 +776,7 @@ fn transpose_into_column_major_target_forwards_deferred_placement() {
             .decode_into(
                 ArrayBytesDecodeIntoInput::from(encoded),
                 &shape,
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &options,
                 &ComputeResources::default(),
             )
@@ -832,7 +832,7 @@ fn sharded_array_compressed_non_native_subset_preserves_output_border() {
         array
             .retrieve_array_subset_into(
                 &ArraySubset::new_with_ranges(&[1..5, 1..5]),
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &Resources::default(),
             )
             .unwrap();
@@ -898,7 +898,7 @@ fn optional_receiver_resolves_efficient_producer_ordinary_route() {
         array
             .retrieve_array_subset_into(
                 &array.subset_all(),
-                &mut ArrayBytesDecodeIntoTarget::Fixed(data_view)
+                &mut ArrayBytesTarget::Fixed(data_view)
                     .with_optional_mask(mask_view)
                     .unwrap(),
                 &Resources::default(),
@@ -939,7 +939,7 @@ fn operation_options_reach_producer_and_rejection_is_not_retried() {
                 .decode_into(
                     CowBytes::Borrowed(&[0; 8]).into(),
                     &[NonZeroU64::new(4).unwrap()],
-                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &mut ArrayBytesTarget::Fixed(view),
                     &CodecOptions::default().with_validate_checksums(false),
                     &ComputeResources::default(),
                 )
@@ -1071,7 +1071,7 @@ fn sharded_reshaped_targets_forward_deferred_placement() {
                 .decode_into(
                     CowBytes::Borrowed(&encoded).into(),
                     &shard_shape,
-                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &mut ArrayBytesTarget::Fixed(view),
                     &CodecOptions::default(),
                     &ComputeResources::default(),
                 )
@@ -1141,7 +1141,7 @@ fn sharded_partial_decoder_reshaped_target_matches_subset_and_fallback() {
             partial_decoder
                 .partial_decode_into(
                     &subset,
-                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &mut ArrayBytesTarget::Fixed(view),
                     &CodecOptions::default(),
                     &Resources::default(),
                 )
@@ -1166,7 +1166,7 @@ fn sharded_partial_decoder_reshaped_target_matches_subset_and_fallback() {
         partial_decoder
             .partial_decode_into(
                 &ArraySubset::new_with_ranges(&[2..4, 0..2]),
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &CodecOptions::default(),
                 &Resources::default(),
             )
@@ -1238,7 +1238,7 @@ async fn async_sharded_partial_decoder_reshaped_target_matches_subset() {
         async_partial_decoder
             .partial_decode_into(
                 &ArraySubset::new_with_ranges(&[0..4, 0..2]),
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &CodecOptions::default(),
                 &Resources::default(),
             )
@@ -1283,7 +1283,7 @@ fn retrieve_multi_chunk_reshaped_target_forwards_deferred_placement() {
         array
             .retrieve_array_subset_into(
                 &ArraySubset::new_with_ranges(&[0..4, 0..2]),
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &Resources::default(),
             )
             .unwrap();
@@ -1307,7 +1307,7 @@ fn retrieve_multi_chunk_reshaped_target_forwards_deferred_placement() {
         array
             .retrieve_array_subset_into(
                 &ArraySubset::new_with_ranges(&[0..4, 0..1]),
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &Resources::default(),
             )
             .unwrap();
@@ -1366,7 +1366,7 @@ async fn async_retrieve_multi_chunk_reshaped_target_forwards_deferred_placement(
         array
             .async_retrieve_array_subset_into(
                 &ArraySubset::new_with_ranges(&[0..4, 0..2]),
-                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &mut ArrayBytesTarget::Fixed(view),
                 &Resources::default(),
             )
             .await
