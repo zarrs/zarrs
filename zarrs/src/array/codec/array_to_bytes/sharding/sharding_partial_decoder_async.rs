@@ -270,21 +270,38 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
         match (fixed, indexer.as_array_subset(), output_target) {
             // Fixed length data (including optional data with fixed length inner data)
             // Subchunks are placed by their position in the subset, which needs a target with the subset shape
-            (true, Some(subset), output_target)
-                if output_target.shape() == subset.shape().as_ref() =>
-            {
-                partial_decode_fixed_array_subset_into(
-                    &self.input_handle,
-                    &self.subchunk_grid,
-                    &self.subchunk_shape,
-                    &self.inner_codecs,
-                    self.shard_index.as_deref(),
-                    subset,
-                    options,
-                    resources,
-                    output_target,
-                )
-                .await
+            (true, Some(subset), output_target) => {
+                let subset_shape = subset.shape();
+                if output_target.shape() == subset_shape.as_ref() {
+                    partial_decode_fixed_array_subset_into(
+                        &self.input_handle,
+                        &self.subchunk_grid,
+                        &self.subchunk_shape,
+                        &self.inner_codecs,
+                        self.shard_index.as_deref(),
+                        subset,
+                        options,
+                        resources,
+                        output_target,
+                    )
+                    .await
+                } else if let Some(mut target) = output_target.reshaped(&subset_shape) {
+                    partial_decode_fixed_array_subset_into(
+                        &self.input_handle,
+                        &self.subchunk_grid,
+                        &self.subchunk_shape,
+                        &self.inner_codecs,
+                        self.shard_index.as_deref(),
+                        subset,
+                        options,
+                        resources,
+                        &mut target,
+                    )
+                    .await
+                } else {
+                    let decoded_value = self.partial_decode(indexer, options, resources).await?;
+                    decode_into_array_bytes_target(&decoded_value, output_target)
+                }
             }
             (true, None, output_target) if !data_type.is_optional() => {
                 partial_decode_fixed_indexer_into(
