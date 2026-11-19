@@ -55,12 +55,7 @@ where
     A: ArrayOps + MaybeSync,
     R: AsyncRetrieveInto + MaybeSync + ?Sized,
 {
-    if array_subset.dimensionality() != array.dimensionality() {
-        return Err(ArrayError::InvalidArraySubset(
-            Box::new(array_subset.to_array_subset()),
-            array.shape().to_vec(),
-        ));
-    }
+    let chunks = super::array_subset_chunks(array, array_subset)?;
 
     let (DataType::Fixed(fixed), depth) = optional_innermost_with_depth(array.data_type()) else {
         return Err(ArrayError::CodecError(CodecError::Other(
@@ -77,13 +72,6 @@ where
             .into(),
         ));
     }
-
-    let Some(chunks) = array.chunks_in_array_subset(array_subset)? else {
-        return Err(ArrayError::InvalidArraySubset(
-            Box::new(array_subset.to_array_subset()),
-            array.shape().to_vec(),
-        ));
-    };
 
     let num_chunks = chunks.num_elements_usize();
     match num_chunks {

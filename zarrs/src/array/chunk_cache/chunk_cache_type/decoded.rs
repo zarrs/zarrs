@@ -203,11 +203,7 @@ where
     cache
         .try_get_or_insert_with(chunk_indices.into(), || {
             Ok(array
-                .retrieve_chunk_if_exists_with_options::<ArrayBytes<'static>>(
-                    chunk_indices,
-                    options,
-                    resources,
-                )?
+                .retrieve_chunk_if_exists_with_options(chunk_indices, options, resources)?
                 .map(Arc::new))
         })
         .map_err(cache_error)
@@ -231,11 +227,7 @@ where
     cache
         .try_get_or_insert_with(chunk_indices.into(), async move {
             Ok(array
-                .async_retrieve_chunk_if_exists_with_options::<ArrayBytes<'static>>(
-                    chunk_indices,
-                    options,
-                    resources,
-                )
+                .async_retrieve_chunk_if_exists_with_options(chunk_indices, options, resources)
                 .await?
                 .map(Arc::new))
         })

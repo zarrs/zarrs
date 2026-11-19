@@ -137,6 +137,32 @@ fn recommended_codec_concurrency(
     Ok(array.codecs_bound().recommended_concurrency(chunk_shape)?)
 }
 
+/// Return the fill value of `array` for `num_elements` elements.
+fn fill_value_bytes(
+    array: &(impl ArrayOps + ?Sized),
+    num_elements: u64,
+) -> Result<super::ArrayBytes<'static>, ArrayError> {
+    super::ArrayBytes::new_fill_value(array.data_type(), num_elements, array.fill_value())
+        .map_err(zarrs_codec::CodecError::from)
+        .map_err(ArrayError::from)
+}
+
+/// Return the chunks of `array` intersecting `array_subset`, or an error if it is not an array subset of `array`.
+fn array_subset_chunks(
+    array: &(impl ArrayOps + ?Sized),
+    array_subset: &dyn ArraySubsetTraits,
+) -> Result<ArraySubset, ArrayError> {
+    if array_subset.dimensionality() == array.dimensionality()
+        && let Some(chunks) = array.chunks_in_array_subset(array_subset)?
+    {
+        return Ok(chunks);
+    }
+    Err(ArrayError::InvalidArraySubset(
+        Box::new(array_subset.to_array_subset()),
+        array.shape().to_vec(),
+    ))
+}
+
 /// Return an error if `indexer` is an array subset that is not within `chunk_shape`.
 pub(in crate::array) fn validate_partial_chunk_subset(
     indexer: &dyn Indexer,
@@ -163,15 +189,8 @@ fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
         return Ok(chunk);
     }
     let chunk_shape = array.chunk_shape(chunk_indices)?;
-    let bytes = super::ArrayBytes::new_fill_value(
-        array.data_type(),
-        chunk_shape.num_elements_u64(),
-        array.fill_value(),
-    )
-    .map_err(zarrs_codec::CodecError::from)
-    .map_err(ArrayError::from)?;
     T::from_array_bytes(
-        bytes,
+        fill_value_bytes(array, chunk_shape.num_elements_u64())?,
         bytemuck::must_cast_slice(&chunk_shape),
         array.data_type(),
     )
