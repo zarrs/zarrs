@@ -420,7 +420,7 @@ impl CodecChainBound {
                 resources,
             );
         };
-        if let Some(mut encoded_target) = codec.decode_into_encoded_target(decoded_shape, target) {
+        if let Some(mut encoded_target) = codec.encoded_target(decoded_shape, target) {
             return self.decode_into_array_to_array(
                 index + 1,
                 array_representations,

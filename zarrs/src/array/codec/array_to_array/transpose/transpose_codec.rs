@@ -302,7 +302,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         )
     }
 
-    fn decode_into_encoded_target<'t>(
+    fn encoded_target<'t>(
         &self,
         decoded_shape: &[NonZeroU64],
         target: &'t mut ArrayBytesDecodeIntoTarget<'_>,

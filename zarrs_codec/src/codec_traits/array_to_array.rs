@@ -320,7 +320,7 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecGeometryTraits + core::fmt::
     ///
     /// `target` has the `decoded_shape`, and the returned target must have the encoded shape and the encoded data type.
     /// Returns [`None`] if decoding changes the bytes of elements or the transform is not expressible for `target`, which is the default.
-    fn decode_into_encoded_target<'t>(
+    fn encoded_target<'t>(
         &self,
         decoded_shape: &[NonZeroU64],
         target: &'t mut ArrayBytesDecodeIntoTarget<'_>,

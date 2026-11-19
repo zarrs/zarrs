@@ -199,7 +199,7 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
         Ok(bytes)
     }
 
-    fn decode_into_encoded_target<'t>(
+    fn encoded_target<'t>(
         &self,
         _decoded_shape: &[NonZeroU64],
         target: &'t mut ArrayBytesDecodeIntoTarget<'_>,
