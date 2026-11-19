@@ -186,15 +186,16 @@ mod tests {
 
         // Tensor validates its shape
         let tensor = Tensor::new(elements.clone(), data_type::uint8(), vec![2, 3]);
+        let tensor_ref = &tensor;
         assert!(tensor.validate_shape(&[2, 3]).is_ok());
-        assert!((&tensor).validate_shape(&[2, 3]).is_ok());
+        assert!(<&Tensor<'_> as IntoArrayBytes>::validate_shape(&tensor_ref, &[2, 3]).is_ok());
         assert!(matches!(
             tensor.validate_shape(&[6]),
             Err(ElementError::IncompatibleShape { expected, actual })
                 if expected == [6] && actual == [2, 3]
         ));
         assert!(matches!(
-            (&tensor).validate_shape(&[3, 2]),
+            <&Tensor<'_> as IntoArrayBytes>::validate_shape(&tensor_ref, &[3, 2]),
             Err(ElementError::IncompatibleShape { expected, actual })
                 if expected == [3, 2] && actual == [2, 3]
         ));
@@ -202,15 +203,19 @@ mod tests {
         #[cfg(feature = "ndarray")]
         {
             let array = ndarray::Array2::from_shape_vec((2, 3), elements).unwrap();
+            let array_ref = &array;
             assert!(array.validate_shape(&[2, 3]).is_ok());
-            assert!((&array).validate_shape(&[2, 3]).is_ok());
+            assert!(
+                <&ndarray::Array2<u8> as IntoArrayBytes>::validate_shape(&array_ref, &[2, 3])
+                    .is_ok()
+            );
             assert!(matches!(
                 array.validate_shape(&[6]),
                 Err(ElementError::IncompatibleShape { expected, actual })
                     if expected == [6] && actual == [2, 3]
             ));
             assert!(matches!(
-                (&array).validate_shape(&[3, 2]),
+                <&ndarray::Array2<u8> as IntoArrayBytes>::validate_shape(&array_ref, &[3, 2]),
                 Err(ElementError::IncompatibleShape { expected, actual })
                     if expected == [3, 2] && actual == [2, 3]
             ));
