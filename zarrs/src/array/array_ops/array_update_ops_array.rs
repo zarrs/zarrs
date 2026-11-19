@@ -1,3 +1,5 @@
+use crate::array::ElementOrder;
+use crate::array::array_bytes_internal::extract_array_subset_in_order;
 use inherent::inherent;
 use std::sync::Arc;
 use zarrs_codec::Resources;
@@ -31,6 +33,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             chunk_indices,
             indexer,
             indexer_data,
+            self.element_order(),
             self.codec_options(),
             resources,
         )
@@ -45,6 +48,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
+        let order = self.element_order();
         // Validation
         if array_subset.dimensionality() != self.shape().len() {
             return Err(ArrayError::InvalidArraySubset(
@@ -68,24 +72,32 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             if array_subset == chunk_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_partial_chunk
-                self.store_chunk_with_options(chunk_indices, subset_data, options, resources)?;
+                self.store_chunk_with_options(
+                    chunk_indices,
+                    subset_data,
+                    order,
+                    options,
+                    resources,
+                )?;
             } else {
                 // Store the chunk subset
                 self.store_partial_chunk_with_options(
                     chunk_indices,
                     &array_subset.relative_to(chunk_subset.start())?,
                     subset_data,
+                    order,
                     options,
                     resources,
                 )?;
             }
         } else {
             let array_subset_shape = array_subset.shape();
-            let subset_bytes = super::into_validated_array_bytes(
+            let (subset_bytes, order) = super::into_ordered_array_bytes(
                 subset_data,
                 self.data_type(),
                 &array_subset_shape,
                 array_subset.num_elements(),
+                order,
             )?;
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
@@ -101,16 +113,19 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 let chunk_subset_in_array = self.chunk_subset(&chunk_indices)?;
                 let overlap = array_subset.overlap(&chunk_subset_in_array)?;
                 let chunk_subset_in_array_subset = overlap.relative_to(&array_subset.start())?;
-                let chunk_subset_bytes = subset_bytes.extract_array_subset(
+                let chunk_subset_bytes = extract_array_subset_in_order(
+                    &subset_bytes,
+                    self.data_type(),
                     &chunk_subset_in_array_subset,
                     &array_subset_shape,
-                    self.data_type(),
+                    order,
                 )?;
                 let chunk_subset_in_chunk = overlap.relative_to(chunk_subset_in_array.start())?;
                 self.store_partial_chunk_with_options(
                     &chunk_indices,
                     &chunk_subset_in_chunk,
                     chunk_subset_bytes,
+                    ElementOrder::C,
                     options,
                     &resources,
                 )
@@ -174,6 +189,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         indexer_data: T,
+        order: ElementOrder,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
@@ -192,9 +208,16 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         } else {
             indexer.validate(&chunk_shape).map_err(CodecError::from)?;
         }
+        let order = super::indexer_element_order(indexer, order);
         // The data of an array subset covering the chunk has the shape of the chunk
         if indexer.as_array_subset().is_some() && indexer.covers_array(&chunk_shape) {
-            return self.store_chunk_with_options(chunk_indices, indexer_data, options, resources);
+            return self.store_chunk_with_options(
+                chunk_indices,
+                indexer_data,
+                order,
+                options,
+                resources,
+            );
         }
 
         // An `ArraySubset` holds its shape, which is its output shape, so this does not allocate per chunk
@@ -202,11 +225,12 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             || std::borrow::Cow::Owned(indexer.output_shape()),
             |subset| subset.shape(),
         );
-        let indexer_bytes = super::into_validated_array_bytes(
+        let indexer_bytes = super::into_c_order_array_bytes(
             indexer_data,
             self.data_type(),
             &output_shape,
             indexer.len(),
+            order,
         )?;
         if indexer.is_empty() {
             return Ok(());
@@ -256,7 +280,13 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 self.data_type(),
             )?;
 
-            self.store_chunk_with_options(chunk_indices, chunk_bytes_new, options, resources)
+            self.store_chunk_with_options(
+                chunk_indices,
+                chunk_bytes_new,
+                ElementOrder::C,
+                options,
+                resources,
+            )
         }
     }
 

@@ -3,7 +3,7 @@ use zarrs_codec::ArrayToBytesCodecTraits;
 
 use super::{
     Arc, Array, ArrayCreateError, ArrayMetadata, ArrayMetadataOptions, ArrayMutOps, ArrayShape,
-    ChunkGrid, CodecCreateError, CodecOptions, CodecSpecificOptions, DimensionName,
+    ChunkGrid, CodecCreateError, CodecOptions, CodecSpecificOptions, DimensionName, ElementOrder,
     MetadataEraseVersion,
 };
 
@@ -41,6 +41,11 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         self.subchunk_codecs = subchunk_codecs;
         self.codec_specific_options = opts.clone();
         Ok(self)
+    }
+
+    pub fn set_element_order(&mut self, element_order: ElementOrder) -> &mut Self {
+        self.element_order = element_order;
+        self
     }
 
     pub fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self {

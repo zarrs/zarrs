@@ -7,7 +7,7 @@ use itertools::Itertools;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::iterators::ContiguousLinearisedIndices;
-use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer};
+use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer, IndexerError};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
     ArrayBytesOffsets, ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
@@ -102,26 +102,39 @@ impl FixedDecodeBuffers {
     /// # Errors
     /// Returns a [`CodecError`] if the views cannot be created.
     pub(crate) fn target(&mut self) -> Result<ArrayBytesDecodeIntoTarget<'_>, CodecError> {
-        let subset = ArraySubset::new_with_shape(self.shape.clone());
+        self.target_in_order(ElementOrder::C)
+    }
+
+    /// Return a decode target covering the entire array, with elements in `order`.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the views cannot be created.
+    pub(crate) fn target_in_order(
+        &mut self,
+        order: ElementOrder,
+    ) -> Result<ArrayBytesDecodeIntoTarget<'_>, CodecError> {
+        let strides = order.strides(&self.shape);
         let data_view = unsafe {
-            // SAFETY: the view is the only view of the data
-            ArrayBytesFixedDisjointView::new(
+            // SAFETY: the view is the only view of the data, and distinct indices of a compact layout address distinct elements
+            ArrayBytesFixedDisjointView::new_strided(
                 UnsafeCellSlice::new(self.data.spare_capacity_mut()),
                 self.data_type_size,
+                0,
                 &self.shape,
-                subset.clone(),
+                &strides,
             )?
         };
         let mask_views = self
             .masks
             .iter_mut()
             .map(|mask| unsafe {
-                // SAFETY: the view is the only view of the mask
-                ArrayBytesFixedDisjointView::new(
+                // SAFETY: the view is the only view of the mask, with the same layout as the data
+                ArrayBytesFixedDisjointView::new_strided(
                     UnsafeCellSlice::new(mask.spare_capacity_mut()),
                     1,
+                    0,
                     &self.shape,
-                    subset.clone(),
+                    &strides,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -131,7 +144,7 @@ impl FixedDecodeBuffers {
     /// Convert the buffers into array bytes.
     ///
     /// # Safety
-    /// Every element of the target returned by [`target`](Self::target) must have been written,
+    /// Every element of the target returned by [`target`](Self::target) or [`target_in_order`](Self::target_in_order) must have been written,
     /// following the [output requirements](ArrayBytesDecodeIntoTarget#output-requirements).
     pub(crate) unsafe fn into_array_bytes(mut self) -> ArrayBytes<'static> {
         let num_elements = usize::try_from(self.shape.iter().product::<u64>()).unwrap();
@@ -169,6 +182,35 @@ pub(crate) fn extract_strided(
     bytes.extract_runs(&runs, data_type)
 }
 
+/// Extract the elements of `subset` in C order from `bytes`, the elements of an array of `shape` in `order`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `bytes` are incompatible with `data_type`, or `subset` is out-of-bounds of `shape`.
+pub(crate) fn extract_array_subset_in_order<'a>(
+    bytes: &'a ArrayBytes<'_>,
+    data_type: &DataType,
+    subset: &ArraySubset,
+    shape: &[u64],
+    order: ElementOrder,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    if order.is_reordered(shape) {
+        if !subset.inbounds_shape(shape) {
+            return Err(IndexerError::new_oob(subset.end_exc().to_vec(), shape.to_vec()).into());
+        }
+        let strides = order.strides(shape);
+        let offset = if subset.is_empty() {
+            0
+        } else {
+            std::iter::zip(subset.start(), &strides)
+                .map(|(start, stride)| start * stride)
+                .sum()
+        };
+        extract_strided(bytes, data_type, offset, subset.shape(), &strides)
+    } else {
+        bytes.extract_array_subset(subset, shape, data_type)
+    }
+}
+
 /// Reorder the elements of `bytes`, an array of `shape` with elements in `from` order, to `to` order.
 ///
 /// # Errors
@@ -183,16 +225,30 @@ pub(crate) fn reorder<'a>(
     if from == to || !ElementOrder::F.is_reordered(shape) {
         return Ok(bytes);
     }
+    reordered(&bytes, data_type, shape, from, to)
+}
+
+/// Copy the elements of `bytes`, an array of `shape` with elements in `from` order, in `to` order.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `bytes` are incompatible with `data_type` or `shape`.
+pub(crate) fn reordered(
+    bytes: &ArrayBytes<'_>,
+    data_type: &DataType,
+    shape: &[u64],
+    from: ElementOrder,
+    to: ElementOrder,
+) -> Result<ArrayBytes<'static>, CodecError> {
     bytes.validate(shape.iter().product(), data_type)?;
     // Gather the elements of the source in the C order of the destination grid
     match to {
-        ElementOrder::C => extract_strided(&bytes, data_type, 0, shape, &from.strides(shape)),
+        ElementOrder::C => extract_strided(bytes, data_type, 0, shape, &from.strides(shape)),
         ElementOrder::F => {
             // The C order of the reversed shape is the F order of `shape`
             let reversed_shape: ArrayIndices = shape.iter().rev().copied().collect();
             let mut reversed_strides = from.strides(shape);
             reversed_strides.reverse();
-            extract_strided(&bytes, data_type, 0, &reversed_shape, &reversed_strides)
+            extract_strided(bytes, data_type, 0, &reversed_shape, &reversed_strides)
         }
     }
 }
@@ -518,6 +574,19 @@ mod tests {
                 u64::MAX,
                 &[0, u64::MAX, 2],
                 &[1, u64::MAX, 1]
+            )
+            .unwrap(),
+            ArrayBytes::new_flen(Vec::<u8>::new())
+        );
+        // Empty subsets with large starts do not overflow offset calculation in F order
+        let empty = ArraySubset::new_with_start_shape(vec![0, u64::MAX], vec![0, 1]).unwrap();
+        assert_eq!(
+            extract_array_subset_in_order(
+                &ArrayBytes::new_flen(vec![0u8; 6]),
+                &uint8,
+                &empty,
+                &[2, 3],
+                ElementOrder::F,
             )
             .unwrap(),
             ArrayBytes::new_flen(Vec::<u8>::new())

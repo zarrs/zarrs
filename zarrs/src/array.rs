@@ -208,6 +208,12 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// Similarly, array `store_*` methods are generic over the input type.
 ///
+/// ### Element Order
+/// Generic `retrieve_*` methods return, and `store_*` methods take, elements in the [`ElementOrder`] of the array, which is row-major ([`ElementOrder::C`]) by default.
+/// Use [`with_element_order`](Array::with_element_order) or [`set_element_order`](Array::set_element_order) to read and write column-major ([`ElementOrder::F`]) elements, such as for Fortran or MATLAB interoperability.
+/// `ndarray` arrays and [`Tensor`]s carry their own layout: they are returned with a layout in the array's order, and stored by their logical elements in either order.
+/// Fixed length data is decoded directly into column-major output, which is cheapest for chunks encoded with a `transpose` codec (e.g. Zarr V2 arrays with `"order": "F"`).
+///
 /// ### Codec Options
 /// The [`CodecOptions`] of an array control checksum validation, storing empty chunks, and partial encoding.
 /// Set them with [`with_codec_options`](Array::with_codec_options) or [`set_codec_options`](Array::set_codec_options).
@@ -454,6 +460,8 @@ pub struct Array<TStorage: ?Sized> {
     codec_options: CodecOptions,
     /// Preferred minimum concurrency for multi-chunk operations.
     chunk_concurrent_minimum: usize,
+    /// The order of the elements that array operations decode into and encode from.
+    element_order: ElementOrder,
     metadata_options: ArrayMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
 }
@@ -477,6 +485,7 @@ impl<TStorage: ?Sized> Clone for Array<TStorage> {
             metadata: self.metadata.clone(),
             codec_options: self.codec_options,
             chunk_concurrent_minimum: self.chunk_concurrent_minimum,
+            element_order: self.element_order,
             metadata_options: self.metadata_options,
             metadata_erase_version: self.metadata_erase_version,
         }
@@ -503,6 +512,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             metadata: self.metadata.clone(),
             codec_options: self.codec_options,
             chunk_concurrent_minimum: self.chunk_concurrent_minimum,
+            element_order: self.element_order,
             metadata_options: self.metadata_options,
             metadata_erase_version: self.metadata_erase_version,
         }
@@ -634,6 +644,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             metadata: Arc::new(ArrayMetadata::V3(v3)),
             codec_options,
             chunk_concurrent_minimum,
+            element_order: ElementOrder::C,
             metadata_options,
             metadata_erase_version,
         })
@@ -738,6 +749,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             dimension_names: None,
             codec_options,
             chunk_concurrent_minimum,
+            element_order: ElementOrder::C,
             metadata: Arc::new(ArrayMetadata::V2(v2)),
             metadata_options,
             metadata_erase_version,

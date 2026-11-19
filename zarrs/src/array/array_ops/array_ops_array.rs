@@ -10,8 +10,8 @@ use super::{
     Arc, Array, ArrayBuilder, ArrayError, ArrayIndices, ArrayMetadata, ArrayMetadataOptions,
     ArrayOps, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkGridDecodedRef,
     ChunkKeyEncoding, ChunkShape, CodecChain, CodecChainBound, CodecOptions, CodecSpecificOptions,
-    DataType, DimensionName, FillValue, IncompatibleDimensionalityError, MetadataEraseVersion,
-    NodePath, StorageTransformerChain, StoreKey,
+    DataType, DimensionName, ElementOrder, FillValue, IncompatibleDimensionalityError,
+    MetadataEraseVersion, NodePath, StorageTransformerChain, StoreKey,
 };
 use crate::array::chunk_key_encoding::chunk_store_key_path;
 use crate::config::MetadataConvertVersion;
@@ -98,6 +98,18 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     #[allow(clippy::must_use_candidate)]
     pub fn metadata_erase_version(&self) -> MetadataEraseVersion {
         self.metadata_erase_version
+    }
+
+    #[allow(clippy::must_use_candidate)]
+    pub fn element_order(&self) -> ElementOrder {
+        self.element_order
+    }
+
+    #[allow(clippy::must_use_candidate, clippy::return_self_not_must_use)]
+    pub fn with_element_order(&self, element_order: ElementOrder) -> Self {
+        let mut array = self.clone();
+        array.element_order = element_order;
+        array
     }
 
     #[allow(clippy::must_use_candidate, clippy::return_self_not_must_use)]
