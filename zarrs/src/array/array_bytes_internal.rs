@@ -7,7 +7,7 @@ use itertools::Itertools;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::iterators::ContiguousLinearisedIndices;
-use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer};
+use super::{ArrayIndices, ArraySubset, DataType, ElementOrder, Indexer, IndexerError};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayBytesMask,
     ArrayBytesOffsets, ArrayBytesOffsetsCreateError, ArrayBytesVariableLength, CodecError,
@@ -180,6 +180,35 @@ pub(crate) fn extract_strided(
     )
     .map_err(|error| CodecError::Other(error.to_string()))?;
     bytes.extract_runs(&runs, data_type)
+}
+
+/// Extract the elements of `subset` in C order from `bytes`, the elements of an array of `shape` in `order`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if `bytes` are incompatible with `data_type`, or `subset` is out-of-bounds of `shape`.
+pub(crate) fn extract_array_subset_in_order<'a>(
+    bytes: &'a ArrayBytes<'_>,
+    data_type: &DataType,
+    subset: &ArraySubset,
+    shape: &[u64],
+    order: ElementOrder,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    if order.is_reordered(shape) {
+        if !subset.inbounds_shape(shape) {
+            return Err(IndexerError::new_oob(subset.end_exc().to_vec(), shape.to_vec()).into());
+        }
+        let strides = order.strides(shape);
+        let offset = if subset.is_empty() {
+            0
+        } else {
+            std::iter::zip(subset.start(), &strides)
+                .map(|(start, stride)| start * stride)
+                .sum()
+        };
+        extract_strided(bytes, data_type, offset, subset.shape(), &strides)
+    } else {
+        bytes.extract_array_subset(subset, shape, data_type)
+    }
 }
 
 /// Reorder the elements of `bytes`, an array of `shape` with elements in `from` order, to `to` order.
@@ -545,6 +574,19 @@ mod tests {
                 u64::MAX,
                 &[0, u64::MAX, 2],
                 &[1, u64::MAX, 1]
+            )
+            .unwrap(),
+            ArrayBytes::new_flen(Vec::<u8>::new())
+        );
+        // Empty subsets with large starts do not overflow offset calculation in F order
+        let empty = ArraySubset::new_with_start_shape(vec![0, u64::MAX], vec![0, 1]).unwrap();
+        assert_eq!(
+            extract_array_subset_in_order(
+                &ArrayBytes::new_flen(vec![0u8; 6]),
+                &uint8,
+                &empty,
+                &[2, 3],
+                ElementOrder::F,
             )
             .unwrap(),
             ArrayBytes::new_flen(Vec::<u8>::new())

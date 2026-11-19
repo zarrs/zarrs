@@ -1,3 +1,5 @@
+use crate::array::ElementOrder;
+use crate::array::array_bytes_internal::extract_array_subset_in_order;
 use inherent::inherent;
 use zarrs_codec::{CowBytes, Resources};
 
@@ -106,6 +108,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         self.async_store_chunk_with_options(
             chunk_indices,
             chunk_data,
+            self.element_order(),
             self.codec_options(),
             resources,
         )
@@ -120,15 +123,17 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let options = self.codec_options();
+        let order = self.element_order();
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
                 let array_subset = self.chunks_subset(chunks)?;
-                super::into_validated_array_bytes(
+                super::into_ordered_array_bytes(
                     chunks_data,
                     self.data_type(),
                     array_subset.shape(),
                     0,
+                    order,
                 )?;
             }
             1 => {
@@ -136,6 +141,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                 self.async_store_chunk_with_options(
                     &chunk_indices,
                     chunks_data,
+                    order,
                     options,
                     resources,
                 )
@@ -143,11 +149,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             }
             _ => {
                 let array_subset = self.chunks_subset(chunks)?;
-                let subset_bytes = super::into_validated_array_bytes(
+                let (subset_bytes, order) = super::into_ordered_array_bytes(
                     chunks_data,
                     self.data_type(),
                     array_subset.shape(),
                     array_subset.num_elements(),
+                    order,
                 )?;
 
                 // Calculate chunk/codec concurrency
@@ -163,17 +170,19 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                 let resources = &resources;
                 let store_chunk = |chunk_indices: ArrayIndices| {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
-                    let chunk_bytes = subset_bytes
-                        .extract_array_subset(
-                            &chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
-                            array_subset.shape(),
-                            self.data_type(),
-                        )
-                        .unwrap(); // FIXME: unwrap
+                    let chunk_bytes = extract_array_subset_in_order(
+                        &subset_bytes,
+                        self.data_type(),
+                        &chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
+                        array_subset.shape(),
+                        order,
+                    )
+                    .unwrap(); // FIXME: unwrap
                     async move {
                         self.async_store_chunk_with_options(
                             &chunk_indices,
                             chunk_bytes,
+                            ElementOrder::C,
                             options,
                             resources,
                         )
@@ -249,16 +258,18 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
+        order: ElementOrder,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
-        let chunk_bytes = super::into_validated_array_bytes(
+        let chunk_bytes = super::into_c_order_array_bytes(
             chunk_data,
             self.data_type(),
             chunk_shape_u64,
             chunk_shape.num_elements_u64(),
+            order,
         )?;
 
         let is_fill_value =

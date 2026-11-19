@@ -324,15 +324,30 @@ fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
     )
 }
 
-/// Validate `data`'s shape (if it has a layout) and convert it into validated [`ArrayBytes`](super::ArrayBytes).
-fn into_validated_array_bytes<'a, T: super::IntoArrayBytes<'a>>(
+/// Validate `data`'s shape (if it has a layout) and convert it into validated [`ArrayBytes`](super::ArrayBytes) with its resolved element order.
+fn into_ordered_array_bytes<'a, T: super::IntoArrayBytes<'a>>(
     data: T,
     data_type: &DataType,
     shape: &[u64],
     num_elements: u64,
-) -> Result<super::ArrayBytes<'a>, ArrayError> {
+    order: ElementOrder,
+) -> Result<(super::ArrayBytes<'a>, ElementOrder), ArrayError> {
     data.validate_shape(shape)?;
-    let bytes = data.into_array_bytes(data_type, super::ElementOrder::C)?;
+    let order = data.element_order(order);
+    let bytes = data.into_array_bytes(data_type, order)?;
     bytes.validate(num_elements, data_type)?;
-    Ok(bytes)
+    Ok((bytes, order))
+}
+
+/// Validate `data`'s shape (if it has a layout) and convert `data` of `shape` into validated C-order [`ArrayBytes`](super::ArrayBytes).
+fn into_c_order_array_bytes<'a, T: super::IntoArrayBytes<'a>>(
+    data: T,
+    data_type: &DataType,
+    shape: &[u64],
+    num_elements: u64,
+    order: ElementOrder,
+) -> Result<super::ArrayBytes<'a>, ArrayError> {
+    let (bytes, order) = into_ordered_array_bytes(data, data_type, shape, num_elements, order)?;
+    super::array_bytes_internal::reorder(bytes, data_type, shape, order, ElementOrder::C)
+        .map_err(ArrayError::CodecError)
 }

@@ -54,9 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Array` operations; configure a derived array with the corresponding `with_*` method, then call the operation
   - Add `ArrayOps::{with_codec_options,with_metadata_options,with_metadata_erase_version}()` and `ArrayMutOps::set_metadata_erase_version()`
   - `ArrayOps::metadata_opt()` no longer takes an options argument and applies the array's stored metadata options
-- Add an array element order for reading arrays in column-major (F) order, `ArrayOps::{element_order,with_element_order}()` and `ArrayMutOps::set_element_order()`
+- Add an array element order for reading and writing arrays in column-major (F) order, `ArrayOps::{element_order,with_element_order}()` and `ArrayMutOps::set_element_order()`
   - Generic `[async_]retrieve_*` methods of `Array` and `ArrayCached` return elements in the array's `ElementOrder` (C by default), so `Vec` results are column-major, `ndarray` results have a column-major layout, and `Tensor` results report `ElementOrder::F`
+  - Generic `[async_]store_*` methods take elements in the array's `ElementOrder`; `ndarray` arrays and `Tensor`s are stored by their logical elements in either order, without a copy for a column-major `ndarray` array of a column-major array
   - Fixed length data is decoded directly into column-major output, so a `transpose` codec chain (e.g. a Zarr V2 array with `"order": "F"`) decodes without a copy, and variable length data is decoded and then reordered
+  - Each chunk of a multi-chunk store is gathered directly from the column-major input
   - `_into` methods are unaffected, since the output target has its own layout
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants, which accept `&dyn Indexer`
 - **Breaking**: `[Async]ArrayReadOps::[async_]retrieve_{chunk,partial_chunk,array_subset}_into` take `&mut ArrayBytesDecodeIntoTarget`
