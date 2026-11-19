@@ -80,8 +80,13 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 )?;
             }
         } else {
-            let subset_bytes = subset_data.into_array_bytes(self.data_type())?;
-            subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
+            let array_subset_shape = array_subset.shape();
+            let subset_bytes = super::into_validated_array_bytes(
+                subset_data,
+                self.data_type(),
+                &array_subset_shape,
+                array_subset.num_elements(),
+            )?;
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
             let codec_concurrency = recommended_codec_concurrency(self, &chunk_shape)?;
@@ -98,7 +103,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
                 let chunk_subset_in_array_subset = overlap.relative_to(&array_subset.start())?;
                 let chunk_subset_bytes = subset_bytes.extract_array_subset(
                     &chunk_subset_in_array_subset,
-                    &array_subset.shape(),
+                    &array_subset_shape,
                     self.data_type(),
                 )?;
                 let chunk_subset_in_chunk = overlap.relative_to(chunk_subset_in_array.start())?;
@@ -187,12 +192,22 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         } else {
             indexer.validate(&chunk_shape).map_err(CodecError::from)?;
         }
-        if indexer.covers_array(&chunk_shape) {
+        // The data of an array subset covering the chunk has the shape of the chunk
+        if indexer.as_array_subset().is_some() && indexer.covers_array(&chunk_shape) {
             return self.store_chunk_with_options(chunk_indices, indexer_data, options, resources);
         }
 
-        let indexer_bytes = indexer_data.into_array_bytes(self.data_type())?;
-        indexer_bytes.validate(indexer.len(), self.data_type())?;
+        // An `ArraySubset` holds its shape, which is its output shape, so this does not allocate per chunk
+        let output_shape = indexer.as_array_subset().map_or_else(
+            || std::borrow::Cow::Owned(indexer.output_shape()),
+            |subset| subset.shape(),
+        );
+        let indexer_bytes = super::into_validated_array_bytes(
+            indexer_data,
+            self.data_type(),
+            &output_shape,
+            indexer.len(),
+        )?;
         if indexer.is_empty() {
             return Ok(());
         }
