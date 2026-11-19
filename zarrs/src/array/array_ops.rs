@@ -195,3 +195,16 @@ fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
         array.data_type(),
     )
 }
+
+/// Validate `data`'s shape (if it has a layout) and convert it into validated [`ArrayBytes`](super::ArrayBytes).
+fn into_validated_array_bytes<'a, T: super::IntoArrayBytes<'a>>(
+    data: T,
+    data_type: &DataType,
+    shape: &[u64],
+    num_elements: u64,
+) -> Result<super::ArrayBytes<'a>, ArrayError> {
+    data.validate_shape(shape)?;
+    let bytes = data.into_array_bytes(data_type)?;
+    bytes.validate(num_elements, data_type)?;
+    Ok(bytes)
+}

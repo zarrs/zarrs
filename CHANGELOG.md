@@ -106,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Support DLPack 1.4, including `complex_bfloat16` export
   - Add `Tensor::into_static()` for converting a `Tensor` into a `Tensor<'static>`, copying only if its bytes are borrowed
   - Add `Tensor::num_elements()` and implement `Clone` and `Debug` for `Tensor`
+  - Add `IntoArrayBytes::validate_shape`, returning the new `ElementError::IncompatibleShape` when storing an `ndarray` array or `Tensor` whose shape differs from the target's (previously stored if it had the same number of elements)
   - Implement `IntoArrayBytes` for `&bytes::Bytes`; storing a chunk from a `bytes::Bytes` is zero-copy where the codec chain passes its input through unchanged
   - Fix DLPack export to validate that tensor bytes cover the shape and data type, adding `TensorError::{InsufficientBytes,UnsupportedShape}`
 - Implement `Clone` for `ArrayBuilder`
@@ -116,6 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `[Async]ArrayReadOps::[async_]retrieve_array_subset_into` failing across multiple chunks if the output target has the same number of elements as the array subset, but a different shape or dimensionality
 - Fix variable-length fill-value detection to respect element boundaries, preventing non-fill chunks from being omitted or erased when `store_empty_chunks` is disabled
 - Fix storing an owned `ndarray` array sliced in place, which used every element of its backing vector rather than only its own elements
+- Fix `Array::chunks_subset` and `[async_]store_chunks` to validate the dimensionality and shape of empty chunk selections
 
 ### Groups and hierarchy
 - **Breaking**: `Group::open_opt` takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`, and `Hierarchy::open_opt` takes a `HierarchyOpenOptions`

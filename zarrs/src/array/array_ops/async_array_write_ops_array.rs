@@ -123,8 +123,13 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
-                let subset_bytes = chunks_data.into_array_bytes(self.data_type())?;
-                subset_bytes.validate(0, self.data_type())?;
+                let array_subset = self.chunks_subset(chunks)?;
+                super::into_validated_array_bytes(
+                    chunks_data,
+                    self.data_type(),
+                    array_subset.shape(),
+                    0,
+                )?;
             }
             1 => {
                 let chunk_indices = chunks.start();
@@ -137,9 +142,13 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
                 .await?;
             }
             _ => {
-                let subset_bytes = chunks_data.into_array_bytes(self.data_type())?;
                 let array_subset = self.chunks_subset(chunks)?;
-                subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
+                let subset_bytes = super::into_validated_array_bytes(
+                    chunks_data,
+                    self.data_type(),
+                    array_subset.shape(),
+                    array_subset.num_elements(),
+                )?;
 
                 // Calculate chunk/codec concurrency
                 let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
@@ -243,10 +252,14 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
-
         let chunk_shape = self.chunk_shape(chunk_indices)?;
-        chunk_bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+        let chunk_bytes = super::into_validated_array_bytes(
+            chunk_data,
+            self.data_type(),
+            chunk_shape_u64,
+            chunk_shape.num_elements_u64(),
+        )?;
 
         let is_fill_value =
             !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value());
