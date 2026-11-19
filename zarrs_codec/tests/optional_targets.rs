@@ -109,8 +109,8 @@ fn optional_targets_nest_masks_outer_to_inner() {
 #[test]
 fn subdivided_targets_preserve_structure() {
     let subset = ArraySubset::new_with_ranges(&[1..3, 0..4]);
-    let left = ArraySubset::new_with_ranges(&[1..3, 0..2]);
-    let right = ArraySubset::new_with_ranges(&[1..3, 2..4]);
+    let left = ArraySubset::new_with_ranges(&[0..2, 0..2]);
+    let right = ArraySubset::new_with_ranges(&[0..2, 2..4]);
     let left_data = [1, 2, 3, 4, 5, 6, 7, 8];
     let right_data = [11, 12, 13, 14, 15, 16, 17, 18];
     let left_masks = [[1, 0, 1, 0], [0, 1, 1, 0], [1, 1, 0, 0]];
@@ -128,7 +128,7 @@ fn subdivided_targets_preserve_structure() {
                 // SAFETY: the left and right subtargets are disjoint.
                 let mut sub = unsafe { target.subdivide(sub_subset.clone()) }.unwrap();
                 assert_eq!(depth(&sub), depth_);
-                assert_eq!(sub.subset(), sub_subset);
+                assert_eq!(sub.subset().shape(), sub_subset.shape());
                 let source = source(sub_data, &sub_masks[..depth_]);
                 decode_into_array_bytes_target(&source, &mut sub).unwrap();
             }
@@ -161,9 +161,9 @@ fn subdivide_rejects_subsets_outside_the_target() {
         let mut masks = vec![[0xa5; 12]; depth_];
         let target = target(&mut data, &mut masks, &subset);
         for outside in [
+            ArraySubset::new_with_ranges(&[0..3, 0..2]),
             ArraySubset::new_with_ranges(&[0..2, 1..3]),
-            ArraySubset::new_with_ranges(&[1..3, 2..4]),
-            ArraySubset::new_with_ranges(&[1..3]),
+            ArraySubset::new_with_ranges(&[0..2]),
         ] {
             // SAFETY: no subtarget is created.
             assert!(unsafe { target.subdivide(outside) }.is_err());

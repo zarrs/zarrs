@@ -702,14 +702,12 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         );
 
         let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
-        let output_start = output_target.subset().start();
         let decode_chunk = |chunk_index: usize| {
             let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
 
-            let output_subset_chunk = chunk_subset.offset(output_start)?;
             // SAFETY: subchunks represent disjoint array subsets
             let mut output_target_subchunk =
-                unsafe { output_target.subdivide(output_subset_chunk) }?;
+                unsafe { output_target.subdivide(chunk_subset.clone()) }?;
 
             // Read the offset/size
             let offset = shard_index[chunk_index * 2];

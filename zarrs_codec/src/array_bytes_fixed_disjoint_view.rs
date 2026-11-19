@@ -118,12 +118,13 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         unsafe { self.bytes.index_mut(offset..offset + length) }
     }
 
-    /// Create a new non-overlapping view of the bytes in an array that is a subset of the current view.
+    /// Create a new non-overlapping view of a `subset` of this view.
     ///
+    /// The `subset` is relative to this view (its origin is the first element of the view).
     /// An empty `subset` references no elements, so it is accepted irrespective of its start.
     ///
     /// # Errors
-    /// Returns [`SubsetOutOfBoundsError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the parent subset.
+    /// Returns [`SubsetOutOfBoundsError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the shape of this view.
     ///
     /// # Safety
     /// The `subset` represented by this view must not overlap with the `subset` of any other created views that reference the same array bytes.
@@ -131,9 +132,18 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         &self,
         subset: ArraySubset,
     ) -> Result<ArrayBytesFixedDisjointView<'a>, ArrayBytesFixedDisjointViewCreateError> {
-        if !subset.inbounds(&self.subset) {
-            return Err(SubsetOutOfBoundsError::new(subset, self.subset.clone()).into());
+        if !subset.inbounds_shape(self.subset.shape()) {
+            let bounding_subset = ArraySubset::new_with_shape(self.subset.shape());
+            return Err(SubsetOutOfBoundsError::new(subset, bounding_subset).into());
         }
+        let subset = if subset.is_empty() {
+            ArraySubset::new_with_start_shape(vec![0; self.subset.dimensionality()], subset.shape())
+                .expect("matching dimensionality")
+        } else {
+            subset
+                .offset(self.subset.start())
+                .expect("matching dimensionality")
+        };
         unsafe { Self::new(self.bytes, self.data_type_size, self.shape, subset) }
     }
 
@@ -622,22 +632,23 @@ mod tests {
             view0.copy_from_slice(&[11, 12, 14, 15]).unwrap();
             assert!(view0.copy_from_slice(&[11, 12, 14, 15, 255]).is_err()); // wrong length
 
+            // Subsets are relative to the view
             let mut view0a =
-                unsafe { view0.subdivide(ArraySubset::new_with_ranges(&[1..2, 1..3])) }.unwrap();
+                unsafe { view0.subdivide(ArraySubset::new_with_ranges(&[1..2, 0..2])) }.unwrap();
             view0a.copy_from_slice(&[24, 25]).unwrap();
             assert!(view0a.copy_from_slice(&[]).is_err()); // wrong length
 
             assert!(
-                unsafe { view0a.subdivide(ArraySubset::new_with_ranges(&[1..2, 1..3])) }.is_ok()
+                unsafe { view0a.subdivide(ArraySubset::new_with_ranges(&[0..1, 0..2])) }.is_ok()
             );
             assert!(
-                unsafe { view0a.subdivide(ArraySubset::new_with_ranges(&[1..2, 2..3])) }.is_ok()
+                unsafe { view0a.subdivide(ArraySubset::new_with_ranges(&[0..1, 1..2])) }.is_ok()
             );
             assert!(
-                unsafe { view0a.subdivide(ArraySubset::new_with_ranges(&[0..2, 1..3])) }.is_err()
+                unsafe { view0a.subdivide(ArraySubset::new_with_ranges(&[0..2, 0..2])) }.is_err()
             ); // OOB
             assert!(
-                unsafe { view0a.subdivide(ArraySubset::new_with_ranges(&[1..2, 1..4])) }.is_err()
+                unsafe { view0a.subdivide(ArraySubset::new_with_ranges(&[0..1, 0..3])) }.is_err()
             ); // OOB
 
             let mut view1 = unsafe {

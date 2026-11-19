@@ -238,12 +238,13 @@ impl<'a> ArrayBytesDecodeIntoTarget<'a> {
         self.data_view().subset()
     }
 
-    /// Create a target with the same structure as this target that covers `subset` of the same array.
+    /// Create a target with the same structure as this target that covers a `subset` of it.
     ///
+    /// The `subset` is relative to the target, as in [`ArrayBytesFixedDisjointView::subdivide`].
     /// An empty `subset` references no elements, so it is accepted irrespective of its start.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the [`subset`](Self::subset) of the target.
+    /// Returns a [`CodecError`] if `subset` has an incompatible dimensionality with, or is out-of-bounds of, the shape of the target.
     ///
     /// # Safety
     /// The `subset` must not overlap with the `subset` of any other created targets or views that reference the same array bytes.
