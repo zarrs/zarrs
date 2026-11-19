@@ -104,41 +104,47 @@ where
                 resources,
                 &codec_concurrency,
             );
-            // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
-            let shape = array_subset.shape();
-            let mut buffers = (output_target.shape() != shape.as_ref())
-                .then(|| FixedDecodeBuffers::with_size_and_depth(fixed.size(), depth, &shape));
-            let buffers_target = buffers
-                .as_mut()
-                .map(FixedDecodeBuffers::target)
-                .transpose()?;
+            let subset_shape = array_subset.shape();
             let resources = &resources;
-            retrieve_multi_chunk_fixed_into(
-                array,
-                array_subset,
-                &chunks,
-                chunk_concurrent_limit,
-                buffers_target.as_ref().unwrap_or(output_target),
-                |chunk_indices, chunk_subset, overlap, mut target| async move {
-                    retrieve
-                        .retrieve_partial_chunk_into(
-                            &chunk_indices,
-                            &overlap.relative_to(chunk_subset.start())?,
-                            &mut target,
-                            options,
-                            resources,
-                        )
-                        .await
-                },
-            )
-            .await?;
-            drop(buffers_target);
-            if let Some(buffers) = buffers {
+            macro_rules! retrieve_into {
+                ($target:expr) => {
+                    retrieve_multi_chunk_fixed_into(
+                        array,
+                        array_subset,
+                        &chunks,
+                        chunk_concurrent_limit,
+                        $target,
+                        |chunk_indices, chunk_subset, overlap, mut target| async move {
+                            retrieve
+                                .retrieve_partial_chunk_into(
+                                    &chunk_indices,
+                                    &overlap.relative_to(chunk_subset.start())?,
+                                    &mut target,
+                                    options,
+                                    resources,
+                                )
+                                .await
+                        },
+                    )
+                    .await
+                };
+            }
+            if output_target.shape() == subset_shape.as_ref() {
+                retrieve_into!(output_target)
+            } else if let Some(target) = output_target.reshaped(&subset_shape) {
+                retrieve_into!(&target)
+            } else {
+                // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
+                let mut buffers =
+                    FixedDecodeBuffers::with_size_and_depth(fixed.size(), depth, &subset_shape);
+                let buffers_target = buffers.target()?;
+                retrieve_into!(&buffers_target)?;
+                drop(buffers_target);
                 // SAFETY: decoding covers the array subset and satisfies the target's output requirements
                 let bytes = unsafe { buffers.into_array_bytes() };
                 decode_into_array_bytes_target(&bytes, output_target)?;
+                Ok(())
             }
-            Ok(())
         }
     }
 }

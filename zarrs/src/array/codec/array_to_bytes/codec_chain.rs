@@ -724,6 +724,18 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
         if self.array_to_array.is_empty() {
+            let shape_u64 = bytemuck::must_cast_slice(shape);
+            if output_target.shape() != shape_u64
+                && let Some(mut target) = output_target.reshaped(shape_u64)
+            {
+                return self.decode_into_array_to_bytes(
+                    input,
+                    shape,
+                    &mut target,
+                    options,
+                    resources,
+                );
+            }
             return self.decode_into_array_to_bytes(
                 input,
                 shape,

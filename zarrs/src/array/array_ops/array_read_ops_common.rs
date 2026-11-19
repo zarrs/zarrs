@@ -95,40 +95,67 @@ where
                 resources,
                 &codec_concurrency,
             );
-            // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
-            let shape = array_subset.shape();
-            let mut buffers = (output_target.shape() != shape.as_ref()).then(|| {
-                FixedDecodeBuffers::with_size_and_depth(fixed.size(), optional_depth, &shape)
-            });
-            let buffers_target = buffers
-                .as_mut()
-                .map(FixedDecodeBuffers::target)
-                .transpose()?;
-            retrieve_multi_chunk_fixed_into(
-                array,
-                array_subset,
-                &chunks,
-                chunk_concurrent_limit,
-                buffers_target.as_ref().unwrap_or(output_target),
-                options,
-                &resources,
-                &|chunk_indices, chunk_subset, overlap, target, options, resources| {
-                    retrieve_partial_chunk_into(
-                        chunk_indices,
-                        &overlap.relative_to(chunk_subset.start())?,
-                        target,
-                        options,
-                        resources,
-                    )
-                },
-            )?;
-            drop(buffers_target);
-            if let Some(buffers) = buffers {
-                // SAFETY: decoding covers the array subset and satisfies the target's output requirements
-                let bytes = unsafe { buffers.into_array_bytes() };
-                decode_into_array_bytes_target(&bytes, output_target)?;
+            {
+                fn decode_with_subset_target_or_buffers<F>(
+                    element_size: usize,
+                    optional_depth: usize,
+                    subset_shape: &[u64],
+                    output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+                    retrieve: F,
+                ) -> Result<(), ArrayError>
+                where
+                    F: for<'t, 'd> FnOnce(
+                        &'t mut ArrayBytesDecodeIntoTarget<'d>,
+                    ) -> Result<(), ArrayError>,
+                {
+                    if output_target.shape() == subset_shape {
+                        return retrieve(output_target);
+                    }
+                    if let Some(mut target) = output_target.reshaped(subset_shape) {
+                        return retrieve(&mut target);
+                    }
+                    // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
+                    let mut buffers = FixedDecodeBuffers::with_size_and_depth(
+                        element_size,
+                        optional_depth,
+                        subset_shape,
+                    );
+                    let mut buffers_target = buffers.target()?;
+                    retrieve(&mut buffers_target)?;
+                    drop(buffers_target);
+                    // SAFETY: decoding covers the array subset and satisfies the target's output requirements
+                    let bytes = unsafe { buffers.into_array_bytes() };
+                    Ok(decode_into_array_bytes_target(&bytes, output_target)?)
+                }
+
+                let subset_shape = array_subset.shape();
+                decode_with_subset_target_or_buffers(
+                    fixed.size(),
+                    optional_depth,
+                    &subset_shape,
+                    output_target,
+                    |target| {
+                        retrieve_multi_chunk_fixed_into(
+                            array,
+                            array_subset,
+                            &chunks,
+                            chunk_concurrent_limit,
+                            target,
+                            options,
+                            &resources,
+                            &|chunk_indices, chunk_subset, overlap, target, options, resources| {
+                                retrieve_partial_chunk_into(
+                                    chunk_indices,
+                                    &overlap.relative_to(chunk_subset.start())?,
+                                    target,
+                                    options,
+                                    resources,
+                                )
+                            },
+                        )
+                    },
+                )
             }
-            Ok(())
         }
     }
 }

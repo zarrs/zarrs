@@ -669,77 +669,105 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         options: &CodecOptions,
         resources: &ComputeResources,
     ) -> Result<(), CodecError> {
+        fn decode_into_shaped(
+            codec: &ShardingCodecBound,
+            encoded_shard: &zarrs_codec::CowBytes<'_>,
+            shape: &[NonZeroU64],
+            output_target: &mut ArrayBytesDecodeIntoTarget<'_>,
+            options: CodecOptions,
+            resources: &ComputeResources,
+        ) -> Result<(), CodecError> {
+            let data_type = codec.data_type();
+            let fill_value = &codec.fill_value;
+
+            let chunks_per_shard = calculate_chunks_per_shard(shape, &codec.subchunk_shape)?;
+            let num_chunks = chunks_per_shard
+                .iter()
+                .map(|i| usize::try_from(i.get()).unwrap())
+                .product::<usize>();
+
+            let shard_index = codec.decode_index(
+                encoded_shard,
+                chunks_per_shard.as_slice(),
+                &options,
+                resources,
+            )?;
+
+            // Calc self/internal concurrent limits
+            let (shard_concurrent_limit, resources) = split_compute_resources(
+                resources,
+                &codec.recommended_concurrency(shape)?,
+                &codec
+                    .inner_codecs
+                    .recommended_concurrency(&codec.subchunk_shape)?,
+            );
+
+            let subchunk_grid = subchunk_grid(shape, &codec.subchunk_shape)?;
+            let decode_chunk = |chunk_index: usize| {
+                let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
+
+                // SAFETY: subchunks represent disjoint array subsets
+                let mut output_target_subchunk =
+                    unsafe { output_target.subdivide(chunk_subset.clone()) }?;
+
+                // Read the offset/size
+                let offset = shard_index[chunk_index * 2];
+                let size = shard_index[chunk_index * 2 + 1];
+                if offset == u64::MAX && size == u64::MAX {
+                    copy_fill_value_into(data_type, fill_value, &mut output_target_subchunk)?;
+                } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
+                    return Err(CodecError::Other(
+                        "The shard index references out-of-bounds bytes. The chunk may be corrupted."
+                            .to_string(),
+                    ));
+                } else {
+                    let offset: usize = offset.try_into().unwrap();
+                    let size: usize = size.try_into().unwrap();
+                    let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
+                    codec.inner_codecs.decode_into(
+                        encoded_chunk.into(),
+                        &chunk_subset.chunk_shape().expect("nonempty subchunk"),
+                        &mut output_target_subchunk,
+                        &options,
+                        &resources,
+                    )?;
+                }
+
+                Ok::<_, CodecError>(())
+            };
+
+            (0..num_chunks)
+                .concurrent_limit(shard_concurrent_limit)
+                .try_for_each(decode_chunk)?;
+
+            Ok(())
+        }
+
         let encoded_shard = input.into_bytes(options, resources)?;
         let shard_shape_u64: &[u64] = bytemuck::must_cast_slice(shape);
-        if output_target.shape() != shard_shape_u64 {
-            // Subchunks are placed by their position in the shard, which needs a target with the shard shape
-            let decoded = self.decode(encoded_shard, shape, options, resources)?;
-            return decode_into_array_bytes_target(&decoded, output_target);
+        if output_target.shape() == shard_shape_u64 {
+            return decode_into_shaped(
+                self,
+                &encoded_shard,
+                shape,
+                output_target,
+                *options,
+                resources,
+            );
         }
-        let data_type = self.data_type();
-        let fill_value = &self.fill_value;
-
-        let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let num_chunks = chunks_per_shard
-            .iter()
-            .map(|i| usize::try_from(i.get()).unwrap())
-            .product::<usize>();
-
-        let shard_index = self.decode_index(
-            &encoded_shard,
-            chunks_per_shard.as_slice(),
-            options,
-            resources,
-        )?;
-
-        // Calc self/internal concurrent limits
-        let (shard_concurrent_limit, resources) = split_compute_resources(
-            resources,
-            &self.recommended_concurrency(shape)?,
-            &self
-                .inner_codecs
-                .recommended_concurrency(&self.subchunk_shape)?,
-        );
-
-        let subchunk_grid = subchunk_grid(shape, &self.subchunk_shape)?;
-        let decode_chunk = |chunk_index: usize| {
-            let chunk_subset = subchunk_subset(&subchunk_grid, chunk_index);
-
-            // SAFETY: subchunks represent disjoint array subsets
-            let mut output_target_subchunk =
-                unsafe { output_target.subdivide(chunk_subset.clone()) }?;
-
-            // Read the offset/size
-            let offset = shard_index[chunk_index * 2];
-            let size = shard_index[chunk_index * 2 + 1];
-            if offset == u64::MAX && size == u64::MAX {
-                copy_fill_value_into(data_type, fill_value, &mut output_target_subchunk)?;
-            } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
-                return Err(CodecError::Other(
-                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                        .to_string(),
-                ));
-            } else {
-                let offset: usize = offset.try_into().unwrap();
-                let size: usize = size.try_into().unwrap();
-                let encoded_chunk = encoded_shard.clone().slice(offset..offset + size);
-                self.inner_codecs.decode_into(
-                    encoded_chunk.into(),
-                    &chunk_subset.chunk_shape().expect("nonempty subchunk"),
-                    &mut output_target_subchunk,
-                    options,
-                    &resources,
-                )?;
-            }
-
-            Ok::<_, CodecError>(())
-        };
-
-        (0..num_chunks)
-            .concurrent_limit(shard_concurrent_limit)
-            .try_for_each(decode_chunk)?;
-
-        Ok(())
+        if let Some(mut target) = output_target.reshaped(shard_shape_u64) {
+            return decode_into_shaped(
+                self,
+                &encoded_shard,
+                shape,
+                &mut target,
+                *options,
+                resources,
+            );
+        }
+        // Subchunks are placed by their position in the shard, which needs a target with the shard shape
+        let decoded = self.decode(encoded_shard, shape, options, resources)?;
+        decode_into_array_bytes_target(&decoded, output_target)
     }
 
     fn partial_decoder(

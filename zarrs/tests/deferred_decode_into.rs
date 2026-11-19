@@ -1001,3 +1001,377 @@ fn packbits_padding_retains_ordinary_producer_route() {
         assert_eq!(calls[0].representation, BytesRepresentation::FixedSize(9));
     }
 }
+
+fn assert_direct_calls_within_output(
+    calls: &Arc<Mutex<Vec<Call>>>,
+    expected_calls: usize,
+    output: &[u8],
+) {
+    let range = (output.as_ptr() as usize)..(output.as_ptr() as usize + output.len());
+    let recorded: Vec<Call> = calls.lock().unwrap().drain(..).collect();
+    assert_eq!(recorded.len(), expected_calls);
+    for call in recorded {
+        assert!(call.direct, "expected deferred direct decode_into call");
+        assert!(
+            range.contains(&call.pointer),
+            "expected direct target pointer in output buffer ({range:?}), got {:#x}",
+            call.pointer
+        );
+    }
+}
+
+#[cfg(feature = "sharding")]
+#[test]
+fn sharded_reshaped_targets_forward_deferred_placement() {
+    use zarrs::array::codec::ShardingCodecBuilder;
+    use zarrs_codec::UnboundArrayToBytesCodecTraits;
+
+    let calls = Arc::default();
+    let shard_shape = [NonZeroU64::new(4).unwrap(), NonZeroU64::new(2).unwrap()];
+    let sharding =
+        ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
+            .array_to_bytes_codec(Arc::new(BytesCodec::new(Some(endian(false)))))
+            .bytes_to_bytes_codecs(vec![producer(&calls, 1, true, false, false)])
+            .build_arc();
+    let chain = bind(&CodecChain::new(vec![], sharding.clone(), vec![]));
+    let sharding_bound = sharding
+        .with_context(
+            data_type::uint16(),
+            Some(FillValue::from(0u16)),
+            &CodecSpecificOptions::default(),
+        )
+        .unwrap();
+
+    let expected: Vec<u8> = (0u16..8).flat_map(u16::to_ne_bytes).collect();
+    let encoded = chain
+        .encode(
+            ArrayBytes::new_flen(expected.clone()),
+            &shard_shape,
+            &CodecOptions::default(),
+            &ComputeResources::default(),
+        )
+        .unwrap()
+        .into_vec();
+
+    // CodecChain (with empty array-to-array) and ShardingCodecBound reshape compatible flat targets
+    for codec in [chain.as_ref(), sharding_bound.as_ref()] {
+        let mut output = vec![0u8; expected.len()];
+        {
+            // SAFETY: one non-overlapping view, dropped before reading `output`.
+            let view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut output),
+                    2,
+                    &[8],
+                    ArraySubset::new_with_ranges(&[0..8]),
+                )
+                .unwrap()
+            };
+            codec
+                .decode_into(
+                    CowBytes::Borrowed(&encoded).into(),
+                    &shard_shape,
+                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &CodecOptions::default(),
+                    &ComputeResources::default(),
+                )
+                .unwrap();
+        }
+        assert_eq!(output, expected);
+        assert_direct_calls_within_output(&calls, 2, &output);
+    }
+}
+
+#[cfg(feature = "sharding")]
+#[test]
+fn sharded_partial_decoder_reshaped_target_matches_subset_and_fallback() {
+    use zarrs::array::codec::ShardingCodecBuilder;
+    use zarrs_codec::UnboundArrayToBytesCodecTraits;
+
+    let shard_shape = [NonZeroU64::new(4).unwrap(), NonZeroU64::new(2).unwrap()];
+    let sharding =
+        ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
+            .array_to_bytes_codec(Arc::new(BytesCodec::new(Some(endian(false)))))
+            .build_arc()
+            .with_context(
+                data_type::uint16(),
+                Some(FillValue::from(0u16)),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+
+    let expected: Vec<u8> = (0u16..8).flat_map(u16::to_ne_bytes).collect();
+    let encoded = sharding
+        .encode(
+            ArrayBytes::new_flen(expected.clone()),
+            &shard_shape,
+            &CodecOptions::default(),
+            &ComputeResources::default(),
+        )
+        .unwrap()
+        .into_vec();
+
+    // ShardingPartialDecoder reshapes compatible flat targets for full-shard and single-subchunk subsets
+    let partial_decoder = sharding
+        .clone()
+        .partial_decoder(
+            Arc::new(encoded),
+            &shard_shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )
+        .unwrap();
+    for (subset, expected_slice) in [
+        (ArraySubset::new_with_ranges(&[0..4, 0..2]), &expected[..]),
+        (ArraySubset::new_with_ranges(&[2..4, 0..2]), &expected[8..]),
+    ] {
+        let mut output = vec![0u8; expected_slice.len()];
+        let len = u64::try_from(output.len() / 2).unwrap();
+        {
+            // SAFETY: one non-overlapping view, dropped before reading `output`.
+            let view = unsafe {
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut output),
+                    2,
+                    &[len],
+                    ArraySubset::new_with_ranges(&[0..len]),
+                )
+                .unwrap()
+            };
+            partial_decoder
+                .partial_decode_into(
+                    &subset,
+                    &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                    &CodecOptions::default(),
+                    &Resources::default(),
+                )
+                .unwrap();
+        }
+        assert_eq!(output, expected_slice);
+    }
+
+    // Non-reshapable strided target with mismatched shape still falls back cleanly and preserves sentinels
+    let mut strided = vec![0xa5u8; 4 * 4 * 2];
+    {
+        // SAFETY: one non-overlapping view, dropped before reading `strided`.
+        let view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut strided),
+                2,
+                &[4, 4],
+                ArraySubset::new_with_ranges(&[0..4, 0..1]),
+            )
+            .unwrap()
+        };
+        partial_decoder
+            .partial_decode_into(
+                &ArraySubset::new_with_ranges(&[2..4, 0..2]),
+                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
+            .unwrap();
+    }
+    for row in 0..4usize {
+        for col in 0..4usize {
+            let offset = (row * 4 + col) * 2;
+            let val = if col == 0 {
+                &expected[8 + row * 2..8 + (row + 1) * 2]
+            } else {
+                &[0xa5, 0xa5]
+            };
+            assert_eq!(&strided[offset..offset + 2], val);
+        }
+    }
+}
+
+#[cfg(all(feature = "sharding", feature = "async"))]
+#[tokio::test]
+async fn async_sharded_partial_decoder_reshaped_target_matches_subset() {
+    use zarrs::array::codec::ShardingCodecBuilder;
+    use zarrs_codec::UnboundArrayToBytesCodecTraits;
+
+    let shard_shape = [NonZeroU64::new(4).unwrap(), NonZeroU64::new(2).unwrap()];
+    let sharding =
+        ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
+            .array_to_bytes_codec(Arc::new(BytesCodec::new(Some(endian(false)))))
+            .build_arc()
+            .with_context(
+                data_type::uint16(),
+                Some(FillValue::from(0u16)),
+                &CodecSpecificOptions::default(),
+            )
+            .unwrap();
+
+    let expected: Vec<u8> = (0u16..8).flat_map(u16::to_ne_bytes).collect();
+    let encoded = sharding
+        .encode(
+            ArrayBytes::new_flen(expected.clone()),
+            &shard_shape,
+            &CodecOptions::default(),
+            &ComputeResources::default(),
+        )
+        .unwrap()
+        .into_vec();
+
+    let async_partial_decoder = sharding
+        .async_partial_decoder(
+            Arc::new(encoded),
+            &shard_shape,
+            &CodecOptions::default(),
+            &Resources::default(),
+        )
+        .await
+        .unwrap();
+    let mut output = vec![0u8; expected.len()];
+    {
+        // SAFETY: one non-overlapping view, dropped before reading `output`.
+        let view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut output),
+                2,
+                &[8],
+                ArraySubset::new_with_ranges(&[0..8]),
+            )
+            .unwrap()
+        };
+        async_partial_decoder
+            .partial_decode_into(
+                &ArraySubset::new_with_ranges(&[0..4, 0..2]),
+                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &CodecOptions::default(),
+                &Resources::default(),
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn retrieve_multi_chunk_reshaped_target_forwards_deferred_placement() {
+    use zarrs::array::ArrayBuilder;
+    use zarrs_storage::store::MemoryStore;
+
+    let calls = Arc::default();
+    let array = ArrayBuilder::new(vec![4, 2], vec![2, 2], data_type::uint16(), 0u16)
+        .array_to_bytes_codec(Arc::new(BytesCodec::new(Some(endian(false)))))
+        .bytes_to_bytes_codecs(vec![producer(&calls, 1, true, false, false)])
+        .build(Arc::new(MemoryStore::default()), "/multi_chunk")
+        .unwrap();
+    array
+        .store_array_subset(
+            &array.subset_all(),
+            (0u16..8).collect::<Vec<_>>(),
+            &Resources::default(),
+        )
+        .unwrap();
+
+    let expected: Vec<u8> = (0u16..8).flat_map(u16::to_ne_bytes).collect();
+    let mut output = vec![0u8; expected.len()];
+    {
+        // SAFETY: one non-overlapping view, dropped before reading `output`.
+        let view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut output),
+                2,
+                &[8],
+                ArraySubset::new_with_ranges(&[0..8]),
+            )
+            .unwrap()
+        };
+        array
+            .retrieve_array_subset_into(
+                &ArraySubset::new_with_ranges(&[0..4, 0..2]),
+                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &Resources::default(),
+            )
+            .unwrap();
+    }
+    assert_eq!(output, expected);
+    assert_direct_calls_within_output(&calls, 2, &output);
+
+    // Non-reshapable strided target with mismatched shape still falls back cleanly and preserves sentinels
+    let mut strided = vec![0xa5u8; 2 * 4 * 2];
+    {
+        // SAFETY: one non-overlapping view, dropped before reading `strided`.
+        let view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut strided),
+                2,
+                &[2, 4],
+                ArraySubset::new_with_ranges(&[0..2, 0..2]),
+            )
+            .unwrap()
+        };
+        array
+            .retrieve_array_subset_into(
+                &ArraySubset::new_with_ranges(&[0..4, 0..1]),
+                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &Resources::default(),
+            )
+            .unwrap();
+    }
+    let col0_expected = [0u16, 2, 4, 6];
+    let mut idx = 0;
+    for row in 0..2usize {
+        for col in 0..4usize {
+            let offset = (row * 4 + col) * 2;
+            let expected_bytes = if col < 2 {
+                let bytes = col0_expected[idx].to_ne_bytes();
+                idx += 1;
+                bytes
+            } else {
+                [0xa5, 0xa5]
+            };
+            assert_eq!(&strided[offset..offset + 2], &expected_bytes);
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn async_retrieve_multi_chunk_reshaped_target_forwards_deferred_placement() {
+    use zarrs::array::ArrayBuilder;
+    use zarrs_storage::store::AsyncMemoryStore;
+
+    let calls = Arc::default();
+    let array = ArrayBuilder::new(vec![4, 2], vec![2, 2], data_type::uint16(), 0u16)
+        .array_to_bytes_codec(Arc::new(BytesCodec::new(Some(endian(false)))))
+        .bytes_to_bytes_codecs(vec![producer(&calls, 1, true, false, false)])
+        .build(Arc::new(AsyncMemoryStore::new()), "/multi_chunk_async")
+        .unwrap();
+    array
+        .async_store_array_subset(
+            &array.subset_all(),
+            (0u16..8).collect::<Vec<_>>(),
+            &Resources::default(),
+        )
+        .await
+        .unwrap();
+
+    let expected: Vec<u8> = (0u16..8).flat_map(u16::to_ne_bytes).collect();
+    let mut output = vec![0u8; expected.len()];
+    {
+        // SAFETY: one non-overlapping view, dropped before reading `output`.
+        let view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut output),
+                2,
+                &[8],
+                ArraySubset::new_with_ranges(&[0..8]),
+            )
+            .unwrap()
+        };
+        array
+            .async_retrieve_array_subset_into(
+                &ArraySubset::new_with_ranges(&[0..4, 0..2]),
+                &mut ArrayBytesDecodeIntoTarget::Fixed(view),
+                &Resources::default(),
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(output, expected);
+    assert_direct_calls_within_output(&calls, 2, &output);
+}
