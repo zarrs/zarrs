@@ -10,10 +10,10 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::{BytesCodec, CodecChain};
 use zarrs::array::{ArraySubset, Endianness, data_type};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoInput, ArrayBytesFixedDisjointView, ArrayBytesTarget,
-    ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecDecodeInto,
-    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, ComputeResources, CowBytes, Resources, UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayToBytesCodecTraits,
+    BytesDecodeInput, BytesRepresentation, BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    ComputeResources, CowBytes, Resources, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::FillValue;
 use zarrs_metadata::Configuration;
@@ -231,7 +231,7 @@ fn run(chain: &dyn ArrayToBytesCodecTraits, padded: bool) -> (Vec<u8>, usize) {
         };
         chain
             .decode_into(
-                ArrayBytesDecodeIntoInput::from(encoded),
+                BytesDecodeInput::from(encoded),
                 &shape,
                 &mut ArrayBytesTarget::Fixed(view),
                 &options,
@@ -409,7 +409,7 @@ impl ArrayToBytesCodecTraits for PlacingReceiverBound {
     }
     fn decode_into(
         &self,
-        input: ArrayBytesDecodeIntoInput<'_>,
+        input: BytesDecodeInput<'_>,
         shape: &[NonZeroU64],
         output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
@@ -671,7 +671,7 @@ fn unknown_receiver_default_resolves_owned_producer_without_reallocating() {
             };
             receiver
                 .decode_into(
-                    ArrayBytesDecodeIntoInput::Deferred(BytesDecodeSource::new(
+                    BytesDecodeInput::Deferred(BytesDecodeSource::new(
                         producer.as_ref(),
                         encoded,
                         BytesRepresentation::FixedSize(8),
@@ -774,7 +774,7 @@ fn transpose_into_column_major_target_forwards_deferred_placement() {
         };
         chain
             .decode_into(
-                ArrayBytesDecodeIntoInput::from(encoded),
+                BytesDecodeInput::from(encoded),
                 &shape,
                 &mut ArrayBytesTarget::Fixed(view),
                 &options,

@@ -1,8 +1,7 @@
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, ArrayBytesTarget, InvalidBytesLengthError,
-    decode_into_array_bytes_target,
+    ArrayBytesTarget, BytesDecodeInput, InvalidBytesLengthError, decode_into_array_bytes_target,
 };
 
 use pco::standalone::guarantee::file_size;
@@ -353,7 +352,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
 
     fn decode_into(
         &self,
-        input: ArrayBytesDecodeIntoInput<'_>,
+        input: BytesDecodeInput<'_>,
         shape: &[NonZeroU64],
         output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,

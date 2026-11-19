@@ -9,7 +9,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::BytesCodec;
 use zarrs::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArraySubset, data_type};
 use zarrs_codec::{
-    ArrayBytesDecodeIntoInput, CodecOptions, CodecSpecificOptions, ComputeResources, Resources,
+    BytesDecodeInput, CodecOptions, CodecSpecificOptions, ComputeResources, Resources,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::codec_traits::bytes::{
@@ -354,7 +354,7 @@ fn bound_custom_support_decodes_into_output_views() {
         .unwrap();
         codec
             .decode_into(
-                ArrayBytesDecodeIntoInput::Bytes(encoded),
+                BytesDecodeInput::Bytes(encoded),
                 &shape,
                 &mut view.into(),
                 &options,

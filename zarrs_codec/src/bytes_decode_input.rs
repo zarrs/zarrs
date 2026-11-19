@@ -7,20 +7,20 @@ use crate::{
 
 /// Immediate or deferred encoded input for an array-to-bytes decoder.
 #[derive(Debug)]
-pub enum ArrayBytesDecodeIntoInput<'a> {
+pub enum BytesDecodeInput<'a> {
     /// Already-produced encoded bytes.
     Bytes(CowBytes<'a>),
     /// One pending bytes-to-bytes decode.
     Deferred(BytesDecodeSource<'a>),
 }
 
-impl<'a> From<CowBytes<'a>> for ArrayBytesDecodeIntoInput<'a> {
+impl<'a> From<CowBytes<'a>> for BytesDecodeInput<'a> {
     fn from(bytes: CowBytes<'a>) -> Self {
         Self::Bytes(bytes)
     }
 }
 
-impl<'a> ArrayBytesDecodeIntoInput<'a> {
+impl<'a> BytesDecodeInput<'a> {
     /// Resolve this input without cloning its bytes.
     ///
     /// # Errors
