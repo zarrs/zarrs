@@ -134,7 +134,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Codecs
 
-`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`; `ArrayBytesMask` guarantees optional masks are 0 or 1
+`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable, strided decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`; `ArrayBytesMask` guarantees optional masks are 0 or 1
 
 #### General
 - **Breaking**: `ArrayBytes` and `ArrayBytesDecodeIntoTarget` are non-exhaustive, so downstream matches require a wildcard arm

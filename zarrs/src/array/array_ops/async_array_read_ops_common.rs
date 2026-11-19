@@ -106,7 +106,7 @@ where
             );
             // Chunks are placed by their position in the array subset, which needs a target with the array subset shape
             let shape = array_subset.shape();
-            let mut buffers = (output_target.subset().shape() != shape.as_ref())
+            let mut buffers = (output_target.shape() != shape.as_ref())
                 .then(|| FixedDecodeBuffers::with_size_and_depth(fixed.size(), depth, &shape));
             let buffers_target = buffers
                 .as_mut()

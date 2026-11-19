@@ -271,7 +271,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             // Fixed length data (including optional data with fixed length inner data)
             // Subchunks are placed by their position in the subset, which needs a target with the subset shape
             (true, Some(subset), output_target)
-                if output_target.subset().shape() == subset.shape().as_ref() =>
+                if output_target.shape() == subset.shape().as_ref() =>
             {
                 partial_decode_fixed_array_subset_into(
                     &self.input_handle,

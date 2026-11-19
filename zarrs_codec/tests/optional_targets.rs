@@ -50,7 +50,7 @@ fn depth(target: &ArrayBytesDecodeIntoTarget) -> usize {
     match target {
         ArrayBytesDecodeIntoTarget::Fixed(_) => 0,
         ArrayBytesDecodeIntoTarget::Optional(optional) => {
-            assert_eq!(optional.mask().subset(), optional.data().subset());
+            assert_eq!(optional.mask().shape(), optional.data().shape());
             1 + depth(optional.data())
         }
         _ => panic!("unexpected decode target layout"),
@@ -86,7 +86,7 @@ fn optional_targets_nest_masks_outer_to_inner() {
         {
             let mut target = target(&mut data, &mut masks, &subset);
             assert_eq!(depth(&target), depth_);
-            assert_eq!(target.subset(), &subset);
+            assert_eq!(target.shape(), subset.shape());
             assert_eq!(target.num_elements(), 4);
             let source = source(&source_data, &source_masks[..depth_]);
             decode_into_array_bytes_target(&source, &mut target).unwrap();
@@ -109,6 +109,7 @@ fn optional_targets_nest_masks_outer_to_inner() {
 #[test]
 fn subdivided_targets_preserve_structure() {
     let subset = ArraySubset::new_with_ranges(&[1..3, 0..4]);
+    // Subsets of a target are relative to the target
     let left = ArraySubset::new_with_ranges(&[0..2, 0..2]);
     let right = ArraySubset::new_with_ranges(&[0..2, 2..4]);
     let left_data = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -128,7 +129,7 @@ fn subdivided_targets_preserve_structure() {
                 // SAFETY: the left and right subtargets are disjoint.
                 let mut sub = unsafe { target.subdivide(sub_subset.clone()) }.unwrap();
                 assert_eq!(depth(&sub), depth_);
-                assert_eq!(sub.subset().shape(), sub_subset.shape());
+                assert_eq!(sub.shape(), sub_subset.shape());
                 let source = source(sub_data, &sub_masks[..depth_]);
                 decode_into_array_bytes_target(&source, &mut sub).unwrap();
             }
@@ -160,6 +161,7 @@ fn subdivide_rejects_subsets_outside_the_target() {
         let mut data = [0xa5; 24];
         let mut masks = vec![[0xa5; 12]; depth_];
         let target = target(&mut data, &mut masks, &subset);
+        // Subsets are relative to the 2x2 target
         for outside in [
             ArraySubset::new_with_ranges(&[0..3, 0..2]),
             ArraySubset::new_with_ranges(&[0..2, 1..3]),
@@ -206,14 +208,17 @@ fn with_optional_mask_validates_the_mask() {
 
     // Return the error kind, checking that the target and mask are returned unchanged
     let err = |target: ArrayBytesDecodeIntoTarget<'_>, mask: ArrayBytesFixedDisjointView<'_>| {
-        let (target_depth, target_subset) = (depth(&target), target.subset().clone());
-        let mask_subset = mask.subset().clone();
+        let (target_depth, target_shape) = (depth(&target), target.shape().to_vec());
+        let (mask_shape, mask_strides) = (mask.shape().to_vec(), mask.strides().to_vec());
         let error = target.with_optional_mask(mask).map(|_| ()).unwrap_err();
         let kind = error.error().clone();
         let (target, mask) = error.into_parts();
         assert_eq!(depth(&target), target_depth);
-        assert_eq!(target.subset(), &target_subset);
-        assert_eq!(mask.subset(), &mask_subset);
+        assert_eq!(target.shape(), target_shape);
+        assert_eq!(
+            (mask.shape(), mask.strides()),
+            (&*mask_shape, &*mask_strides)
+        );
         kind
     };
     assert!(matches!(
@@ -228,10 +233,25 @@ fn with_optional_mask_validates_the_mask() {
             data_target(data_subset.clone()),
             mask_view(1, &transposed_shape, data_subset.clone())
         ),
-        IncompatibleOptionalMaskError::ArrayShape { .. }
+        IncompatibleOptionalMaskError::Layout { .. }
     ));
+    let offset_err = err(
+        data_target(data_subset.clone()),
+        mask_view(1, &SHAPE, ArraySubset::new_with_ranges(&[0..2, 0..2])),
+    );
+    assert!(matches!(
+        offset_err,
+        IncompatibleOptionalMaskError::Layout {
+            mask_offset: 0,
+            data_offset: 5,
+            ..
+        }
+    ));
+    assert_eq!(
+        offset_err.to_string(),
+        "the optional mask layout (offset 0, strides [4, 1]) does not address the same elements as the data layout (offset 5, strides [4, 1])"
+    );
     for mask_subset in [
-        ArraySubset::new_with_ranges(&[0..2, 0..2]),
         ArraySubset::new_with_ranges(&[1..3, 1..2]),
         ArraySubset::new_with_start_shape(vec![1, 1], vec![0, 2]).unwrap(),
     ] {
@@ -240,9 +260,34 @@ fn with_optional_mask_validates_the_mask() {
                 data_target(data_subset.clone()),
                 mask_view(1, &SHAPE, mask_subset)
             ),
-            IncompatibleOptionalMaskError::Subset { .. }
+            IncompatibleOptionalMaskError::Shape { .. }
         ));
     }
+    // A mask of a different array with the same layout is compatible
+    let mut padded_mask = [0u8; 15];
+    // SAFETY: the mask is the only view of its buffer.
+    let padded_mask_view = unsafe {
+        ArrayBytesFixedDisjointView::new(
+            UnsafeCellSlice::new(&mut padded_mask),
+            1,
+            &[5, 3],
+            ArraySubset::new_with_ranges(&[1..2, 0..3]),
+        )
+    }
+    .unwrap();
+    // SAFETY: the target is the only view of its buffer.
+    let mut row = [0u8; 24];
+    let row_target: ArrayBytesDecodeIntoTarget<'_> = unsafe {
+        ArrayBytesFixedDisjointView::new(
+            UnsafeCellSlice::new(&mut row),
+            2,
+            &[4, 3],
+            ArraySubset::new_with_ranges(&[1..2, 0..3]),
+        )
+    }
+    .unwrap()
+    .into();
+    assert!(row_target.with_optional_mask(padded_mask_view).is_ok());
 
     // Nested masks are validated against the innermost data
     let nested = data_target(data_subset.clone())
@@ -260,10 +305,10 @@ fn with_optional_mask_validates_the_mask() {
     .unwrap();
     assert!(matches!(
         err(nested, outer_mask_view),
-        IncompatibleOptionalMaskError::Subset { .. }
+        IncompatibleOptionalMaskError::Layout { .. }
     ));
 
-    // Empty subsets must match exactly, including their start
+    // Empty views reference no elements, so only their shapes must match
     let empty =
         |start: Vec<u64>, shape: Vec<u64>| ArraySubset::new_with_start_shape(start, shape).unwrap();
     let num_elements = data_target(empty(vec![0, 0], vec![0, 4]))
@@ -271,21 +316,24 @@ fn with_optional_mask_validates_the_mask() {
         .unwrap()
         .num_elements();
     assert_eq!(num_elements, 0);
-    for mask_subset in [empty(vec![3, 0], vec![0, 4]), empty(vec![0, 0], vec![0, 3])] {
-        assert!(matches!(
-            err(
-                data_target(empty(vec![0, 0], vec![0, 4])),
-                mask_view(1, &SHAPE, mask_subset)
-            ),
-            IncompatibleOptionalMaskError::Subset { .. }
-        ));
-    }
+    assert!(
+        data_target(empty(vec![0, 0], vec![0, 4]))
+            .with_optional_mask(mask_view(1, &SHAPE, empty(vec![3, 0], vec![0, 4])))
+            .is_ok()
+    );
+    assert!(matches!(
+        err(
+            data_target(empty(vec![0, 0], vec![0, 4])),
+            mask_view(1, &SHAPE, empty(vec![0, 0], vec![0, 3]))
+        ),
+        IncompatibleOptionalMaskError::Shape { .. }
+    ));
 }
 
 #[test]
 fn with_optional_masks_returns_inputs_on_error() {
     let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
-    let other = ArraySubset::new_with_ranges(&[0..2, 0..2]);
+    let other = ArraySubset::new_with_ranges(&[0..2, 0..1]);
     let mut data = [0u8; 24];
     let mut masks = [[0u8; 12]; 2];
     // SAFETY: each view is the only view of its backing buffer.
@@ -316,11 +364,11 @@ fn with_optional_masks_returns_inputs_on_error() {
         .unwrap_err();
     assert!(matches!(
         error.error(),
-        IncompatibleOptionalMaskError::Subset { .. }
+        IncompatibleOptionalMaskError::Shape { .. }
     ));
     let (target, mask_views) = error.into_parts();
     assert_eq!(depth(&target), 0);
-    assert_eq!(target.subset(), &subset);
-    let mask_subsets: Vec<_> = mask_views.iter().map(|mask| mask.subset()).collect();
-    assert_eq!(mask_subsets, [&subset, &other]);
+    assert_eq!(target.shape(), subset.shape());
+    let mask_shapes: Vec<_> = mask_views.iter().map(|mask| mask.shape()).collect();
+    assert_eq!(mask_shapes, [subset.shape(), other.shape()]);
 }
