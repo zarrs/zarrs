@@ -3,6 +3,7 @@ use std::ffi::c_void;
 
 use dlpark::ffi::{DLDataType, DLDataTypeCode, DLDevice};
 use dlpark::metadata::Dynamic;
+use dlpark::tensor::compact_strides;
 use dlpark::{DlpackFlags, versioned};
 
 use super::element_layout::{ElementLayout, ElementPacking};
@@ -146,6 +147,21 @@ fn expected_num_bytes(
     usize::try_from(layout.byte_offset.checked_add(elements)?).ok()
 }
 
+/// The compact column-major strides (in elements) of `shape`.
+///
+/// Returns [`None`] if a dimension or a stride is not representable as an [`i64`].
+fn f_order_strides(shape: &[u64]) -> Option<Vec<i64>> {
+    // The column-major strides of a shape are the row-major strides of its reverse, reversed
+    let reversed = shape
+        .iter()
+        .rev()
+        .map(|&size| i64::try_from(size).ok())
+        .collect::<Option<Vec<i64>>>()?;
+    let mut strides = compact_strides(&reversed).ok()?;
+    strides.reverse();
+    Some(strides)
+}
+
 impl Tensor<'static> {
     /// Convert this tensor into a read-only, versioned `DLPack` managed tensor.
     ///
@@ -194,9 +210,14 @@ impl Tensor<'static> {
         let unsupported_shape = self.shape().to_vec();
         let layout = self.layout();
         let (dtype, flags) = data_type_to_dlpack(self.data_type(), layout)?;
-        let metadata = Dynamic::compact(self.shape())
-            .prepare()
-            .map_err(|_| TensorError::UnsupportedShape(unsupported_shape.clone()))?;
+        let unsupported = || TensorError::UnsupportedShape(unsupported_shape.clone());
+        let metadata = if self.order().is_reordered(self.shape()) {
+            let strides = f_order_strides(self.shape()).ok_or_else(unsupported)?;
+            Dynamic::new(self.shape(), strides).prepare()
+        } else {
+            Dynamic::compact(self.shape()).prepare()
+        }
+        .map_err(|_| unsupported())?;
 
         // The exported tensor must not describe bytes beyond the end of the buffer
         let expected = expected_num_bytes(self.num_elements(), dtype, layout);
@@ -208,7 +229,7 @@ impl Tensor<'static> {
             });
         }
 
-        let (bytes, _, _) = self.into_parts();
+        let (bytes, ..) = self.into_parts();
         let data = if bytes.is_empty() {
             std::ptr::null_mut()
         } else {
@@ -224,9 +245,10 @@ impl Tensor<'static> {
             .set_flags(flags | DlpackFlags::READ_ONLY)
             .expect("export flags never assert IS_COPIED");
         // SAFETY: the context retains the `'static` bytes at `data` until the managed tensor is
-        // dropped. `dtype`/shape/strides/`byte_offset` describe those bytes as a compact row-major
-        // tensor, and there are enough bytes for its elements. The flags declare shared read-only
-        // storage and any sub-byte padding without asserting exclusive ownership.
+        // dropped. `dtype`/shape/strides/`byte_offset` describe those bytes as a compact tensor in
+        // the tensor's element order, and there are enough bytes for its elements. The flags
+        // declare shared read-only storage and any sub-byte padding without asserting exclusive
+        // ownership.
         let dlpack = unsafe { initialized.finish() };
         dlpack
             .validate_export()
@@ -242,6 +264,27 @@ mod tests {
 
     use super::{ElementLayout, ElementPacking};
     use crate::array::data_type;
+
+    #[test]
+    fn tensor_dlpack_strides() {
+        use crate::array::{ElementOrder, Tensor};
+        let bytes: Vec<u8> = (0..24).collect();
+        let tensor = |order| {
+            Tensor::new(bytes.clone(), data_type::uint8(), vec![2, 3, 4])
+                .with_order(order)
+                .into_dlpack()
+                .unwrap()
+        };
+        for (order, strides) in [
+            (ElementOrder::C, [12i64, 4, 1]),
+            (ElementOrder::F, [1, 2, 6]),
+        ] {
+            let dlpack = tensor(order);
+            let view = dlpack.validate().unwrap();
+            assert_eq!(view.shape(), &[2, 3, 4]);
+            assert_eq!(view.strides().unwrap(), &strides);
+        }
+    }
 
     #[test]
     fn tensor_dlpack_layout_flags() {

@@ -13,7 +13,7 @@ use super::{
     Array, ArrayError, ArraySubsetTraits, AsyncArrayReadOps, AsyncReadableStorageTraits, ChunkGrid,
     CodecOptions, FromArrayBytes, Indexer, recommended_codec_concurrency,
 };
-use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
+use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, ElementOrder};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
     CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
@@ -40,6 +40,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             bytes,
             bytemuck::must_cast_slice(&chunk_shape),
             self.data_type(),
+            ElementOrder::C,
         )
     }
 
@@ -85,7 +86,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 resources,
             )
             .await?;
-        T::from_array_bytes(bytes, &indexer.output_shape(), self.data_type())
+        T::from_array_bytes(
+            bytes,
+            &indexer.output_shape(),
+            self.data_type(),
+            ElementOrder::C,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -122,7 +128,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 resources,
             )
             .await?;
-        T::from_array_bytes(bytes, &array_subset_shape, self.data_type())
+        T::from_array_bytes(
+            bytes,
+            &array_subset_shape,
+            self.data_type(),
+            ElementOrder::C,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -156,6 +167,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             bytes,
             bytemuck::must_cast_slice(&chunk_shape),
             self.data_type(),
+            ElementOrder::C,
         )
         .map(Some)
     }

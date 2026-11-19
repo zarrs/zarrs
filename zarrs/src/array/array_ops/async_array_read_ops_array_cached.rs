@@ -18,7 +18,7 @@ use crate::array::chunk_cache::{
     async_retrieve_chunk_overlap_into, fill_value_bytes,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
-use crate::array::{ArrayBytes, ArrayIndices, DataType};
+use crate::array::{ArrayBytes, ArrayIndices, DataType, ElementOrder};
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
@@ -309,6 +309,7 @@ where
             bytes,
             bytemuck::must_cast_slice(&shape),
             self.array().data_type(),
+            ElementOrder::C,
         )
     }
 
@@ -354,7 +355,12 @@ where
             resources,
         )
         .await?;
-        T::from_array_bytes_arc(bytes, &indexer.output_shape(), self.array().data_type())
+        T::from_array_bytes_arc(
+            bytes,
+            &indexer.output_shape(),
+            self.array().data_type(),
+            ElementOrder::C,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -392,7 +398,12 @@ where
             resources,
         )
         .await?;
-        T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
+        T::from_array_bytes_arc(
+            bytes,
+            &array_subset.shape(),
+            self.array().data_type(),
+            ElementOrder::C,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -418,6 +429,7 @@ where
             bytes,
             bytemuck::must_cast_slice(&shape),
             self.array().data_type(),
+            ElementOrder::C,
         )
         .map(Some)
     }
