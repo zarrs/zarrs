@@ -352,7 +352,14 @@ fn decode_into_view(
             InvalidBytesLengthError::new(view.data_type_size(), element_type.size()).into(),
         );
     }
-    let expected_len = usize::try_from(view.num_elements()).unwrap() * encoded_element_type.size();
+    let Some(expected_len) = usize::try_from(view.num_elements())
+        .ok()
+        .and_then(|num_elements| num_elements.checked_mul(encoded_element_type.size()))
+    else {
+        return Err(CodecError::from(
+            "fixedscaleoffset encoded byte length overflows usize",
+        ));
+    };
     if encoded.len() != expected_len {
         return Err(InvalidBytesLengthError::new(encoded.len(), expected_len).into());
     }
