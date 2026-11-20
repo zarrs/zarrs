@@ -318,11 +318,16 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
                     InvalidBytesLengthError::new(view.data_type_size(), target_size).into(),
                 );
             }
-            let num_elements = usize::try_from(view.num_elements()).unwrap();
-            if bytes.len() != num_elements * source_size {
-                return Err(
-                    InvalidBytesLengthError::new(bytes.len(), num_elements * source_size).into(),
-                );
+            let Some(num_elements) = usize::try_from(view.num_elements()).ok() else {
+                return Err(CodecError::from("cast_value element count overflows usize"));
+            };
+            let Some(expected_source_len) = num_elements.checked_mul(source_size) else {
+                return Err(CodecError::from(
+                    "cast_value encoded byte length overflows usize",
+                ));
+            };
+            if bytes.len() != expected_source_len {
+                return Err(InvalidBytesLengthError::new(bytes.len(), expected_source_len).into());
             }
             let context = CastBytesContext {
                 source_data_type: &self.encoded_data_type,
@@ -338,12 +343,18 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
             // A bulk kernel casts straight into the regions of the view
             if let (Some(kernel), None) = (&context.kernel, context.scalar_map) {
                 let mut source: &[u8] = &bytes;
+                let Some(region_source_len) =
+                    view.num_contiguous_elements().checked_mul(source_size)
+                else {
+                    return Err(CodecError::from(
+                        "cast_value encoded byte length overflows usize",
+                    ));
+                };
                 // SAFETY: each region is cast from the next source elements, and `cast_into` writes every byte of its output on success.
                 // There is a source element for every element of the view, so every region is initialised.
                 return unsafe {
                     view.for_each_region_mut(|region| {
-                        let (region_source, rest) =
-                            source.split_at(region.len() / target_size * source_size);
+                        let (region_source, rest) = source.split_at(region_source_len);
                         source = rest;
                         kernel
                             .cast_into(region_source, region)
@@ -353,8 +364,19 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
             }
 
             // Otherwise elements are cast a block at a time into a buffer that stays in cache, and copied into the regions of the view
+            let block_elements = num_elements.min(BLOCK_ELEMENTS);
+            let Some(block_source_len) = block_elements.checked_mul(source_size) else {
+                return Err(CodecError::from(
+                    "cast_value block encoded byte length overflows usize",
+                ));
+            };
+            let Some(block_target_len) = block_elements.checked_mul(target_size) else {
+                return Err(CodecError::from(
+                    "cast_value block decoded byte length overflows usize",
+                ));
+            };
             let mut source: &[u8] = &bytes;
-            let mut cast = Vec::with_capacity(num_elements.min(BLOCK_ELEMENTS) * target_size);
+            let mut cast = Vec::with_capacity(block_target_len);
             let mut cast_position = 0;
             // SAFETY: every region is written from the cast elements in order.
             // There is a source element for every element of the view, and each block is checked to cast to one element per source element, so the cast elements cover every region.
@@ -362,14 +384,15 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
                 view.for_each_region_mut(|mut region| {
                     while !region.is_empty() {
                         if cast_position == cast.len() {
-                            let (block, rest) =
-                                source.split_at(source.len().min(BLOCK_ELEMENTS * source_size));
+                            let (block, rest) = source.split_at(source.len().min(block_source_len));
                             source = rest;
                             cast.clear();
                             cast_position = 0;
                             cast_bytes_into(block, &context, &mut cast)?;
                             if block.is_empty()
-                                || cast.len() != block.len() / source_size * target_size
+                                || (block.len() / source_size)
+                                    .checked_mul(target_size)
+                                    .is_none_or(|expected| cast.len() != expected)
                             {
                                 return Err(CodecError::Other(
                                     "cast_value cast an unexpected number of bytes".to_string(),
