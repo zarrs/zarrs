@@ -332,4 +332,78 @@ mod tests {
 
         assert_eq!(codec.encoded_fill_value(), Some(&FillValue::from(3u8)));
     }
+
+    #[test]
+    fn codec_fixedscaleoffset_rejects_unaligned_bytes() {
+        use unsafe_cell_slice::UnsafeCellSlice;
+        use zarrs_codec::ArrayBytesTarget;
+
+        use crate::array::ArrayBytesFixedDisjointView;
+
+        const JSON: &str = r#"{ "offset": 0, "scale": 10, "dtype": "<f8", "astype": "<i4" }"#;
+        let shape = [NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let codec_configuration: FixedScaleOffsetCodecConfiguration =
+            serde_json::from_str(JSON).unwrap();
+        let codec =
+            Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
+                .with_context(
+                    data_type::float64(),
+                    Some(FillValue::from(0.0f64)),
+                    &CodecSpecificOptions::default(),
+                )
+                .unwrap();
+
+        let options = CodecOptions::default();
+        let resources = ComputeResources::default();
+
+        // Trailing unaligned bytes are rejected by encode and decode
+        assert!(
+            codec
+                .encode(
+                    ArrayBytes::from(vec![0u8; 16 * 8 + 1]),
+                    &shape,
+                    &options,
+                    &resources
+                )
+                .is_err()
+        );
+        assert!(
+            codec
+                .decode(
+                    ArrayBytes::from(vec![0u8; 16 * 4 + 1]),
+                    &shape,
+                    &options,
+                    &resources
+                )
+                .is_err()
+        );
+
+        // Trailing unaligned bytes are rejected by decode_into for both contiguous and strided views
+        for strides in [[4, 1], [1, 4]] {
+            let mut output = vec![0xa5u8; 16 * 8];
+            // SAFETY: sole view of `output`, with disjoint element indices.
+            let view = unsafe {
+                ArrayBytesFixedDisjointView::new_strided(
+                    UnsafeCellSlice::new(&mut output),
+                    8,
+                    0,
+                    &[4, 4],
+                    &strides,
+                )
+            }
+            .unwrap();
+            assert!(
+                codec
+                    .decode_into(
+                        ArrayBytes::from(vec![0u8; 16 * 4 + 1]),
+                        &shape,
+                        &mut ArrayBytesTarget::Fixed(view),
+                        &options,
+                        &resources,
+                    )
+                    .is_err()
+            );
+            assert!(output.iter().all(|&b| b == 0xa5));
+        }
+    }
 }

@@ -315,6 +315,13 @@ fn transform_to_vec(
     scale: f64,
     transform_fn: TransformSliceFn,
 ) -> Result<Vec<u8>, CodecError> {
+    if !bytes.len().is_multiple_of(from.size()) {
+        return Err(CodecError::Other(format!(
+            "fixedscaleoffset input length {} is not a multiple of the element size {}",
+            bytes.len(),
+            from.size(),
+        )));
+    }
     let num_elements = bytes.len() / from.size();
     let Some(len) = num_elements.checked_mul(to.size()) else {
         return Err(CodecError::from(
