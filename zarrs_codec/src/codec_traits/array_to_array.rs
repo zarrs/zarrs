@@ -319,6 +319,8 @@ pub trait ArrayToArrayCodecTraits: ArrayToArrayCodecGeometryTraits + core::fmt::
     /// The default implementation decodes with [`decode`](Self::decode) and copies the result into `target`.
     /// Codecs that transform the bytes of elements on decode can write into `target` directly instead.
     ///
+    /// Implementations must satisfy the target's [output requirements](ArrayBytesTarget#output-requirements).
+    ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or `bytes` is incompatible with the encoded representation or `target`.
     /// `target` may have been partially written.
