@@ -63,6 +63,8 @@ fn padding_bits(packed_bits: u64) -> u8 {
 
 /// The sizes of the packed elements of an array, which are checked for overflow.
 pub(super) struct PackBitsSizes {
+    /// The number of elements in the decoded array.
+    pub(super) num_elements: u64,
     /// The size of the decoded elements in bytes.
     pub(super) decoded_bytes: u64,
     /// The size of the encoded bytes, including the padding encoding byte.
@@ -302,6 +304,7 @@ impl PackBitsCodecBound {
             .checked_add(usize::from(padding_byte.is_some()))
             .ok_or("the encoded chunk size in bytes overflows usize")?;
         Ok(PackBitsSizes {
+            num_elements,
             decoded_bytes,
             encoded_bytes,
             packed: packed_start..packed_start + packed_bytes,
@@ -478,12 +481,10 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         if let Some((index, _)) = sizes.padding_byte {
             sizes.check_padding_byte(bytes[index])?;
         }
-        if view.num_elements() * data_type_size as u64 != sizes.decoded_bytes {
-            return Err(InvalidNumberOfElementsError::new(
-                view.num_elements(),
-                sizes.decoded_bytes / data_type_size as u64,
-            )
-            .into());
+        if view.num_elements() != sizes.num_elements {
+            return Err(
+                InvalidNumberOfElementsError::new(view.num_elements(), sizes.num_elements).into(),
+            );
         }
         let packed_elements = &bytes[sizes.packed];
 
