@@ -66,6 +66,11 @@ impl CastValueCodec {
         match configuration {
             CastValueCodecConfiguration::V1(configuration) => {
                 let target_data_type = DataType::from_metadata(&configuration.data_type)?;
+                if !matches!(&target_data_type, DataType::Fixed(dt) if dt.size() > 0) {
+                    return Err(PluginCreateError::Other(format!(
+                        "cast_value requires non-zero fixed-size data types, got {target_data_type}"
+                    )));
+                }
                 let target = target_data_type
                     .codec_castvalue()
                     .map_err(|err| PluginCreateError::Other(err.to_string()))?;
@@ -122,6 +127,18 @@ impl UnboundArrayToArrayCodecTraits for CastValueCodec {
         fill_value: Option<FillValue>,
         _codec_specific_options: &CodecSpecificOptions,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecCreateError> {
+        if !matches!(&data_type, DataType::Fixed(dt) if dt.size() > 0) {
+            return Err(CodecCreateError::UnsupportedDataType(
+                data_type,
+                "cast_value".to_string(),
+            ));
+        }
+        if !matches!(&self.target_data_type, DataType::Fixed(dt) if dt.size() > 0) {
+            return Err(CodecCreateError::UnsupportedDataType(
+                self.target_data_type.clone(),
+                "cast_value".to_string(),
+            ));
+        }
         let cast_value = data_type.codec_castvalue_arc()?;
         let encoded_cast_value = self.target_data_type.codec_castvalue_arc()?;
         let (source, target) = (&*cast_value, &*encoded_cast_value);
@@ -312,6 +329,12 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
         {
             let source_size = source.size();
             let target_size = target_dt.size();
+            if source_size == 0 || target_size == 0 {
+                return Err(CodecError::Other(
+                    "cast_value requires non-zero fixed-size source and target data types"
+                        .to_string(),
+                ));
+            }
             let bytes = bytes.into_fixed()?;
             if view.data_type_size() != target_size {
                 return Err(
@@ -549,13 +572,23 @@ fn cast_bytes_into(
     };
     let source_size = source.size();
     let target_size = target.size();
+    if source_size == 0 || target_size == 0 {
+        return Err(CodecError::Other(
+            "cast_value requires non-zero fixed-size source and target data types".to_string(),
+        ));
+    }
     if !bytes.len().is_multiple_of(source_size) {
         return Err(CodecError::Other(
             "cast_value source bytes are not element aligned".to_string(),
         ));
     }
     let num_elements = bytes.len() / source_size;
-    output.reserve(num_elements * target_size);
+    let Some(output_len) = num_elements.checked_mul(target_size) else {
+        return Err(CodecError::from(
+            "cast_value decoded byte length overflows usize",
+        ));
+    };
+    output.reserve(output_len);
     if let Some(scalar_map) = context.scalar_map {
         for source_bytes in bytes.chunks_exact(source_size) {
             if let Some(mapped) = scalar_map.get(source_bytes) {
@@ -669,4 +702,124 @@ fn validate_wrap_mode(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::any::Any;
+    use std::borrow::Cow;
+
+    use zarrs_data_type::codec_traits::cast_value::{CastValueError, CastValueScalar};
+    use zarrs_data_type::{
+        DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FixedDataTypeTraits,
+    };
+    use zarrs_metadata::FillValueMetadata;
+    use zarrs_plugin::ExtensionName;
+
+    use super::*;
+    use crate::array::data_type;
+
+    #[derive(Debug)]
+    struct ZeroSizedCastValue;
+
+    impl ExtensionName for ZeroSizedCastValue {
+        fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+            Some(Cow::Borrowed("test.zero_sized_cast_value"))
+        }
+    }
+
+    impl FixedDataTypeTraits for ZeroSizedCastValue {
+        fn size(&self) -> usize {
+            0
+        }
+    }
+
+    impl DataTypeTraits for ZeroSizedCastValue {
+        fn into_data_type(self: Arc<Self>) -> DataType {
+            DataType::Fixed(self)
+        }
+
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
+            Configuration::default()
+        }
+
+        fn fill_value(
+            &self,
+            _metadata: &FillValueMetadata,
+            _version: ZarrVersion,
+        ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+            Ok(FillValue::new(Vec::new()))
+        }
+
+        fn metadata_fill_value(
+            &self,
+            _fill_value: &FillValue,
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            Ok(FillValueMetadata::Null)
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    impl CastValueDataTypeTraits for ZeroSizedCastValue {
+        fn cast_value_is_integral(&self) -> bool {
+            true
+        }
+
+        fn cast_value_read(&self, _bytes: &[u8]) -> Result<CastValueScalar, CastValueError> {
+            Ok(CastValueScalar::Unsigned(0))
+        }
+
+        fn cast_value_write(
+            &self,
+            _value: CastValueScalar,
+            _rounding: DataTypeCastValueRoundingMode,
+            _out_of_range: Option<DataTypeCastValueOutOfRangeMode>,
+            _output: &mut Vec<u8>,
+        ) -> Result<(), CastValueError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn cast_value_rejects_zero_sized_fixed_data_type() {
+        let zero_dt = DataType::Fixed(Arc::new(ZeroSizedCastValue));
+        let u8_dt = data_type::uint8();
+        let u8_trait = u8_dt.codec_castvalue().unwrap();
+
+        let configuration: CastValueCodecConfiguration =
+            serde_json::from_str(r#"{"data_type": "uint8"}"#).unwrap();
+        let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
+        assert!(matches!(
+            codec.with_context(zero_dt.clone(), None, &CodecSpecificOptions::default()),
+            Err(CodecCreateError::UnsupportedDataType(..))
+        ));
+
+        let mut out = Vec::new();
+        let ctx_zero_src = CastBytesContext {
+            source_data_type: &zero_dt,
+            target_data_type: &u8_dt,
+            source: &ZeroSizedCastValue,
+            target: u8_trait,
+            scalar_map: None,
+            rounding: DataTypeCastValueRoundingMode::NearestEven,
+            out_of_range: None,
+            kernel: None,
+        };
+        assert!(cast_bytes_into(&[], &ctx_zero_src, &mut out).is_err());
+
+        let ctx_zero_dst = CastBytesContext {
+            source_data_type: &u8_dt,
+            target_data_type: &zero_dt,
+            source: u8_trait,
+            target: &ZeroSizedCastValue,
+            scalar_map: None,
+            rounding: DataTypeCastValueRoundingMode::NearestEven,
+            out_of_range: None,
+            kernel: None,
+        };
+        assert!(cast_bytes_into(&[1u8], &ctx_zero_dst, &mut out).is_err());
+    }
 }

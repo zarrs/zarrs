@@ -112,11 +112,11 @@ impl<T: ?Sized> CastValueCodecPartial<T> {
 }
 
 fn require_fixed(data_type: &DataType) -> Result<(), CodecError> {
-    if data_type.is_fixed() {
+    if matches!(data_type, DataType::Fixed(dt) if dt.size() > 0) {
         Ok(())
     } else {
         Err(CodecError::Other(format!(
-            "cast_value requires fixed-size data types, got {data_type}"
+            "cast_value requires non-zero fixed-size data types, got {data_type}"
         )))
     }
 }
