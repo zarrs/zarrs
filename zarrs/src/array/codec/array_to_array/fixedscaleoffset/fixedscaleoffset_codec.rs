@@ -168,110 +168,112 @@ fn get_element_type(
     Ok(fso.fixedscaleoffset_element_type())
 }
 
-/// Bind `$T` to the Rust type of the `$element_type` elements, and optionally `$F` to the float type that `numpy` computes in for them (`f32` for `float32`, otherwise `f64`).
+/// Bind `$T` to the Rust type of the `$element_type` elements, and optionally `$F` to the float type that `numpy` computes in for them (`f32` for `float32`, otherwise `f64`) or `const $IS_INT` to whether `$T` is an integer type.
 macro_rules! with_element_type {
-    ($element_type:expr, $T:ident $(, $F:ident)?, $body:block) => {
+    ($element_type:expr, $T:ident $(, float: $F:ident)? $(, is_int: $IS_INT:ident)?, $body:block) => {
         match $element_type {
             FixedScaleOffsetElementType::I8 => {
                 type $T = i8;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = true;)?
                 $body
             }
             FixedScaleOffsetElementType::I16 => {
                 type $T = i16;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = true;)?
                 $body
             }
             FixedScaleOffsetElementType::I32 => {
                 type $T = i32;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = true;)?
                 $body
             }
             FixedScaleOffsetElementType::I64 => {
                 type $T = i64;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = true;)?
                 $body
             }
             FixedScaleOffsetElementType::U8 => {
                 type $T = u8;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = true;)?
                 $body
             }
             FixedScaleOffsetElementType::U16 => {
                 type $T = u16;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = true;)?
                 $body
             }
             FixedScaleOffsetElementType::U32 => {
                 type $T = u32;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = true;)?
                 $body
             }
             FixedScaleOffsetElementType::U64 => {
                 type $T = u64;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = true;)?
                 $body
             }
             FixedScaleOffsetElementType::F32 => {
                 type $T = f32;
                 $(type $F = f32;)?
+                $(const $IS_INT: bool = false;)?
                 $body
             }
             FixedScaleOffsetElementType::F64 => {
                 type $T = f64;
                 $(type $F = f64;)?
+                $(const $IS_INT: bool = false;)?
                 $body
             }
         }
     };
 }
 
-/// Transform elements of `from` to elements of `to` with `$transform`, a function of an element `x` and `offset` and `scale` (`$offset` and `$scale` as the float type `x` is computed in).
+/// Transform a slice of encoded/decoded element bytes into a destination slice of the same element count.
+type TransformSliceFn = fn(&[u8], &mut [MaybeUninit<u8>], f64, f64);
+
+/// Select a monomorphised slice transform function from `$from` to `$to` using `$transform`, a function of an element `x` and `offset` and `scale` (`$offset` and `$scale` as the float type `x` is computed in).
 ///
 /// As in `numpy`, elements are computed in [`f32`] if `from` is `float32`, otherwise [`f64`].
 /// Integer elements of `to` are rounded to the nearest integer (ties to even) and saturated to the range of the type.
-macro_rules! transform {
-    ($bytes:expr, $from:expr, $to:expr, $offset:expr, $scale:expr, |$x:ident, $o:ident, $s:ident| $transform:expr) => {{
-        let bytes: &[u8] = $bytes;
-        let to_integer = !matches!(
-            $to,
-            FixedScaleOffsetElementType::F32 | FixedScaleOffsetElementType::F64
-        );
-        with_element_type!($from, T, F, {
-            let ($o, $s) = ($offset as F, $scale as F);
-            let elements = bytes.as_chunks::<{ size_of::<T>() }>().0;
-            with_element_type!($to, U, {
-                let len = elements
-                    .len()
-                    .checked_mul(size_of::<U>())
-                    .expect("capacity overflow");
-                let mut out: Vec<u8> = Vec::with_capacity(len);
-                // Writing through a pre-sized slice (rather than pushing each element) lets the loop vectorise
-                let transformed = out.spare_capacity_mut()[..len]
-                    .as_chunks_mut::<{ size_of::<U>() }>()
-                    .0;
-                for (transformed, element) in std::iter::zip(transformed, elements) {
-                    let $x = <T>::from_ne_bytes(*element) as F;
-                    let value = $transform;
-                    let value = if to_integer {
-                        value.round_ties_even()
-                    } else {
-                        value
-                    };
-                    *transformed = (value as U).to_ne_bytes().map(MaybeUninit::new);
+macro_rules! transform_slice_fn {
+    ($from:expr, $to:expr, |$x:ident, $o:ident, $s:ident| $transform:expr) => {{
+        with_element_type!($from, T, float: F, {
+            with_element_type!($to, U, is_int: TO_INTEGER, {
+                fn transform_elements(
+                    input: &[u8],
+                    output: &mut [MaybeUninit<u8>],
+                    offset: f64,
+                    scale: f64,
+                ) {
+                    let ($o, $s) = (offset as F, scale as F);
+                    let input = input.as_chunks::<{ size_of::<T>() }>().0;
+                    let output = output.as_chunks_mut::<{ size_of::<U>() }>().0;
+                    // Writing through a pre-sized slice (rather than pushing each element) lets the loop vectorise
+                    for (transformed, element) in std::iter::zip(output, input) {
+                        let $x = <T>::from_ne_bytes(*element) as F;
+                        let value = $transform;
+                        let value = if TO_INTEGER {
+                            value.round_ties_even()
+                        } else {
+                            value
+                        };
+                        *transformed = (value as U).to_ne_bytes().map(MaybeUninit::new);
+                    }
                 }
-                // SAFETY: an element was written for each of the `elements`, which initialises the first `len <= capacity` bytes.
-                unsafe { out.set_len(len) };
-                out
+                transform_elements as TransformSliceFn
             })
         })
     }};
 }
 
-/// Encode elements of `element_type` as elements of `encoded_element_type`: `round((x - offset) * scale)`.
-///
-/// As in `numcodecs`, the transform is computed in [`f32`] for `float32` elements and otherwise [`f64`], and rounded to the nearest integer with ties to even (`numpy.around`).
-/// Values out of the range of `encoded_element_type` are saturated (unspecified in `numcodecs`).
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -279,6 +281,57 @@ macro_rules! transform {
     clippy::cast_sign_loss,
     clippy::unnecessary_cast
 )]
+fn encode_slice_fn(
+    element_type: FixedScaleOffsetElementType,
+    encoded_element_type: FixedScaleOffsetElementType,
+) -> TransformSliceFn {
+    transform_slice_fn!(element_type, encoded_element_type, |x, offset, scale| ((x
+        - offset)
+        * scale)
+        .round_ties_even())
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless,
+    clippy::cast_sign_loss,
+    clippy::unnecessary_cast
+)]
+fn decode_slice_fn(
+    encoded_element_type: FixedScaleOffsetElementType,
+    element_type: FixedScaleOffsetElementType,
+) -> TransformSliceFn {
+    transform_slice_fn!(encoded_element_type, element_type, |x, offset, scale| x
+        / scale
+        + offset)
+}
+
+fn transform_to_vec(
+    bytes: &[u8],
+    from: FixedScaleOffsetElementType,
+    to: FixedScaleOffsetElementType,
+    offset: f64,
+    scale: f64,
+    transform_fn: TransformSliceFn,
+) -> Result<Vec<u8>, CodecError> {
+    let num_elements = bytes.len() / from.size();
+    let Some(len) = num_elements.checked_mul(to.size()) else {
+        return Err(CodecError::from(
+            "fixedscaleoffset output byte length overflows usize",
+        ));
+    };
+    let mut out: Vec<u8> = Vec::with_capacity(len);
+    transform_fn(bytes, &mut out.spare_capacity_mut()[..len], offset, scale);
+    // SAFETY: `bytes` holds at least `num_elements` elements of `from`, and `len == num_elements * to.size()`, so `transform_fn` initialises all `len <= capacity` bytes.
+    unsafe { out.set_len(len) };
+    Ok(out)
+}
+
+/// Encode elements of `element_type` as elements of `encoded_element_type`: `round((x - offset) * scale)`.
+///
+/// As in `numcodecs`, the transform is computed in [`f32`] for `float32` elements and otherwise [`f64`], and rounded to the nearest integer with ties to even (`numpy.around`).
+/// Values out of the range of `encoded_element_type` are saturated (unspecified in `numcodecs`).
 fn do_encode(
     bytes: ArrayBytes<'_>,
     element_type: FixedScaleOffsetElementType,
@@ -287,14 +340,14 @@ fn do_encode(
     encoded_element_type: FixedScaleOffsetElementType,
 ) -> Result<ArrayBytes<'_>, CodecError> {
     let bytes = bytes.into_fixed()?;
-    let encoded = transform!(
+    let encoded = transform_to_vec(
         &bytes,
         element_type,
         encoded_element_type,
         offset,
         scale,
-        |x, offset, scale| ((x - offset) * scale).round_ties_even()
-    );
+        encode_slice_fn(element_type, encoded_element_type),
+    )?;
     Ok(encoded.into())
 }
 
@@ -302,13 +355,6 @@ fn do_encode(
 ///
 /// As in `numcodecs`, the transform is computed in [`f32`] for `float32` encoded elements and otherwise [`f64`].
 /// `numcodecs` truncates decoded integer elements, whereas they are rounded to the nearest integer (ties to even) here, so they may differ by one (the transform is lossy).
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::cast_sign_loss,
-    clippy::unnecessary_cast
-)]
 fn do_decode(
     bytes: ArrayBytes<'_>,
     element_type: FixedScaleOffsetElementType,
@@ -317,14 +363,14 @@ fn do_decode(
     encoded_element_type: FixedScaleOffsetElementType,
 ) -> Result<ArrayBytes<'_>, CodecError> {
     let bytes = bytes.into_fixed()?;
-    let decoded = transform!(
+    let decoded = transform_to_vec(
         &bytes,
         encoded_element_type,
         element_type,
         offset,
         scale,
-        |x, offset, scale| x / scale + offset
-    );
+        decode_slice_fn(encoded_element_type, element_type),
+    )?;
     Ok(decoded.into())
 }
 
@@ -332,13 +378,6 @@ fn do_decode(
 ///
 /// # Errors
 /// Returns a [`CodecError`] if `encoded` does not hold one element per element of `view`, or the elements of `view` are not of `element_type`.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::cast_sign_loss,
-    clippy::unnecessary_cast
-)]
 fn decode_into_view(
     encoded: &[u8],
     view: &mut ArrayBytesFixedDisjointView<'_>,
@@ -363,46 +402,25 @@ fn decode_into_view(
     if encoded.len() != expected_len {
         return Err(InvalidBytesLengthError::new(encoded.len(), expected_len).into());
     }
-    let to_integer = !matches!(
-        element_type,
-        FixedScaleOffsetElementType::F32 | FixedScaleOffsetElementType::F64
-    );
-    with_element_type!(encoded_element_type, T, F, {
-        let (offset, scale) = (offset as F, scale as F);
-        let mut encoded = encoded.as_chunks::<{ size_of::<T>() }>().0;
-        with_element_type!(element_type, U, {
-            /// Decode `encoded` into `decoded`, which have the same length.
-            fn decode_elements(
-                encoded: &[[u8; size_of::<T>()]],
-                decoded: &mut [[MaybeUninit<u8>; size_of::<U>()]],
-                offset: F,
-                scale: F,
-                to_integer: bool,
-            ) {
-                for (decoded, encoded) in std::iter::zip(decoded, encoded) {
-                    let x = <T>::from_ne_bytes(*encoded) as F;
-                    let value = x / scale + offset;
-                    let value = if to_integer {
-                        value.round_ties_even()
-                    } else {
-                        value
-                    };
-                    *decoded = (value as U).to_ne_bytes().map(MaybeUninit::new);
-                }
-            }
-            // SAFETY: each region is a whole number of `U` elements (the element size of the view), and each element is written from the next encoded element.
-            // There is one encoded element per element of the view, so every region is initialised.
-            unsafe {
-                view.for_each_region_mut(|region| {
-                    let decoded = region.as_chunks_mut::<{ size_of::<U>() }>().0;
-                    let (region_encoded, rest) = encoded.split_at(decoded.len());
-                    encoded = rest;
-                    decode_elements(region_encoded, decoded, offset, scale, to_integer);
-                    Ok::<_, CodecError>(())
-                })
-            }
+    let Some(region_encoded_len) = view
+        .num_contiguous_elements()
+        .checked_mul(encoded_element_type.size())
+    else {
+        return Err(CodecError::from(
+            "fixedscaleoffset encoded byte length overflows usize",
+        ));
+    };
+    let decode_fn = decode_slice_fn(encoded_element_type, element_type);
+    let mut encoded = encoded;
+    // SAFETY: each region is a whole number of `element_type` elements (the element size of the view), and `region_encoded` has the same number of `encoded_element_type` elements, so `decode_fn` initialises every byte of each region.
+    unsafe {
+        view.for_each_region_mut(|region| {
+            let (region_encoded, rest) = encoded.split_at(region_encoded_len);
+            encoded = rest;
+            decode_fn(region_encoded, region, offset, scale);
+            Ok::<_, CodecError>(())
         })
-    })
+    }
 }
 
 fn encode_fill_value(
