@@ -95,8 +95,7 @@ where
     async fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase().await;
         self.cached
-            .cache()
-            .async_invalidate_cached_chunk(self.cached.array(), &self.chunk_indices)
+            .async_invalidate_chunk(&self.chunk_indices)
             .await;
         result
     }
@@ -113,8 +112,7 @@ where
             .partial_encode(indexer, bytes, options, resources)
             .await;
         self.cached
-            .cache()
-            .async_invalidate_cached_chunk(self.cached.array(), &self.chunk_indices)
+            .async_invalidate_chunk(&self.chunk_indices)
             .await;
         result
     }
@@ -142,9 +140,7 @@ where
             .array()
             .async_store_partial_chunk(chunk_indices, indexer, indexer_data, resources)
             .await;
-        self.cache()
-            .async_invalidate_cached_chunk(self.array(), chunk_indices)
-            .await;
+        self.async_invalidate_chunk(chunk_indices).await;
         result
     }
 
@@ -161,13 +157,11 @@ where
             .await;
         let invalidated = match self.array().chunks_in_array_subset(array_subset) {
             Ok(Some(chunks)) => {
-                self.cache()
-                    .async_invalidate_cached_chunks(self.array(), &chunks)
-                    .await;
+                self.async_invalidate_chunks(&chunks).await;
                 Ok(())
             }
             Ok(None) => {
-                self.cache().async_invalidate_cached_all(self.array()).await;
+                self.async_invalidate().await;
                 Ok(())
             }
             Err(err) => Err(err.into()),
@@ -186,9 +180,7 @@ where
             .async_compact_chunk(chunk_indices, resources)
             .await;
         if !matches!(compacted, Ok(false)) {
-            self.cache()
-                .async_invalidate_cached_chunk(self.array(), chunk_indices)
-                .await;
+            self.async_invalidate_chunk(chunk_indices).await;
         }
         compacted
     }

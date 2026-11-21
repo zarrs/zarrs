@@ -20,6 +20,8 @@ mod partial_decoder;
 #[cfg(feature = "async")]
 mod partial_decoder_async;
 
+pub(super) use decoded::decoded_chunk_subset_into;
+
 pub(super) fn cache_error(error: Arc<ArrayError>) -> ArrayError {
     Arc::try_unwrap(error)
         .unwrap_or_else(|error| ArrayError::StorageError(StorageError::from(error.to_string())))

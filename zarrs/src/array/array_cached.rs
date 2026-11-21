@@ -1,7 +1,12 @@
 use std::sync::Arc;
 
-use super::Array;
+#[cfg(feature = "async")]
+use super::chunk_cache::AsyncArrayCache;
+use super::chunk_cache::SyncArrayCache;
+use super::{Array, Indexer};
 use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
+#[cfg(feature = "async")]
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 /// A cached array wrapper.
 ///
@@ -51,6 +56,11 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 ///
 /// For thread-local caches, invalidation only affects the thread performing the
 /// mutation.
+///
+/// After writing through the inner [`Array`] or another handle, invalidate what changed with
+/// [`invalidate`](ArrayCached::invalidate), [`invalidate_chunk`](ArrayCached::invalidate_chunk), or
+/// [`invalidate_chunks`](ArrayCached::invalidate_chunks), rather than through the cache itself, so that every layer
+/// of a composed cache (e.g. a [`SubchunkCached`](super::chunk_cache::SubchunkCached)) is invalidated.
 ///
 /// Invalidation makes a cache coherent with writes that *precede* the retrievals of
 /// the chunks they invalidate. It does not make concurrent reads and writes of the same
@@ -152,5 +162,57 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     #[must_use]
     pub fn into_inner(self) -> (Arc<Array<TStorage>>, Arc<C>) {
         (self.array, self.cache)
+    }
+}
+
+impl<TStorage: ?Sized, C: SyncArrayCache> ArrayCached<TStorage, C> {
+    /// Invalidate everything cached for the array.
+    ///
+    /// Writes through `ArrayCached` invalidate what they change, so this is only needed after writes that bypass it.
+    pub fn invalidate(&self) {
+        self.cache.invalidate_cached_all(&self.array);
+    }
+
+    /// Invalidate everything cached for the chunk at `chunk_indices`.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub fn invalidate_chunk(&self, chunk_indices: &[u64]) {
+        self.cache
+            .invalidate_cached_chunk(&self.array, chunk_indices);
+    }
+
+    /// Invalidate everything cached for the chunks of `chunks`.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub fn invalidate_chunks(&self, chunks: &dyn Indexer) {
+        self.cache.invalidate_cached_chunks(&self.array, chunks);
+    }
+}
+
+#[cfg(feature = "async")]
+impl<TStorage: ?Sized + MaybeSend + MaybeSync, C: AsyncArrayCache> ArrayCached<TStorage, C> {
+    /// Asynchronously invalidate everything cached for the array.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub async fn async_invalidate(&self) {
+        self.cache.async_invalidate_cached_all(&self.array).await;
+    }
+
+    /// Asynchronously invalidate everything cached for the chunk at `chunk_indices`.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub async fn async_invalidate_chunk(&self, chunk_indices: &[u64]) {
+        self.cache
+            .async_invalidate_cached_chunk(&self.array, chunk_indices)
+            .await;
+    }
+
+    /// Asynchronously invalidate everything cached for the chunks of `chunks`.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub async fn async_invalidate_chunks(&self, chunks: &dyn Indexer) {
+        self.cache
+            .async_invalidate_cached_chunks(&self.array, chunks)
+            .await;
     }
 }

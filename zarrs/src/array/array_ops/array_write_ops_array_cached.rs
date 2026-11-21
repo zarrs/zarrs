@@ -16,14 +16,14 @@ where
     #[allow(clippy::missing_errors_doc)]
     pub fn store_metadata(&self) -> Result<(), StorageError> {
         let result = self.array().store_metadata();
-        self.cache().invalidate_cached_all(self.array());
+        self.invalidate();
         result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
         let result = self.array().erase_metadata();
-        self.cache().invalidate_cached_all(self.array());
+        self.invalidate();
         result
     }
 
@@ -37,8 +37,7 @@ where
         let result = self
             .array()
             .store_chunk(chunk_indices, chunk_data, resources);
-        self.cache()
-            .invalidate_cached_chunk(self.array(), chunk_indices);
+        self.invalidate_chunk(chunk_indices);
         result
     }
 
@@ -50,15 +49,14 @@ where
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let result = self.array().store_chunks(chunks, chunks_data, resources);
-        self.cache().invalidate_cached_chunks(self.array(), chunks);
+        self.invalidate_chunks(chunks);
         result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         let result = self.array().erase_chunk(chunk_indices);
-        self.cache()
-            .invalidate_cached_chunk(self.array(), chunk_indices);
+        self.invalidate_chunk(chunk_indices);
         result
     }
 
@@ -69,7 +67,7 @@ where
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let result = self.array().erase_chunks(chunks, resources);
-        self.cache().invalidate_cached_chunks(self.array(), chunks);
+        self.invalidate_chunks(chunks);
         result
     }
 
@@ -83,8 +81,7 @@ where
             self.array()
                 .store_encoded_chunk(chunk_indices, encoded_chunk_bytes)
         };
-        self.cache()
-            .invalidate_cached_chunk(self.array(), chunk_indices);
+        self.invalidate_chunk(chunk_indices);
         result
     }
 }

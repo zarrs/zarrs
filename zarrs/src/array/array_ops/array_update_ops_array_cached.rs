@@ -83,9 +83,7 @@ where
 {
     fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase();
-        self.cached
-            .cache()
-            .invalidate_cached_chunk(self.cached.array(), &self.chunk_indices);
+        self.cached.invalidate_chunk(&self.chunk_indices);
         result
     }
 
@@ -99,9 +97,7 @@ where
         let result = self
             .encoder
             .partial_encode(indexer, bytes, options, resources);
-        self.cached
-            .cache()
-            .invalidate_cached_chunk(self.cached.array(), &self.chunk_indices);
+        self.cached.invalidate_chunk(&self.chunk_indices);
         result
     }
 
@@ -127,8 +123,7 @@ where
         let result =
             self.array()
                 .store_partial_chunk(chunk_indices, indexer, indexer_data, resources);
-        self.cache()
-            .invalidate_cached_chunk(self.array(), chunk_indices);
+        self.invalidate_chunk(chunk_indices);
         result
     }
 
@@ -144,11 +139,11 @@ where
             .store_array_subset(array_subset, subset_data, resources);
         let invalidated = match self.array().chunks_in_array_subset(array_subset) {
             Ok(Some(chunks)) => {
-                self.cache().invalidate_cached_chunks(self.array(), &chunks);
+                self.invalidate_chunks(&chunks);
                 Ok(())
             }
             Ok(None) => {
-                self.cache().invalidate_cached_all(self.array());
+                self.invalidate();
                 Ok(())
             }
             Err(err) => Err(err.into()),
@@ -164,8 +159,7 @@ where
     ) -> Result<bool, ArrayError> {
         let compacted = self.array().compact_chunk(chunk_indices, resources);
         if !matches!(compacted, Ok(false)) {
-            self.cache()
-                .invalidate_cached_chunk(self.array(), chunk_indices);
+            self.invalidate_chunk(chunk_indices);
         }
         compacted
     }

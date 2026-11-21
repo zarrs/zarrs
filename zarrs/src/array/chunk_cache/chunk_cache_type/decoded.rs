@@ -164,7 +164,7 @@ fn cached_chunk_into(
 /// Decode the elements of `indexer` in already-decoded chunk bytes of `chunk_shape` into `output_target`, or copy the fill value if absent.
 ///
 /// `indexer` must be validated against `chunk_shape`, and match the number of elements of `output_target`.
-fn decoded_chunk_subset_into(
+pub(in crate::array::chunk_cache) fn decoded_chunk_subset_into(
     chunk: Option<&ArrayBytes<'static>>,
     chunk_shape: &[u64],
     data_type: &DataType,
