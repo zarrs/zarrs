@@ -5,9 +5,13 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 
 /// A cached array wrapper.
 ///
-/// `ArrayCached` combines an [`Array`] with a chunk cache. Read operations use
+/// `ArrayCached` combines an [`Array`] with a cache. Read operations use
 /// the cache, while write/update operations delegate to the inner array and
 /// invalidate cached chunks that may have changed.
+///
+/// The cache is a [`SyncArrayCache`](super::chunk_cache::SyncArrayCache) for synchronous operations, such as any
+/// [`ChunkCache`](super::chunk_cache::ChunkCache). The cache determines how it serves each retrieval and what each
+/// write invalidates; a chunk cache invalidates whole chunks.
 ///
 /// ## Cache Behavior
 ///
@@ -58,9 +62,9 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 /// ## Asynchronous Operations
 ///
 /// With the `async` feature, `ArrayCached` also supports the `async_` prefixed
-/// operations, which require an `AsyncChunkCache` — one of the
+/// operations, which require an `AsyncArrayCache`, such as any `AsyncChunkCache` — one of the
 /// `AsyncChunkCache*Lru*` caches, or a custom implementation.
-/// A cache implements either `ChunkCache` or `AsyncChunkCache`, so a given `ArrayCached`
+/// A chunk cache implements either `ChunkCache` or `AsyncChunkCache`, so a given `ArrayCached`
 /// supports one flavour of operation; a synchronous cache passed to an `async_` operation
 /// is rejected at compile time:
 ///
@@ -75,7 +79,7 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 ///     .build_arc(store, "/")
 ///     .unwrap();
 /// let cached = ArrayCached::new(array, ChunkCacheEncodedLruChunkLimit::new(2));
-/// // error: the trait bound `ChunkCacheEncodedLruChunkLimit: AsyncChunkCache` is not satisfied
+/// // error: the trait bound `ChunkCacheEncodedLruChunkLimit: AsyncArrayCache` is not satisfied
 /// cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap();
 /// # }
 /// ```
@@ -115,7 +119,7 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
         &self.array
     }
 
-    /// Return the chunk cache.
+    /// Return the cache.
     #[must_use]
     pub fn cache(&self) -> &C {
         self.cache.as_ref()
@@ -148,9 +152,5 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     #[must_use]
     pub fn into_inner(self) -> (Arc<Array<TStorage>>, Arc<C>) {
         (self.array, self.cache)
-    }
-
-    pub(crate) fn cache_arc(&self) -> Arc<C> {
-        Arc::clone(&self.cache)
     }
 }

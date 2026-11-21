@@ -1,8 +1,9 @@
+use crate::array::chunk_cache::SyncArrayCache;
 use inherent::inherent;
 use zarrs_codec::{CowBytes, Resources};
 
 use super::{
-    ArrayCached, ArrayError, ArraySubsetTraits, ArrayWriteOps, ChunkCache, Indexer, IntoArrayBytes,
+    ArrayCached, ArrayError, ArraySubsetTraits, ArrayWriteOps, Indexer, IntoArrayBytes,
     StorageError, WritableStorageTraits,
 };
 
@@ -10,19 +11,19 @@ use super::{
 impl<TStorage, C> ArrayWriteOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + WritableStorageTraits + 'static,
-    C: ChunkCache,
+    C: SyncArrayCache,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_metadata(&self) -> Result<(), StorageError> {
         let result = self.array().store_metadata();
-        self.cache().invalidate();
+        self.cache().invalidate_cached_all(self.array());
         result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
         let result = self.array().erase_metadata();
-        self.cache().invalidate();
+        self.cache().invalidate_cached_all(self.array());
         result
     }
 
@@ -36,7 +37,8 @@ where
         let result = self
             .array()
             .store_chunk(chunk_indices, chunk_data, resources);
-        self.cache().invalidate_chunk(chunk_indices);
+        self.cache()
+            .invalidate_cached_chunk(self.array(), chunk_indices);
         result
     }
 
@@ -48,14 +50,15 @@ where
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let result = self.array().store_chunks(chunks, chunks_data, resources);
-        self.cache().invalidate_chunks(chunks);
+        self.cache().invalidate_cached_chunks(self.array(), chunks);
         result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         let result = self.array().erase_chunk(chunk_indices);
-        let _ = self.cache().invalidate_chunk(chunk_indices);
+        self.cache()
+            .invalidate_cached_chunk(self.array(), chunk_indices);
         result
     }
 
@@ -66,7 +69,7 @@ where
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         let result = self.array().erase_chunks(chunks, resources);
-        let _ = self.cache().invalidate_chunks(chunks);
+        self.cache().invalidate_cached_chunks(self.array(), chunks);
         result
     }
 
@@ -80,7 +83,8 @@ where
             self.array()
                 .store_encoded_chunk(chunk_indices, encoded_chunk_bytes)
         };
-        self.cache().invalidate_chunk(chunk_indices);
+        self.cache()
+            .invalidate_cached_chunk(self.array(), chunk_indices);
         result
     }
 }
