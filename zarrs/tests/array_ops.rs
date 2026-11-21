@@ -1268,6 +1268,84 @@ fn array_cached_cache_size_sums_cached_chunks() -> TestResult {
     assert_decoded_cache_size(ChunkCacheDecodedLruSizeLimitThreadLocal::new(1024))
 }
 
+#[test]
+fn array_cached_thread_local_reads_and_writes_stay_on_the_calling_thread() -> TestResult {
+    fn check<C>(cache: C) -> TestResult
+    where
+        C: ChunkCache<Value = ChunkCacheTypeDecoded> + 'static,
+    {
+        let array = ArrayBuilder::new(vec![64], vec![4], data_type::uint8(), 0u8)
+            .build_arc(Arc::new(MemoryStore::default()), "/array")?;
+        let cached = ArrayCached::new(array, cache);
+        let resources = Resources::default().with_compute_target(0);
+        cached.store_array_subset(&[0..64], &[1u8; 64], &resources)?;
+        assert_eq!(
+            cached.retrieve_array_subset::<Vec<u8>>(&[0..64], &resources)?,
+            vec![1; 64]
+        );
+        // Every chunk read is cached on this thread, so a write on this thread invalidates it
+        assert_eq!(cached.cache().len(), 16);
+        cached.store_array_subset(&[0..64], &[2u8; 64], &resources)?;
+        assert!(cached.cache().is_empty());
+        assert_eq!(
+            cached.retrieve_array_subset::<Vec<u8>>(&[0..64], &resources)?,
+            vec![2; 64]
+        );
+        Ok(())
+    }
+    // Read with several threads available, which a thread-local cache must not use
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(4).build()?;
+    pool.install(|| {
+        check(ChunkCacheDecodedLruChunkLimitThreadLocal::new(64)).map_err(|err| err.to_string())
+    })?;
+    pool.install(|| {
+        check(ChunkCacheDecodedLruSizeLimitThreadLocal::new(1024)).map_err(|err| err.to_string())
+    })?;
+    Ok(())
+}
+
+#[test]
+fn parallel_thread_local_chunk_reads_with_nested_unlimited_decoding_finish() -> TestResult {
+    use rayon::iter::{IntoParallelIterator, ParallelIterator};
+    let (send, receive) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap()
+            .install(|| {
+                let array =
+                    ArrayBuilder::new(vec![64 * 16, 16], vec![16, 16], data_type::uint16(), 0u16)
+                        .subchunk_shape(vec![2, 2])
+                        .build_arc(Arc::new(MemoryStore::default()), "/array")
+                        .unwrap();
+                let resources = Resources::default().with_compute_target(0);
+                array
+                    .store_array_subset(&array.subset_all(), vec![1u16; 64 * 256], &resources)
+                    .unwrap();
+                // Nested decoding must not run another read, which locks the same thread-local cache, on this thread
+                for _ in 0..8 {
+                    let cached = ArrayCached::new(
+                        array.clone(),
+                        ChunkCacheDecodedLruChunkLimitThreadLocal::new(64),
+                    );
+                    (0..64u64).into_par_iter().for_each(|i| {
+                        assert_eq!(
+                            cached
+                                .retrieve_chunk::<Vec<u16>>(&[i, 0], &resources)
+                                .unwrap(),
+                            vec![1; 256]
+                        );
+                    });
+                }
+            });
+        send.send(()).unwrap();
+    });
+    receive.recv_timeout(std::time::Duration::from_secs(10))?;
+    worker.join().unwrap();
+    Ok(())
+}
+
 fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
 where
     C: ChunkCache + 'static,

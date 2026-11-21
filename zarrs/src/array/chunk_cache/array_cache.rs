@@ -7,6 +7,7 @@
 //! Every [`ChunkCache`] is a [`SyncArrayCache`], with the retrieval behaviour of its value type and chunk-level
 //! invalidation. With the `async` feature, every `AsyncChunkCache` is an `AsyncArrayCache`.
 
+use std::borrow::Cow;
 #[cfg(feature = "async")]
 use std::future::Future;
 use std::sync::Arc;
@@ -46,6 +47,18 @@ pub trait AsyncArrayCache: array_cache_sealed::AsyncArrayCacheOps {}
 #[cfg(feature = "async")]
 impl<T: array_cache_sealed::AsyncArrayCacheOps + ?Sized> AsyncArrayCache for T {}
 
+/// Keep thread-local cache access and any nested decoding on the calling thread, if `thread_local`.
+pub(crate) fn thread_local_resources(
+    thread_local: bool,
+    resources: &Resources,
+) -> Cow<'_, Resources> {
+    if thread_local && resources.compute_target() != 1 {
+        Cow::Owned(resources.clone().with_compute_target(1))
+    } else {
+        Cow::Borrowed(resources)
+    }
+}
+
 pub(crate) mod array_cache_sealed {
     #[allow(clippy::wildcard_imports)]
     use super::*;
@@ -56,6 +69,34 @@ pub(crate) mod array_cache_sealed {
     /// [`ArrayCached`](crate::array::ArrayCached), which is bounded by this trait rather than [`ChunkCache`], cannot
     /// invalidate a cache by chunk without going through it.
     pub trait SyncArrayCacheOps: MaybeSend + MaybeSync {
+        /// Return whether any layer uses a thread-local cache.
+        fn uses_thread_local_cache(&self) -> bool {
+            false
+        }
+
+        /// Return the `resources` of an access of the cache, which keep any nested decoding on the calling thread if a
+        /// layer uses a thread-local cache.
+        fn cache_resources<'a>(&self, resources: &'a Resources) -> Cow<'a, Resources> {
+            thread_local_resources(self.uses_thread_local_cache(), resources)
+        }
+
+        /// Return the minimum number of chunks to retrieve concurrently through the cache, given the
+        /// `chunk_concurrent_minimum` of the array, and the resources of the retrieval.
+        ///
+        /// Chunks are retrieved one at a time on the calling thread if a layer uses a thread-local cache.
+        fn cache_concurrency<'a>(
+            &self,
+            chunk_concurrent_minimum: usize,
+            resources: &'a Resources,
+        ) -> (usize, Cow<'a, Resources>) {
+            let chunk_concurrent_minimum = if self.uses_thread_local_cache() {
+                1
+            } else {
+                chunk_concurrent_minimum
+            };
+            (chunk_concurrent_minimum, self.cache_resources(resources))
+        }
+
         /// Return a partial decoder of the chunk at `chunk_indices`, through the cache.
         fn cached_partial_decoder<TStorage>(
             &self,
@@ -177,6 +218,10 @@ pub(crate) mod array_cache_sealed {
     }
 
     impl<C: ChunkCache + ?Sized> SyncArrayCacheOps for C {
+        fn uses_thread_local_cache(&self) -> bool {
+            self.is_thread_local()
+        }
+
         fn cached_partial_decoder<TStorage>(
             &self,
             array: &Array<TStorage>,
@@ -187,7 +232,8 @@ pub(crate) mod array_cache_sealed {
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
         {
-            C::Value::partial_decoder(self, array, chunk_indices, options, resources)
+            let resources = self.cache_resources(resources);
+            C::Value::partial_decoder(self, array, chunk_indices, options, &resources)
         }
 
         fn cached_chunk_bytes_if_exists<TStorage>(
@@ -200,7 +246,14 @@ pub(crate) mod array_cache_sealed {
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
         {
-            C::Value::retrieve_chunk_bytes_if_exists(self, array, chunk_indices, options, resources)
+            let resources = self.cache_resources(resources);
+            C::Value::retrieve_chunk_bytes_if_exists(
+                self,
+                array,
+                chunk_indices,
+                options,
+                &resources,
+            )
         }
 
         fn cached_chunk_into<TStorage>(
@@ -214,13 +267,14 @@ pub(crate) mod array_cache_sealed {
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
         {
+            let resources = self.cache_resources(resources);
             C::Value::retrieve_chunk_into(
                 self,
                 array,
                 chunk_indices,
                 output_target,
                 options,
-                resources,
+                &resources,
             )
         }
 
@@ -235,13 +289,14 @@ pub(crate) mod array_cache_sealed {
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
         {
+            let resources = self.cache_resources(resources);
             C::Value::retrieve_partial_chunk_bytes(
                 self,
                 array,
                 chunk_indices,
                 indexer,
                 options,
-                resources,
+                &resources,
             )
         }
 
@@ -257,6 +312,7 @@ pub(crate) mod array_cache_sealed {
         where
             TStorage: ?Sized + ReadableStorageTraits + 'static,
         {
+            let resources = self.cache_resources(resources);
             C::Value::retrieve_partial_chunk_into(
                 self,
                 array,
@@ -264,7 +320,7 @@ pub(crate) mod array_cache_sealed {
                 indexer,
                 output_target,
                 options,
-                resources,
+                &resources,
             )
         }
 

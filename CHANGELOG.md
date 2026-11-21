@@ -80,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `ChunkCacheTypeDecoded` is an `Option`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
     - `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key, and is no longer `#[doc(hidden)]`
     - `ChunkCache` has a `Value` associated type and is no longer dyn compatible, and `ChunkCacheType` is sealed
+    - Add `ChunkCache::is_thread_local`, which custom thread-local caches must override to return `true`
     - Add `invalidate` methods
     - Add `size` methods, which return the size of the cached chunks in bytes
   - Add support for async caching
@@ -90,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ArrayCached` accepts any `SyncArrayCache` or `AsyncArrayCache`, which every `ChunkCache` and `AsyncChunkCache` is, and dispatches its retrievals and invalidations through the cache
   - Invalidate caches for chunks that a failed write may have changed
   - Retrieve complete cached chunks without extracting a subset
+  - *Behavioural change*: retrievals through a thread-local chunk cache run on the calling thread, one chunk at a time and with nested decoding limited to that thread, so that a write on that thread invalidates everything they cache
   - Fix chunk subset retrieval from a chunk cache to validate the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - Subchunks
   - **Breaking**: Remove `[Async]ArrayShardedReadableExt[Cache]`, whose methods are now part of `[Async]ArrayReadOps`

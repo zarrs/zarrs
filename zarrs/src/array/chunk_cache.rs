@@ -301,6 +301,15 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     /// written rather than at an unrelated retrieval call site.
     type Value: SyncChunkCacheType;
 
+    /// Return whether entries are stored separately on each thread.
+    ///
+    /// Array operations keep accesses to a thread-local cache on the calling thread, so that subsequent writes can
+    /// invalidate the entries populated by those reads. Custom thread-local caches must return `true`.
+    #[must_use]
+    fn is_thread_local(&self) -> bool {
+        false
+    }
+
     /// Return a cached value or insert the value returned by `f`.
     ///
     /// Implementations should evaluate `f` at most once per uncached chunk where possible, so
