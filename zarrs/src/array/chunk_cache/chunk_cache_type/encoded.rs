@@ -257,9 +257,10 @@ where
     C: AsyncChunkCache<Value = ChunkCacheTypeEncoded> + ?Sized,
 {
     cache
-        .try_get_or_insert_with(chunk_indices.into(), async move {
-            array.async_retrieve_encoded_chunk(chunk_indices).await
-        })
+        .try_get_or_insert_with(
+            chunk_indices.into(),
+            std::pin::pin!(async move { array.async_retrieve_encoded_chunk(chunk_indices).await }),
+        )
         .await
         .map_err(cache_error)
 }

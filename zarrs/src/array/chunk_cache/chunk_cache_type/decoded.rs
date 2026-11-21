@@ -218,12 +218,15 @@ where
     C: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
 {
     cache
-        .try_get_or_insert_with(chunk_indices.into(), async move {
-            Ok(array
-                .async_retrieve_chunk_if_exists_with_options(chunk_indices, options, resources)
-                .await?
-                .map(Arc::new))
-        })
+        .try_get_or_insert_with(
+            chunk_indices.into(),
+            std::pin::pin!(async move {
+                Ok(array
+                    .async_retrieve_chunk_if_exists_with_options(chunk_indices, options, resources)
+                    .await?
+                    .map(Arc::new))
+            }),
+        )
         .await
         .map_err(cache_error)
 }

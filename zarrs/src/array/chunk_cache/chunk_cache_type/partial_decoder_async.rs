@@ -34,11 +34,14 @@ where
     C: AsyncChunkCache<Value = ChunkCacheTypeAsyncPartialDecoder> + ?Sized,
 {
     cache
-        .try_get_or_insert_with(chunk_indices.into(), async move {
-            array
-                .async_partial_decoder_with_options(chunk_indices, options, resources)
-                .await
-        })
+        .try_get_or_insert_with(
+            chunk_indices.into(),
+            std::pin::pin!(async move {
+                array
+                    .async_partial_decoder_with_options(chunk_indices, options, resources)
+                    .await
+            }),
+        )
         .await
         .map_err(cache_error)
 }

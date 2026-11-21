@@ -3,10 +3,9 @@ use std::future::Future;
 use std::sync::Arc;
 
 #[cfg(feature = "async")]
-use zarrs_storage::MaybeSend;
-
-#[cfg(feature = "async")]
-use super::{AsyncChunkCache, AsyncChunkCacheType, ChunkCacheTypeAsyncPartialDecoder};
+use super::{
+    AsyncChunkCache, AsyncChunkCacheInit, AsyncChunkCacheType, ChunkCacheTypeAsyncPartialDecoder,
+};
 use super::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder, SyncChunkCacheType,
@@ -201,53 +200,50 @@ impl<CT: AsyncChunkCacheType> AsyncChunkCacheLruSizeLimit<CT> {
 }
 
 #[cfg(feature = "async")]
-/// The [`AsyncChunkCache`] methods of an LRU cache.
-macro_rules! impl_AsyncChunkCacheLruCommon {
-    () => {
-        type Value = CT;
+/// Implement [`AsyncChunkCache`] for an LRU cache type.
+macro_rules! impl_AsyncChunkCacheLru {
+    ($ty:ident) => {
+        #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+        #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+        impl<CT: AsyncChunkCacheType> AsyncChunkCache for $ty<CT> {
+            type Value = CT;
 
-        async fn try_get_or_insert_with<F>(
-            &self,
-            chunk_indices: ChunkIndices,
-            init: F,
-        ) -> Result<Self::Value, Arc<ArrayError>>
-        where
-            F: Future<Output = Result<Self::Value, ArrayError>> + MaybeSend,
-        {
-            self.cache.try_get_or_insert_with(chunk_indices, init).await
-        }
+            async fn try_get_or_insert_with(
+                &self,
+                chunk_indices: ChunkIndices,
+                init: AsyncChunkCacheInit<'_, Self::Value>,
+            ) -> Result<Self::Value, Arc<ArrayError>> {
+                self.cache.try_get_or_insert_with(chunk_indices, init).await
+            }
 
-        async fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
-            AsyncCacheTraits::remove(&self.cache, chunk_indices).await
-        }
+            async fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
+                AsyncCacheTraits::remove(&self.cache, chunk_indices).await
+            }
 
-        async fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
-            AsyncCacheTraits::remove_many(&self.cache, chunks).await
-        }
+            async fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
+                AsyncCacheTraits::remove_many(&self.cache, chunks).await
+            }
 
-        async fn len(&self) -> usize {
-            AsyncCacheTraits::len(&self.cache).await
-        }
+            async fn len(&self) -> usize {
+                AsyncCacheTraits::len(&self.cache).await
+            }
 
-        async fn size(&self) -> usize {
-            AsyncCacheTraits::size(&self.cache).await
-        }
+            async fn size(&self) -> usize {
+                AsyncCacheTraits::size(&self.cache).await
+            }
 
-        async fn invalidate(&self) -> usize {
-            AsyncCacheTraits::clear(&self.cache).await
+            async fn invalidate(&self) -> usize {
+                AsyncCacheTraits::clear(&self.cache).await
+            }
         }
     };
 }
 
 #[cfg(feature = "async")]
-impl<CT: AsyncChunkCacheType> AsyncChunkCache for AsyncChunkCacheLruChunkLimit<CT> {
-    impl_AsyncChunkCacheLruCommon!();
-}
+impl_AsyncChunkCacheLru!(AsyncChunkCacheLruChunkLimit);
 
 #[cfg(feature = "async")]
-impl<CT: AsyncChunkCacheType> AsyncChunkCache for AsyncChunkCacheLruSizeLimit<CT> {
-    impl_AsyncChunkCacheLruCommon!();
-}
+impl_AsyncChunkCacheLru!(AsyncChunkCacheLruSizeLimit);
 
 /// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
 pub type ChunkCacheEncodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheTypeEncoded>;

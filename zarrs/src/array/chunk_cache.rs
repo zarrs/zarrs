@@ -48,6 +48,8 @@
 
 #[cfg(feature = "async")]
 use std::future::Future;
+#[cfg(feature = "async")]
+use std::pin::Pin;
 use std::sync::Arc;
 
 use super::{ArrayBytes, ArrayError};
@@ -334,6 +336,16 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     }
 }
 
+/// A pinned, type-erased future used to initialise a missing entry in an [`AsyncChunkCache`].
+#[cfg(all(feature = "async", not(target_arch = "wasm32")))]
+pub type AsyncChunkCacheInit<'a, V> =
+    Pin<&'a mut (dyn Future<Output = Result<V, ArrayError>> + Send + 'a)>;
+
+/// A pinned, type-erased future used to initialise a missing entry in an [`AsyncChunkCache`].
+#[cfg(all(feature = "async", target_arch = "wasm32"))]
+pub type AsyncChunkCacheInit<'a, V> =
+    Pin<&'a mut (dyn Future<Output = Result<V, ArrayError>> + 'a)>;
+
 /// An asynchronous chunk cache.
 ///
 /// This is the asynchronous counterpart of [`ChunkCache`], and is what
@@ -346,6 +358,8 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
 /// arrays; [`ArrayCached`](super::ArrayCached) is the entry point for cached
 /// array operations.
 #[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncChunkCache: MaybeSend + MaybeSync {
     /// The value stored for each chunk.
     ///
@@ -364,39 +378,35 @@ pub trait AsyncChunkCache: MaybeSend + MaybeSync {
     /// # Errors
     /// Returns the [`ArrayError`] returned by `init`, which may be shared with the other callers
     /// awaiting the same value.
-    fn try_get_or_insert_with<F>(
+    async fn try_get_or_insert_with(
         &self,
         chunk_indices: ArrayIndices,
-        init: F,
-    ) -> impl Future<Output = Result<Self::Value, Arc<ArrayError>>> + MaybeSend
-    where
-        F: Future<Output = Result<Self::Value, ArrayError>> + MaybeSend;
+        init: AsyncChunkCacheInit<'_, Self::Value>,
+    ) -> Result<Self::Value, Arc<ArrayError>>;
 
     /// Invalidate all cached chunks, returning the number of chunks invalidated.
-    fn invalidate(&self) -> impl Future<Output = usize> + MaybeSend;
+    async fn invalidate(&self) -> usize;
 
     /// Invalidate a cached chunk, returning true if the chunk was cached.
-    fn invalidate_chunk(&self, chunk_indices: &[u64]) -> impl Future<Output = bool> + MaybeSend;
+    async fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool;
 
     /// Invalidate cached chunks, returning the number of chunks invalidated.
-    fn invalidate_chunks(&self, chunks: &dyn Indexer) -> impl Future<Output = usize> + MaybeSend {
-        async move {
-            let mut invalidated = 0;
-            for chunk_indices in chunks.iter_indices() {
-                invalidated += usize::from(self.invalidate_chunk(&chunk_indices).await);
-            }
-            invalidated
+    async fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
+        let mut invalidated = 0;
+        for chunk_indices in chunks.iter_indices() {
+            invalidated += usize::from(self.invalidate_chunk(&chunk_indices).await);
         }
+        invalidated
     }
 
     /// Return the number of chunks in the cache.
-    fn len(&self) -> impl Future<Output = usize> + MaybeSend;
+    async fn len(&self) -> usize;
 
     /// Return the size of the cached chunks in bytes, the sum of their [`ChunkCacheType::size`].
-    fn size(&self) -> impl Future<Output = usize> + MaybeSend;
+    async fn size(&self) -> usize;
 
     /// Returns true if the cache is empty.
-    fn is_empty(&self) -> impl Future<Output = bool> + MaybeSend {
-        async move { self.len().await == 0 }
+    async fn is_empty(&self) -> bool {
+        self.len().await == 0
     }
 }

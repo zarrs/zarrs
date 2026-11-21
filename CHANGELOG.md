@@ -79,7 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Remove the `ChunkCache` `retrieve_*` methods, which are provided by `ArrayCached`, and chunk cache constructors no longer take an array (e.g. `ChunkCacheDecodedLruChunkLimit::new(capacity)`)
     - `ChunkCacheTypeDecoded` is an `Option`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
     - `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key, and is no longer `#[doc(hidden)]`
-    - `ChunkCache` has a `Value` associated type (and is dyn compatible with `Value` specified), and `ChunkCacheType` is sealed
+    - `ChunkCache` and `AsyncChunkCache` have a `Value` associated type (and are dyn compatible with `Value` specified), and `ChunkCacheType` is sealed
     - `SyncArrayCache` and `AsyncArrayCache` are dyn compatible, and `ArrayCached` supports `?Sized` caches via `new_arc`
     - Add `invalidate` methods
     - Add `size` methods, which return the size of the cached chunks in bytes
