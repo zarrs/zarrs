@@ -11,19 +11,23 @@ use crate::array::chunk_cache::AsyncArrayCache;
 impl<TStorage, C> AsyncArrayWriteOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncWritableStorageTraits + 'static,
-    C: AsyncArrayCache,
+    C: AsyncArrayCache + ?Sized,
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
         let result = self.array().async_store_metadata().await;
-        self.cache().async_invalidate_cached_all(self.array()).await;
+        self.cache()
+            .async_invalidate_cached_all(self.array().as_ref())
+            .await;
         result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
         let result = self.array().async_erase_metadata().await;
-        self.cache().async_invalidate_cached_all(self.array()).await;
+        self.cache()
+            .async_invalidate_cached_all(self.array().as_ref())
+            .await;
         result
     }
 
@@ -39,7 +43,7 @@ where
             .async_store_chunk(chunk_indices, chunk_data, resources)
             .await;
         self.cache()
-            .async_invalidate_cached_chunk(self.array(), chunk_indices)
+            .async_invalidate_cached_chunk(self.array().as_ref(), chunk_indices)
             .await;
         result
     }
@@ -56,7 +60,7 @@ where
             .async_store_chunks(chunks, chunks_data, resources)
             .await;
         self.cache()
-            .async_invalidate_cached_chunks(self.array(), chunks)
+            .async_invalidate_cached_chunks(self.array().as_ref(), chunks)
             .await;
         result
     }
@@ -65,7 +69,7 @@ where
     pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
         let result = self.array().async_erase_chunk(chunk_indices).await;
         self.cache()
-            .async_invalidate_cached_chunk(self.array(), chunk_indices)
+            .async_invalidate_cached_chunk(self.array().as_ref(), chunk_indices)
             .await;
         result
     }
@@ -78,7 +82,7 @@ where
     ) -> Result<(), ArrayError> {
         let result = self.array().async_erase_chunks(chunks, resources).await;
         self.cache()
-            .async_invalidate_cached_chunks(self.array(), chunks)
+            .async_invalidate_cached_chunks(self.array().as_ref(), chunks)
             .await;
         result
     }
@@ -95,7 +99,7 @@ where
                 .await
         };
         self.cache()
-            .async_invalidate_cached_chunk(self.array(), chunk_indices)
+            .async_invalidate_cached_chunk(self.array().as_ref(), chunk_indices)
             .await;
         result
     }

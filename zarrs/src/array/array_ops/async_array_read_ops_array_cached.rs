@@ -37,7 +37,12 @@ where
     C: AsyncArrayCache + ?Sized,
 {
     match chunks.num_elements_usize() {
-        0 => super::fill_value_bytes(array, array_subset.num_elements()).map(Arc::new),
+        0 => super::fill_value_bytes(
+            array.data_type(),
+            array.fill_value(),
+            array_subset.num_elements(),
+        )
+        .map(Arc::new),
         1 => {
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
@@ -199,7 +204,7 @@ where
 impl<TStorage, C> ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncArrayCache,
+    C: AsyncArrayCache + ?Sized,
 {
     pub(in crate::array) async fn async_retrieve_chunk_into_with_options(
         &self,
@@ -210,7 +215,7 @@ where
     ) -> Result<(), ArrayError> {
         self.cache()
             .async_cached_chunk_into(
-                self.array(),
+                self.array().as_ref(),
                 chunk_indices,
                 output_target,
                 options,
@@ -229,7 +234,7 @@ where
     ) -> Result<(), ArrayError> {
         self.cache()
             .async_cached_partial_chunk_into(
-                self.array(),
+                self.array().as_ref(),
                 chunk_indices,
                 indexer,
                 output_target,
@@ -245,7 +250,7 @@ where
 impl<TStorage, C> AsyncRetrieveInto for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncArrayCache,
+    C: AsyncArrayCache + ?Sized,
 {
     async fn retrieve_chunk_into(
         &self,
@@ -286,7 +291,7 @@ where
 impl<TStorage, C> AsyncArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncArrayCache,
+    C: AsyncArrayCache + ?Sized,
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk<T: FromArrayBytes>(
@@ -311,7 +316,12 @@ where
             },
             async || {
                 self.cache()
-                    .async_cached_chunk_bytes(self.array(), chunk_indices, options, resources)
+                    .async_cached_chunk_bytes(
+                        self.array().as_ref(),
+                        chunk_indices,
+                        options,
+                        resources,
+                    )
                     .await
             },
         )
@@ -368,7 +378,7 @@ where
             async || {
                 self.cache()
                     .async_cached_partial_chunk_bytes(
-                        self.array(),
+                        self.array().as_ref(),
                         chunk_indices,
                         indexer,
                         options,
@@ -438,7 +448,12 @@ where
         let options = self.codec_options();
         let Some(bytes) = self
             .cache()
-            .async_cached_chunk_bytes_if_exists(self.array(), chunk_indices, options, resources)
+            .async_cached_chunk_bytes_if_exists(
+                self.array().as_ref(),
+                chunk_indices,
+                options,
+                resources,
+            )
             .await?
         else {
             return Ok(None);
@@ -531,7 +546,7 @@ where
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
         self.cache()
             .async_cached_partial_decoder(
-                self.array(),
+                self.array().as_ref(),
                 chunk_indices,
                 self.codec_options(),
                 resources,
@@ -941,5 +956,49 @@ mod tests {
         test_cache_spawn_async(AsyncChunkCacheEncodedLruChunkLimit::new(2)).await;
         test_cache_spawn_async(AsyncChunkCacheDecodedLruChunkLimit::new(2)).await;
         test_cache_spawn_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(2)).await;
+    }
+
+    #[tokio::test]
+    async fn dyn_async_array_cache() {
+        let store = Arc::new(AsyncMemoryStore::new());
+        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+            .build_arc(store, "/")
+            .unwrap();
+        let data: Vec<u8> = (0..16).collect();
+        array
+            .async_store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
+            .await
+            .unwrap();
+
+        let caches: Vec<Arc<dyn AsyncArrayCache>> = vec![
+            Arc::new(AsyncChunkCacheEncodedLruChunkLimit::new(4)),
+            Arc::new(AsyncChunkCacheDecodedLruChunkLimit::new(4)),
+            Arc::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)),
+        ];
+        for cache in caches {
+            let cached: ArrayCached<AsyncMemoryStore, dyn AsyncArrayCache> =
+                ArrayCached::new_arc(array.clone(), cache);
+            assert_eq!(
+                cached
+                    .async_retrieve_array_subset::<Vec<u8>>(
+                        &array.subset_all(),
+                        &Resources::default()
+                    )
+                    .await
+                    .unwrap(),
+                data
+            );
+            cached
+                .async_store_chunk(&[0, 0], &[0u8, 1, 4, 5], &Resources::default())
+                .await
+                .unwrap();
+            assert_eq!(
+                cached
+                    .async_retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+                    .await
+                    .unwrap(),
+                vec![0, 1, 4, 5]
+            );
+        }
     }
 }

@@ -1,18 +1,16 @@
 use std::sync::Arc;
 
 #[cfg(feature = "async")]
-use super::AsyncArrayCache;
-use super::SyncArrayCache;
+use super::{AsyncArrayCache, AsyncCachedArray};
+use super::{CachedArrayMeta, SyncArrayCache, SyncCachedArray};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, CodecOptions,
-    Indexer, Resources,
+    ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, CodecOptions, Indexer,
+    Resources,
 };
 use zarrs_codec::{
     ArrayBytesTarget, CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
 };
-#[cfg(feature = "async")]
-use zarrs_storage::AsyncReadableStorageTraits;
-use zarrs_storage::{ReadableStorageTraits, StorageError};
+use zarrs_storage::StorageError;
 
 mod decoded;
 mod encoded;
@@ -26,8 +24,8 @@ pub(super) fn cache_error(error: Arc<ArrayError>) -> ArrayError {
 }
 
 /// Validate that `chunk_indices` are within the chunk grid of `array`.
-pub(super) fn validate_chunk_grid_indices<TStorage: ?Sized>(
-    array: &Array<TStorage>,
+pub(super) fn validate_chunk_grid_indices(
+    array: &(impl CachedArrayMeta + ?Sized),
     chunk_indices: &[u64],
 ) -> Result<(), ArrayError> {
     if chunk_indices.len() != array.dimensionality()
@@ -56,8 +54,8 @@ pub(super) fn validate_target_num_elements(
     Ok(())
 }
 
-pub(super) fn validate_partial_chunk_indexer<TStorage: ?Sized>(
-    array: &Array<TStorage>,
+pub(super) fn validate_partial_chunk_indexer(
+    array: &(impl CachedArrayMeta + ?Sized),
     chunk_indices: &[u64],
     indexer: &dyn Indexer,
     output_target: &ArrayBytesTarget<'_>,
@@ -73,15 +71,15 @@ pub(super) fn validate_partial_chunk_indexer<TStorage: ?Sized>(
 }
 
 pub(super) fn copy_array_fill_value_into(
-    array: &Array<impl ?Sized>,
+    array: &(impl CachedArrayMeta + ?Sized),
     output_target: &mut ArrayBytesTarget<'_>,
 ) -> Result<(), ArrayError> {
     copy_fill_value_into(array.data_type(), array.fill_value(), output_target)
         .map_err(ArrayError::CodecError)
 }
 
-pub(super) fn validate_chunk_indices<TStorage: ?Sized>(
-    array: &Array<TStorage>,
+pub(super) fn validate_chunk_indices(
+    array: &(impl CachedArrayMeta + ?Sized),
     chunk_indices: &[u64],
 ) -> Result<ChunkShape, ArrayError> {
     validate_chunk_grid_indices(array, chunk_indices)?;
@@ -91,9 +89,9 @@ pub(super) fn validate_chunk_indices<TStorage: ?Sized>(
 /// Retrieve `overlap`, a subset of the chunk at `chunk_indices` with array subset `chunk_subset`.
 ///
 /// The complete chunk is retrieved without subsetting if `overlap` covers it.
-pub(crate) fn retrieve_chunk_overlap_bytes<TStorage, C>(
+pub(crate) fn retrieve_chunk_overlap_bytes<C>(
     cache: &C,
-    array: &Array<TStorage>,
+    array: &dyn SyncCachedArray,
     chunk_indices: &[u64],
     chunk_subset: &ArraySubset,
     overlap: &dyn ArraySubsetTraits,
@@ -101,7 +99,6 @@ pub(crate) fn retrieve_chunk_overlap_bytes<TStorage, C>(
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     if *chunk_subset == overlap {
@@ -120,9 +117,9 @@ where
 /// Retrieve `overlap`, a subset of the chunk at `chunk_indices` with array subset `chunk_subset`,
 /// directly into `output_target`.
 #[expect(clippy::too_many_arguments)]
-pub(crate) fn retrieve_chunk_overlap_into<TStorage, C>(
+pub(crate) fn retrieve_chunk_overlap_into<C>(
     cache: &C,
-    array: &Array<TStorage>,
+    array: &dyn SyncCachedArray,
     chunk_indices: &[u64],
     chunk_subset: &ArraySubset,
     overlap: &dyn ArraySubsetTraits,
@@ -131,7 +128,6 @@ pub(crate) fn retrieve_chunk_overlap_into<TStorage, C>(
     resources: &Resources,
 ) -> Result<(), ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     if *chunk_subset == overlap {
@@ -150,9 +146,9 @@ where
 
 /// Asynchronous version of [`retrieve_chunk_overlap_bytes`].
 #[cfg(feature = "async")]
-pub(crate) async fn async_retrieve_chunk_overlap_bytes<TStorage, C>(
+pub(crate) async fn async_retrieve_chunk_overlap_bytes<C>(
     cache: &C,
-    array: &Array<TStorage>,
+    array: &dyn AsyncCachedArray,
     chunk_indices: &[u64],
     chunk_subset: &ArraySubset,
     overlap: &dyn ArraySubsetTraits,
@@ -160,7 +156,6 @@ pub(crate) async fn async_retrieve_chunk_overlap_bytes<TStorage, C>(
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
-    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
     C: AsyncArrayCache + ?Sized,
 {
     if *chunk_subset == overlap {
@@ -183,9 +178,9 @@ where
 /// Asynchronous version of [`retrieve_chunk_overlap_into`].
 #[cfg(feature = "async")]
 #[expect(clippy::too_many_arguments)]
-pub(crate) async fn async_retrieve_chunk_overlap_into<TStorage, C>(
+pub(crate) async fn async_retrieve_chunk_overlap_into<C>(
     cache: &C,
-    array: &Array<TStorage>,
+    array: &dyn AsyncCachedArray,
     chunk_indices: &[u64],
     chunk_subset: &ArraySubset,
     overlap: &dyn ArraySubsetTraits,
@@ -194,7 +189,6 @@ pub(crate) async fn async_retrieve_chunk_overlap_into<TStorage, C>(
     resources: &Resources,
 ) -> Result<(), ArrayError>
 where
-    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
     C: AsyncArrayCache + ?Sized,
 {
     if *chunk_subset == overlap {

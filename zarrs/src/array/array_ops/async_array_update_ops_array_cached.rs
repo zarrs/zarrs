@@ -15,7 +15,7 @@ use zarrs_codec::{
 };
 use zarrs_storage::StorageError;
 
-struct CachedAsyncArrayPartialEncoder<TStorage: ?Sized, C> {
+struct CachedAsyncArrayPartialEncoder<TStorage: ?Sized, C: ?Sized> {
     cached: ArrayCached<TStorage, C>,
     encoder: Arc<dyn AsyncArrayPartialEncoderTraits>,
     chunk_indices: ArrayIndices,
@@ -27,7 +27,7 @@ impl<TStorage, C> AsyncArrayPartialDecoderSubchunkingTraits
     for CachedAsyncArrayPartialEncoder<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static,
-    C: AsyncArrayCache + 'static,
+    C: AsyncArrayCache + ?Sized + 'static,
 {
     async fn local_subchunk_grids(
         &self,
@@ -43,7 +43,7 @@ where
 impl<TStorage, C> AsyncArrayPartialDecoderTraits for CachedAsyncArrayPartialEncoder<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static,
-    C: AsyncArrayCache + 'static,
+    C: AsyncArrayCache + ?Sized + 'static,
 {
     fn data_type(&self) -> &DataType {
         self.encoder.data_type()
@@ -90,13 +90,13 @@ where
 impl<TStorage, C> AsyncArrayPartialEncoderTraits for CachedAsyncArrayPartialEncoder<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static,
-    C: AsyncArrayCache + 'static,
+    C: AsyncArrayCache + ?Sized + 'static,
 {
     async fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase().await;
         self.cached
             .cache()
-            .async_invalidate_cached_chunk(self.cached.array(), &self.chunk_indices)
+            .async_invalidate_cached_chunk(self.cached.array().as_ref(), &self.chunk_indices)
             .await;
         result
     }
@@ -114,7 +114,7 @@ where
             .await;
         self.cached
             .cache()
-            .async_invalidate_cached_chunk(self.cached.array(), &self.chunk_indices)
+            .async_invalidate_cached_chunk(self.cached.array().as_ref(), &self.chunk_indices)
             .await;
         result
     }
@@ -128,7 +128,7 @@ where
 impl<TStorage, C> AsyncArrayUpdateOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static,
-    C: AsyncArrayCache + 'static,
+    C: AsyncArrayCache + ?Sized + 'static,
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_partial_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
@@ -143,7 +143,7 @@ where
             .async_store_partial_chunk(chunk_indices, indexer, indexer_data, resources)
             .await;
         self.cache()
-            .async_invalidate_cached_chunk(self.array(), chunk_indices)
+            .async_invalidate_cached_chunk(self.array().as_ref(), chunk_indices)
             .await;
         result
     }
@@ -162,12 +162,14 @@ where
         let invalidated = match self.array().chunks_in_array_subset(array_subset) {
             Ok(Some(chunks)) => {
                 self.cache()
-                    .async_invalidate_cached_chunks(self.array(), &chunks)
+                    .async_invalidate_cached_chunks(self.array().as_ref(), &chunks)
                     .await;
                 Ok(())
             }
             Ok(None) => {
-                self.cache().async_invalidate_cached_all(self.array()).await;
+                self.cache()
+                    .async_invalidate_cached_all(self.array().as_ref())
+                    .await;
                 Ok(())
             }
             Err(err) => Err(err.into()),
@@ -187,7 +189,7 @@ where
             .await;
         if !matches!(compacted, Ok(false)) {
             self.cache()
-                .async_invalidate_cached_chunk(self.array(), chunk_indices)
+                .async_invalidate_cached_chunk(self.array().as_ref(), chunk_indices)
                 .await;
         }
         compacted

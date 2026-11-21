@@ -10,7 +10,7 @@ use super::{
 };
 
 #[inherent]
-impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
+impl<TStorage: ?Sized, C: ?Sized> ArrayOps for ArrayCached<TStorage, C> {
     type Storage = TStorage;
 
     #[allow(clippy::must_use_candidate)]

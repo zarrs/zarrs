@@ -39,7 +39,12 @@ where
     C: SyncArrayCache + ?Sized,
 {
     match chunks.num_elements_usize() {
-        0 => super::fill_value_bytes(array, array_subset.num_elements()).map(Arc::new),
+        0 => super::fill_value_bytes(
+            array.data_type(),
+            array.fill_value(),
+            array_subset.num_elements(),
+        )
+        .map(Arc::new),
         1 => {
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
@@ -187,7 +192,7 @@ where
 impl<TStorage, C> ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: SyncArrayCache,
+    C: SyncArrayCache + ?Sized,
 {
     pub(in crate::array) fn retrieve_chunk_into_with_options(
         &self,
@@ -197,7 +202,7 @@ where
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.cache().cached_chunk_into(
-            self.array(),
+            self.array().as_ref(),
             chunk_indices,
             output_target,
             options,
@@ -214,7 +219,7 @@ where
         resources: &Resources,
     ) -> Result<(), ArrayError> {
         self.cache().cached_partial_chunk_into(
-            self.array(),
+            self.array().as_ref(),
             chunk_indices,
             indexer,
             output_target,
@@ -228,7 +233,7 @@ where
 impl<TStorage, C> ArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: SyncArrayCache,
+    C: SyncArrayCache + ?Sized,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk<T: FromArrayBytes>(
@@ -246,8 +251,12 @@ where
                 self.retrieve_chunk_into_with_options(chunk_indices, target, options, resources)
             },
             || {
-                self.cache()
-                    .cached_chunk_bytes(self.array(), chunk_indices, options, resources)
+                self.cache().cached_chunk_bytes(
+                    self.array().as_ref(),
+                    chunk_indices,
+                    options,
+                    resources,
+                )
             },
         )
     }
@@ -299,7 +308,7 @@ where
             },
             || {
                 self.cache().cached_partial_chunk_bytes(
-                    self.array(),
+                    self.array().as_ref(),
                     chunk_indices,
                     indexer,
                     options,
@@ -360,7 +369,7 @@ where
     ) -> Result<Option<T>, ArrayError> {
         let options = self.codec_options();
         let Some(bytes) = self.cache().cached_chunk_bytes_if_exists(
-            self.array(),
+            self.array().as_ref(),
             chunk_indices,
             options,
             resources,
@@ -464,8 +473,12 @@ where
         resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
         let options = self.codec_options();
-        self.cache()
-            .cached_partial_decoder(self.array(), chunk_indices, options, resources)
+        self.cache().cached_partial_decoder(
+            self.array().as_ref(),
+            chunk_indices,
+            options,
+            resources,
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -499,9 +512,9 @@ mod tests {
     use crate::array::{ArrayBuilder, ArrayError, ArrayIndices, ArraySubset, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
 
-    fn test_cache<C>(cache: C)
+    fn test_cache<C>(cache: Arc<C>)
     where
-        C: ChunkCache,
+        C: ChunkCache + ?Sized,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -511,7 +524,7 @@ mod tests {
             .store_chunk(&[0], &[1u8, 2], &Resources::default())
             .unwrap();
 
-        let cached = ArrayCached::new(array, cache);
+        let cached = ArrayCached::new_arc(array, cache);
         assert_eq!(
             cached
                 .retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
@@ -715,8 +728,8 @@ mod tests {
 
     #[test]
     fn all_lru_policies_support_encoded_values() {
-        test_cache(ChunkCacheEncodedLruChunkLimit::new(2));
-        test_cache(ChunkCacheEncodedLruSizeLimit::new(1024));
+        test_cache(Arc::new(ChunkCacheEncodedLruChunkLimit::new(2)));
+        test_cache(Arc::new(ChunkCacheEncodedLruSizeLimit::new(1024)));
         test_cache_sharded(ChunkCacheEncodedLruChunkLimit::new(4));
         test_cache_sharded(ChunkCacheEncodedLruSizeLimit::new(4096));
         test_cache_nested_optional(ChunkCacheEncodedLruChunkLimit::new(4));
@@ -727,8 +740,8 @@ mod tests {
 
     #[test]
     fn all_lru_policies_support_decoded_values() {
-        test_cache(ChunkCacheDecodedLruChunkLimit::new(2));
-        test_cache(ChunkCacheDecodedLruSizeLimit::new(1024));
+        test_cache(Arc::new(ChunkCacheDecodedLruChunkLimit::new(2)));
+        test_cache(Arc::new(ChunkCacheDecodedLruSizeLimit::new(1024)));
         test_cache_sharded(ChunkCacheDecodedLruChunkLimit::new(4));
         test_cache_sharded(ChunkCacheDecodedLruSizeLimit::new(4096));
         test_cache_nested_optional(ChunkCacheDecodedLruChunkLimit::new(4));
@@ -739,8 +752,8 @@ mod tests {
 
     #[test]
     fn all_lru_policies_support_partial_decoder_values() {
-        test_cache(ChunkCachePartialDecoderLruChunkLimit::new(2));
-        test_cache(ChunkCachePartialDecoderLruSizeLimit::new(1024));
+        test_cache(Arc::new(ChunkCachePartialDecoderLruChunkLimit::new(2)));
+        test_cache(Arc::new(ChunkCachePartialDecoderLruSizeLimit::new(1024)));
         test_cache_sharded(ChunkCachePartialDecoderLruChunkLimit::new(4));
         test_cache_sharded(ChunkCachePartialDecoderLruSizeLimit::new(4096));
         test_cache_nested_optional(ChunkCachePartialDecoderLruChunkLimit::new(4));
@@ -757,14 +770,11 @@ mod tests {
     impl ChunkCache for CustomDecodedCache {
         type Value = ChunkCacheTypeDecoded;
 
-        fn try_get_or_insert_with<F>(
+        fn try_get_or_insert_with(
             &self,
             chunk_indices: ArrayIndices,
-            f: F,
-        ) -> Result<Self::Value, Arc<ArrayError>>
-        where
-            F: FnOnce() -> Result<Self::Value, ArrayError>,
-        {
+            f: &mut dyn FnMut() -> Result<Self::Value, ArrayError>,
+        ) -> Result<Self::Value, Arc<ArrayError>> {
             let mut values = self.values.lock().unwrap();
             if let Some(value) = values.get(&chunk_indices) {
                 return Ok(value.clone());
@@ -801,7 +811,62 @@ mod tests {
 
     #[test]
     fn custom_policy_gets_reads_from_its_value_type() {
-        test_cache(CustomDecodedCache::default());
+        test_cache(Arc::new(CustomDecodedCache::default()));
         test_cache_sharded(CustomDecodedCache::default());
+    }
+
+    #[test]
+    fn dyn_chunk_cache_and_sync_array_cache() {
+        let store = Arc::new(MemoryStore::default());
+        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+            .build_arc(store, "/")
+            .unwrap();
+        let data: Vec<u8> = (0..16).collect();
+        array
+            .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
+            .unwrap();
+
+        // dyn ChunkCache<Value = ChunkCacheTypeDecoded>
+        let dyn_decoded: Arc<dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
+            Arc::new(ChunkCacheDecodedLruChunkLimit::new(4));
+        let cached: ArrayCached<MemoryStore, dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
+            ArrayCached::new_arc(array.clone(), dyn_decoded.clone());
+        assert_eq!(
+            cached
+                .retrieve_array_subset::<Vec<u8>>(&array.subset_all(), &Resources::default())
+                .unwrap(),
+            data
+        );
+        assert_eq!(cached.cache().len(), 4);
+        assert_eq!(cached.cache().invalidate(), 4);
+        assert!(cached.cache().is_empty());
+
+        test_cache(dyn_decoded);
+
+        // Heterogeneous caches behind ArrayCached<MemoryStore, dyn SyncArrayCache>
+        let caches: Vec<Arc<dyn SyncArrayCache>> = vec![
+            Arc::new(ChunkCacheEncodedLruChunkLimit::new(4)),
+            Arc::new(ChunkCacheDecodedLruChunkLimit::new(4)),
+            Arc::new(ChunkCachePartialDecoderLruChunkLimit::new(4)),
+        ];
+        for cache in caches {
+            let cached: ArrayCached<MemoryStore, dyn SyncArrayCache> =
+                ArrayCached::new_arc(array.clone(), cache);
+            assert_eq!(
+                cached
+                    .retrieve_array_subset::<Vec<u8>>(&array.subset_all(), &Resources::default())
+                    .unwrap(),
+                data
+            );
+            cached
+                .store_chunk(&[0, 0], &[0u8, 1, 4, 5], &Resources::default())
+                .unwrap();
+            assert_eq!(
+                cached
+                    .retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+                    .unwrap(),
+                vec![0, 1, 4, 5]
+            );
+        }
     }
 }

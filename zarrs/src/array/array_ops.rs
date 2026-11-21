@@ -210,12 +210,13 @@ pub(crate) fn subchunk_grid_at_level(
         .ok_or(ArrayError::MissingSubchunkGrid)
 }
 
-/// Return the fill value of `array` for `num_elements` elements.
+/// Return `num_elements` elements of `fill_value`.
 pub(crate) fn fill_value_bytes(
-    array: &(impl ArrayOps + ?Sized),
+    data_type: &DataType,
+    fill_value: &FillValue,
     num_elements: u64,
 ) -> Result<super::ArrayBytes<'static>, ArrayError> {
-    super::ArrayBytes::new_fill_value(array.data_type(), num_elements, array.fill_value())
+    super::ArrayBytes::new_fill_value(data_type, num_elements, fill_value)
         .map_err(zarrs_codec::CodecError::from)
         .map_err(ArrayError::from)
 }
@@ -330,7 +331,11 @@ fn chunk_or_fill_value<A: ArrayOps + ?Sized, T: FromArrayBytes>(
     }
     let chunk_shape = array.chunk_shape(chunk_indices)?;
     T::from_array_bytes(
-        fill_value_bytes(array, chunk_shape.num_elements_u64())?,
+        fill_value_bytes(
+            array.data_type(),
+            array.fill_value(),
+            chunk_shape.num_elements_u64(),
+        )?,
         bytemuck::must_cast_slice(&chunk_shape),
         array.data_type(),
         array.element_order(),

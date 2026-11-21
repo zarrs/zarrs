@@ -130,14 +130,11 @@ macro_rules! impl_ChunkCacheLruCommon {
     () => {
         type Value = CT;
 
-        fn try_get_or_insert_with<F>(
+        fn try_get_or_insert_with(
             &self,
             chunk_indices: ChunkIndices,
-            f: F,
-        ) -> Result<Self::Value, Arc<ArrayError>>
-        where
-            F: FnOnce() -> Result<Self::Value, ArrayError>,
-        {
+            f: &mut dyn FnMut() -> Result<Self::Value, ArrayError>,
+        ) -> Result<Self::Value, Arc<ArrayError>> {
             self.cache.try_get_or_insert_with(chunk_indices, f)
         }
 

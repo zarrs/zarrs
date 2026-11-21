@@ -292,7 +292,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let options = self.codec_options();
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
-            0 => super::fill_value_bytes(self, array_subset.num_elements()),
+            0 => super::fill_value_bytes(
+                self.data_type(),
+                self.fill_value(),
+                array_subset.num_elements(),
+            ),
             1 => {
                 let chunk_indices = chunks.start();
                 let chunk_subset = self.chunk_subset(chunk_indices)?;
@@ -376,7 +380,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk_encoded) = self.retrieve_encoded_chunk(chunk_indices)? {
             self.decode_chunk(chunk_encoded, chunk_shape, options, resources)
         } else {
-            super::fill_value_bytes(self, chunk_shape.num_elements_u64())
+            super::fill_value_bytes(
+                self.data_type(),
+                self.fill_value(),
+                chunk_shape.num_elements_u64(),
+            )
         }
     }
 

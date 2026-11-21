@@ -12,7 +12,7 @@
 )]
 //!   - Preferred where chunks are repeatedly *partially retrieved*.
 //!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
-//!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
+//!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`](super::Array::codecs)) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
 //!
 //! `zarrs` implements the following Least Recently Used (LRU) chunk caches:
 //!  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
@@ -51,21 +51,22 @@ use std::future::Future;
 use std::sync::Arc;
 
 use super::{ArrayBytes, ArrayError};
-use crate::array::{Array, ArrayIndices, Indexer};
+use crate::array::{ArrayIndices, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions, Resources};
 
-#[cfg(feature = "async")]
-use zarrs_storage::AsyncReadableStorageTraits;
-use zarrs_storage::{Bytes, MaybeSend, MaybeSync, ReadableStorageTraits};
+use zarrs_storage::{Bytes, MaybeSend, MaybeSync};
 
 mod array_cache;
 mod chunk_cache_lru;
 mod chunk_cache_type;
 #[cfg(feature = "async")]
 pub use array_cache::AsyncArrayCache;
+#[cfg(feature = "async")]
+pub(crate) use array_cache::AsyncCachedArray;
 pub use array_cache::SyncArrayCache;
+pub(crate) use array_cache::{CachedArrayMeta, SyncCachedArray};
 // pub(crate) mod chunk_cache_lru_macros;
 pub use chunk_cache_lru::*;
 #[cfg(feature = "async")]
@@ -124,17 +125,19 @@ pub trait AsyncChunkCacheType: ChunkCacheType + chunk_cache_type_sealed::SealedA
 impl<T: ChunkCacheType + chunk_cache_type_sealed::SealedAsync> AsyncChunkCacheType for T {}
 
 mod chunk_cache_type_sealed {
+    #[cfg(feature = "async")]
+    use std::future::Future;
     use std::sync::Arc;
 
     use super::{
-        Array, ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCache, ChunkCacheType,
+        ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCache, ChunkCacheType,
         ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, CodecOptions,
-        Indexer, ReadableStorageTraits, Resources,
+        Indexer, Resources, SyncCachedArray,
     };
     #[cfg(feature = "async")]
     use super::{
-        AsyncArrayPartialDecoderTraits, AsyncChunkCache, AsyncReadableStorageTraits,
-        ChunkCacheTypeAsyncPartialDecoder,
+        AsyncArrayPartialDecoderTraits, AsyncCachedArray, AsyncChunkCache,
+        ChunkCacheTypeAsyncPartialDecoder, MaybeSend,
     };
     use zarrs_codec::ArrayBytesTarget;
 
@@ -151,55 +154,51 @@ mod chunk_cache_type_sealed {
     /// This trait cannot be named outside of `zarrs`, which keeps its operations out of the public
     /// API while [`SyncChunkCacheType`](super::SyncChunkCacheType) remains usable as a public bound.
     pub trait SealedSync: ChunkCacheType {
-        fn partial_decoder<TStorage, C>(
+        fn partial_decoder<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn SyncCachedArray,
             chunk_indices: &[u64],
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
         where
-            TStorage: ?Sized + ReadableStorageTraits + 'static,
             C: ChunkCache<Value = Self> + ?Sized;
 
-        fn retrieve_chunk_bytes_if_exists<TStorage, C>(
+        fn retrieve_chunk_bytes_if_exists<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn SyncCachedArray,
             chunk_indices: &[u64],
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
         where
-            TStorage: ?Sized + ReadableStorageTraits + 'static,
             C: ChunkCache<Value = Self> + ?Sized;
 
-        fn retrieve_partial_chunk_bytes<TStorage, C>(
+        fn retrieve_partial_chunk_bytes<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn SyncCachedArray,
             chunk_indices: &[u64],
             indexer: &dyn Indexer,
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
         where
-            TStorage: ?Sized + ReadableStorageTraits + 'static,
             C: ChunkCache<Value = Self> + ?Sized;
 
-        fn retrieve_chunk_into<TStorage, C>(
+        fn retrieve_chunk_into<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn SyncCachedArray,
             chunk_indices: &[u64],
             output_target: &mut ArrayBytesTarget<'_>,
             options: &CodecOptions,
             resources: &Resources,
         ) -> Result<(), ArrayError>
         where
-            TStorage: ?Sized + ReadableStorageTraits + 'static,
             C: ChunkCache<Value = Self> + ?Sized;
 
-        fn retrieve_partial_chunk_into<TStorage, C>(
+        fn retrieve_partial_chunk_into<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn SyncCachedArray,
             chunk_indices: &[u64],
             indexer: &dyn Indexer,
             output_target: &mut ArrayBytesTarget<'_>,
@@ -207,7 +206,6 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> Result<(), ArrayError>
         where
-            TStorage: ?Sized + ReadableStorageTraits + 'static,
             C: ChunkCache<Value = Self> + ?Sized;
     }
 
@@ -217,66 +215,59 @@ mod chunk_cache_type_sealed {
     /// API while [`AsyncChunkCacheType`](super::AsyncChunkCacheType) remains usable as a public
     /// bound.
     #[cfg(feature = "async")]
-    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
     pub trait SealedAsync: ChunkCacheType {
-        async fn async_partial_decoder<TStorage, C>(
+        fn async_partial_decoder<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn AsyncCachedArray,
             chunk_indices: &[u64],
             options: &CodecOptions,
             resources: &Resources,
-        ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
+        ) -> impl Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>> + MaybeSend
         where
-            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
             C: AsyncChunkCache<Value = Self> + ?Sized;
 
-        async fn async_retrieve_chunk_bytes_if_exists<TStorage, C>(
+        fn async_retrieve_chunk_bytes_if_exists<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn AsyncCachedArray,
             chunk_indices: &[u64],
             options: &CodecOptions,
             resources: &Resources,
-        ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
+        ) -> impl Future<Output = Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>> + MaybeSend
         where
-            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
             C: AsyncChunkCache<Value = Self> + ?Sized;
 
-        async fn async_retrieve_partial_chunk_bytes<TStorage, C>(
+        fn async_retrieve_partial_chunk_bytes<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn AsyncCachedArray,
             chunk_indices: &[u64],
             indexer: &dyn Indexer,
             options: &CodecOptions,
             resources: &Resources,
-        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+        ) -> impl Future<Output = Result<Arc<ArrayBytes<'static>>, ArrayError>> + MaybeSend
         where
-            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
             C: AsyncChunkCache<Value = Self> + ?Sized;
 
-        async fn async_retrieve_chunk_into<TStorage, C>(
+        fn async_retrieve_chunk_into<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn AsyncCachedArray,
             chunk_indices: &[u64],
             output_target: &mut ArrayBytesTarget<'_>,
             options: &CodecOptions,
             resources: &Resources,
-        ) -> Result<(), ArrayError>
+        ) -> impl Future<Output = Result<(), ArrayError>> + MaybeSend
         where
-            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
             C: AsyncChunkCache<Value = Self> + ?Sized;
 
-        async fn async_retrieve_partial_chunk_into<TStorage, C>(
+        fn async_retrieve_partial_chunk_into<C>(
             cache: &C,
-            array: &Array<TStorage>,
+            array: &dyn AsyncCachedArray,
             chunk_indices: &[u64],
             indexer: &dyn Indexer,
             output_target: &mut ArrayBytesTarget<'_>,
             options: &CodecOptions,
             resources: &Resources,
-        ) -> Result<(), ArrayError>
+        ) -> impl Future<Output = Result<(), ArrayError>> + MaybeSend
         where
-            TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
             C: AsyncChunkCache<Value = Self> + ?Sized;
     }
 }
@@ -307,13 +298,11 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     /// # Errors
     /// Returns the [`ArrayError`] returned by `f`, which may be shared with the other callers
     /// awaiting the same value.
-    fn try_get_or_insert_with<F>(
+    fn try_get_or_insert_with(
         &self,
         chunk_indices: ArrayIndices,
-        f: F,
-    ) -> Result<Self::Value, Arc<ArrayError>>
-    where
-        F: FnOnce() -> Result<Self::Value, ArrayError>;
+        f: &mut dyn FnMut() -> Result<Self::Value, ArrayError>,
+    ) -> Result<Self::Value, Arc<ArrayError>>;
 
     /// Invalidate all cached chunks, returning the number of chunks invalidated.
     fn invalidate(&self) -> usize;

@@ -86,12 +86,12 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 /// (see `SyncChunkCacheType` and `AsyncChunkCacheType` in
 /// [`chunk_cache`](super::chunk_cache)).
 #[derive(Debug)]
-pub struct ArrayCached<TStorage: ?Sized, C> {
+pub struct ArrayCached<TStorage: ?Sized, C: ?Sized> {
     array: Arc<Array<TStorage>>,
     cache: Arc<C>,
 }
 
-impl<TStorage: ?Sized, C> Clone for ArrayCached<TStorage, C> {
+impl<TStorage: ?Sized, C: ?Sized> Clone for ArrayCached<TStorage, C> {
     fn clone(&self) -> Self {
         Self {
             array: self.array.clone(),
@@ -104,10 +104,15 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     /// Create a new cached array wrapper.
     #[must_use]
     pub fn new(array: Arc<Array<TStorage>>, cache: C) -> Self {
-        Self {
-            array,
-            cache: Arc::new(cache),
-        }
+        Self::new_arc(array, Arc::new(cache))
+    }
+}
+
+impl<TStorage: ?Sized, C: ?Sized> ArrayCached<TStorage, C> {
+    /// Create a new cached array wrapper from a shared cache.
+    #[must_use]
+    pub fn new_arc(array: Arc<Array<TStorage>>, cache: Arc<C>) -> Self {
+        Self { array, cache }
     }
 
     /// Return the inner array.

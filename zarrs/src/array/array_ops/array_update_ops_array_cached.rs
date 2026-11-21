@@ -14,7 +14,7 @@ use zarrs_codec::{
 };
 use zarrs_storage::StorageError;
 
-struct CachedArrayPartialEncoder<TStorage: ?Sized, C> {
+struct CachedArrayPartialEncoder<TStorage: ?Sized, C: ?Sized> {
     cached: ArrayCached<TStorage, C>,
     encoder: Arc<dyn ArrayPartialEncoderTraits>,
     chunk_indices: ArrayIndices,
@@ -23,7 +23,7 @@ struct CachedArrayPartialEncoder<TStorage: ?Sized, C> {
 impl<TStorage, C> ArrayPartialDecoderSubchunkingTraits for CachedArrayPartialEncoder<TStorage, C>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
-    C: SyncArrayCache + 'static,
+    C: SyncArrayCache + ?Sized + 'static,
 {
     fn local_subchunk_grids(
         &self,
@@ -37,7 +37,7 @@ where
 impl<TStorage, C> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
-    C: SyncArrayCache + 'static,
+    C: SyncArrayCache + ?Sized + 'static,
 {
     fn data_type(&self) -> &DataType {
         self.encoder.data_type()
@@ -79,13 +79,13 @@ where
 impl<TStorage, C> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
-    C: SyncArrayCache + 'static,
+    C: SyncArrayCache + ?Sized + 'static,
 {
     fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase();
         self.cached
             .cache()
-            .invalidate_cached_chunk(self.cached.array(), &self.chunk_indices);
+            .invalidate_cached_chunk(self.cached.array().as_ref(), &self.chunk_indices);
         result
     }
 
@@ -101,7 +101,7 @@ where
             .partial_encode(indexer, bytes, options, resources);
         self.cached
             .cache()
-            .invalidate_cached_chunk(self.cached.array(), &self.chunk_indices);
+            .invalidate_cached_chunk(self.cached.array().as_ref(), &self.chunk_indices);
         result
     }
 
@@ -114,7 +114,7 @@ where
 impl<TStorage, C> ArrayUpdateOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
-    C: SyncArrayCache + 'static,
+    C: SyncArrayCache + ?Sized + 'static,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_partial_chunk<'a, T: IntoArrayBytes<'a>>(
@@ -128,7 +128,7 @@ where
             self.array()
                 .store_partial_chunk(chunk_indices, indexer, indexer_data, resources);
         self.cache()
-            .invalidate_cached_chunk(self.array(), chunk_indices);
+            .invalidate_cached_chunk(self.array().as_ref(), chunk_indices);
         result
     }
 
@@ -144,11 +144,12 @@ where
             .store_array_subset(array_subset, subset_data, resources);
         let invalidated = match self.array().chunks_in_array_subset(array_subset) {
             Ok(Some(chunks)) => {
-                self.cache().invalidate_cached_chunks(self.array(), &chunks);
+                self.cache()
+                    .invalidate_cached_chunks(self.array().as_ref(), &chunks);
                 Ok(())
             }
             Ok(None) => {
-                self.cache().invalidate_cached_all(self.array());
+                self.cache().invalidate_cached_all(self.array().as_ref());
                 Ok(())
             }
             Err(err) => Err(err.into()),
@@ -165,7 +166,7 @@ where
         let compacted = self.array().compact_chunk(chunk_indices, resources);
         if !matches!(compacted, Ok(false)) {
             self.cache()
-                .invalidate_cached_chunk(self.array(), chunk_indices);
+                .invalidate_cached_chunk(self.array().as_ref(), chunk_indices);
         }
         compacted
     }
