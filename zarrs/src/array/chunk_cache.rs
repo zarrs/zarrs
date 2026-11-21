@@ -70,8 +70,7 @@ pub(crate) use chunk_cache_type::{
     async_retrieve_chunk_overlap_into,
 };
 pub(crate) use chunk_cache_type::{
-    fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
-    retrieve_chunk_overlap_into,
+    retrieve_chunk_bytes, retrieve_chunk_overlap_bytes, retrieve_chunk_overlap_into,
 };
 
 /// The chunk type of an encoded chunk cache.

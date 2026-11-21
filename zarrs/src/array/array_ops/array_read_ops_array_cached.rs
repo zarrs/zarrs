@@ -16,8 +16,7 @@ use crate::array::array_bytes_internal::{
     FixedDecodeBuffers, merge_cached_chunks, optional_innermost_with_depth,
 };
 use crate::array::chunk_cache::{
-    SealedSync, fill_value_bytes, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes,
-    retrieve_chunk_overlap_into,
+    SealedSync, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes, retrieve_chunk_overlap_into,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, DataType};
@@ -40,7 +39,7 @@ where
     C: ChunkCache + ?Sized,
 {
     match chunks.num_elements_usize() {
-        0 => fill_value_bytes(array, array_subset.num_elements()),
+        0 => super::fill_value_bytes(array, array_subset.num_elements()).map(Arc::new),
         1 => {
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;

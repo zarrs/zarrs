@@ -3,6 +3,7 @@ use std::sync::Arc;
 #[cfg(feature = "async")]
 use super::{AsyncChunkCache, SealedAsync};
 use super::{ChunkCache, SealedSync};
+use crate::array::array_ops::fill_value_bytes;
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits,
     CodecOptions, Indexer, Resources,
@@ -25,10 +26,11 @@ pub(super) fn cache_error(error: Arc<ArrayError>) -> ArrayError {
         .unwrap_or_else(|error| ArrayError::StorageError(StorageError::from(error.to_string())))
 }
 
-pub(super) fn validate_chunk_indices<TStorage: ?Sized>(
+/// Validate that `chunk_indices` are within the chunk grid of `array`.
+pub(super) fn validate_chunk_grid_indices<TStorage: ?Sized>(
     array: &Array<TStorage>,
     chunk_indices: &[u64],
-) -> Result<ChunkShape, ArrayError> {
+) -> Result<(), ArrayError> {
     if chunk_indices.len() != array.dimensionality()
         || chunk_indices
             .iter()
@@ -39,7 +41,7 @@ pub(super) fn validate_chunk_indices<TStorage: ?Sized>(
             chunk_indices.to_vec(),
         ));
     }
-    array.chunk_shape(chunk_indices)
+    Ok(())
 }
 
 /// Return an error if `output_target` does not have `expected` elements.
@@ -79,16 +81,12 @@ pub(super) fn copy_array_fill_value_into(
         .map_err(ArrayError::CodecError)
 }
 
-pub(crate) fn fill_value_bytes(
-    array: &Array<impl ?Sized>,
-    num_elements: u64,
-) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-    Ok(
-        ArrayBytes::new_fill_value(array.data_type(), num_elements, array.fill_value())
-            .map_err(CodecError::from)
-            .map_err(ArrayError::from)?
-            .into(),
-    )
+pub(super) fn validate_chunk_indices<TStorage: ?Sized>(
+    array: &Array<TStorage>,
+    chunk_indices: &[u64],
+) -> Result<ChunkShape, ArrayError> {
+    validate_chunk_grid_indices(array, chunk_indices)?;
+    array.chunk_shape(chunk_indices)
 }
 
 pub(crate) fn retrieve_chunk_bytes<TStorage, C>(
@@ -108,7 +106,7 @@ where
         Ok(bytes)
     } else {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        fill_value_bytes(array, chunk_shape.num_elements_u64())
+        fill_value_bytes(array, chunk_shape.num_elements_u64()).map(Arc::new)
     }
 }
 
@@ -205,7 +203,7 @@ where
         Ok(bytes)
     } else {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        fill_value_bytes(array, chunk_shape.num_elements_u64())
+        fill_value_bytes(array, chunk_shape.num_elements_u64()).map(Arc::new)
     }
 }
 

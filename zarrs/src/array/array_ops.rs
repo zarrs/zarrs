@@ -197,8 +197,22 @@ impl COrderBytes for Arc<super::ArrayBytes<'static>> {
     }
 }
 
+/// Return the subchunk grid of `array` at `level`.
+///
+/// # Errors
+/// Returns [`ArrayError::MissingSubchunkGrid`] if the subchunk grid at `level` is not globally resolvable.
+pub(crate) fn subchunk_grid_at_level(
+    array: &(impl ArrayOps + ?Sized),
+    level: usize,
+) -> Result<&ChunkGrid, ArrayError> {
+    array
+        .subchunk_grid_at_level(level)
+        .as_chunk_grid()
+        .ok_or(ArrayError::MissingSubchunkGrid)
+}
+
 /// Return the fill value of `array` for `num_elements` elements.
-fn fill_value_bytes(
+pub(crate) fn fill_value_bytes(
     array: &(impl ArrayOps + ?Sized),
     num_elements: u64,
 ) -> Result<super::ArrayBytes<'static>, ArrayError> {

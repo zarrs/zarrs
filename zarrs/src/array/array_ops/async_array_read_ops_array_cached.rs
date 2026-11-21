@@ -15,7 +15,7 @@ use crate::array::array_bytes_internal::{
 };
 use crate::array::chunk_cache::{
     AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
-    async_retrieve_chunk_overlap_into, fill_value_bytes,
+    async_retrieve_chunk_overlap_into,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayIndices, DataType};
@@ -38,7 +38,7 @@ where
     C: AsyncChunkCache + ?Sized,
 {
     match chunks.num_elements_usize() {
-        0 => fill_value_bytes(array, array_subset.num_elements()),
+        0 => super::fill_value_bytes(array, array_subset.num_elements()).map(Arc::new),
         1 => {
             let chunk_indices = chunks.start();
             let chunk_subset = array.chunk_subset(chunk_indices)?;
