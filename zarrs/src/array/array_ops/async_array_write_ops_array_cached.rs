@@ -15,16 +15,16 @@ where
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.array().async_store_metadata().await?;
+        let result = self.array().async_store_metadata().await;
         self.cache().invalidate().await;
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
-        self.array().async_erase_metadata().await?;
+        let result = self.array().async_erase_metadata().await;
         self.cache().invalidate().await;
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -34,11 +34,12 @@ where
         chunk_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
+        let result = self
+            .array()
             .async_store_chunk(chunk_indices, chunk_data, resources)
-            .await?;
+            .await;
         self.cache().invalidate_chunk(chunk_indices).await;
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -48,18 +49,19 @@ where
         chunks_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
+        let result = self
+            .array()
             .async_store_chunks(chunks, chunks_data, resources)
-            .await?;
+            .await;
         self.cache().invalidate_chunks(chunks).await;
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
-        self.array().async_erase_chunk(chunk_indices).await?;
+        let result = self.array().async_erase_chunk(chunk_indices).await;
         let _ = self.cache().invalidate_chunk(chunk_indices).await;
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -68,9 +70,9 @@ where
         chunks: &dyn Indexer,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array().async_erase_chunks(chunks, resources).await?;
+        let result = self.array().async_erase_chunks(chunks, resources).await;
         let _ = self.cache().invalidate_chunks(chunks).await;
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
@@ -79,12 +81,12 @@ where
         chunk_indices: &[u64],
         encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
-        unsafe {
+        let result = unsafe {
             self.array()
                 .async_store_encoded_chunk(chunk_indices, encoded_chunk_bytes)
-                .await?;
-        }
+                .await
+        };
         self.cache().invalidate_chunk(chunk_indices).await;
-        Ok(())
+        result
     }
 }

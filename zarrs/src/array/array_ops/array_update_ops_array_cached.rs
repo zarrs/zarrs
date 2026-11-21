@@ -117,10 +117,11 @@ where
         indexer_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
-            .store_partial_chunk(chunk_indices, indexer, indexer_data, resources)?;
+        let result =
+            self.array()
+                .store_partial_chunk(chunk_indices, indexer, indexer_data, resources);
         self.cache().invalidate_chunk(chunk_indices);
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -130,14 +131,21 @@ where
         subset_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
-            .store_array_subset(array_subset, subset_data, resources)?;
-        if let Some(chunks) = self.array().chunks_in_array_subset(array_subset)? {
-            self.cache().invalidate_chunks(&chunks);
-        } else {
-            self.cache().invalidate();
-        }
-        Ok(())
+        let result = self
+            .array()
+            .store_array_subset(array_subset, subset_data, resources);
+        let invalidated = match self.array().chunks_in_array_subset(array_subset) {
+            Ok(Some(chunks)) => {
+                self.cache().invalidate_chunks(&chunks);
+                Ok(())
+            }
+            Ok(None) => {
+                self.cache().invalidate();
+                Ok(())
+            }
+            Err(err) => Err(err.into()),
+        };
+        result.and(invalidated)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -146,11 +154,11 @@ where
         chunk_indices: &[u64],
         resources: &Resources,
     ) -> Result<bool, ArrayError> {
-        let compacted = self.array().compact_chunk(chunk_indices, resources)?;
-        if compacted {
+        let compacted = self.array().compact_chunk(chunk_indices, resources);
+        if !matches!(compacted, Ok(false)) {
             self.cache().invalidate_chunk(chunk_indices);
         }
-        Ok(compacted)
+        compacted
     }
 
     #[allow(clippy::must_use_candidate)]

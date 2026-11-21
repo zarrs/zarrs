@@ -86,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Add the `AsyncChunkCache` trait and `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` implementations with `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases
     - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
     - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
+  - Invalidate caches for chunks that a failed write may have changed
   - Retrieve complete cached chunks without extracting a subset
   - Fix chunk subset retrieval from a chunk cache to validate the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - Subchunks

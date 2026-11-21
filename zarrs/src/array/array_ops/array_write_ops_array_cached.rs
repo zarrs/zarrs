@@ -14,16 +14,16 @@ where
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_metadata(&self) -> Result<(), StorageError> {
-        self.array().store_metadata()?;
+        let result = self.array().store_metadata();
         self.cache().invalidate();
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
-        self.array().erase_metadata()?;
+        let result = self.array().erase_metadata();
         self.cache().invalidate();
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -33,10 +33,11 @@ where
         chunk_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
-            .store_chunk(chunk_indices, chunk_data, resources)?;
+        let result = self
+            .array()
+            .store_chunk(chunk_indices, chunk_data, resources);
         self.cache().invalidate_chunk(chunk_indices);
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -46,16 +47,16 @@ where
         chunks_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array().store_chunks(chunks, chunks_data, resources)?;
+        let result = self.array().store_chunks(chunks, chunks_data, resources);
         self.cache().invalidate_chunks(chunks);
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError> {
-        self.array().erase_chunk(chunk_indices)?;
+        let result = self.array().erase_chunk(chunk_indices);
         let _ = self.cache().invalidate_chunk(chunk_indices);
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -64,9 +65,9 @@ where
         chunks: &dyn Indexer,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array().erase_chunks(chunks, resources)?;
+        let result = self.array().erase_chunks(chunks, resources);
         let _ = self.cache().invalidate_chunks(chunks);
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc, clippy::missing_safety_doc)]
@@ -75,11 +76,11 @@ where
         chunk_indices: &[u64],
         encoded_chunk_bytes: CowBytes<'_>,
     ) -> Result<(), ArrayError> {
-        unsafe {
+        let result = unsafe {
             self.array()
-                .store_encoded_chunk(chunk_indices, encoded_chunk_bytes)?;
-        }
+                .store_encoded_chunk(chunk_indices, encoded_chunk_bytes)
+        };
         self.cache().invalidate_chunk(chunk_indices);
-        Ok(())
+        result
     }
 }

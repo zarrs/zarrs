@@ -128,11 +128,12 @@ where
         indexer_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
+        let result = self
+            .array()
             .async_store_partial_chunk(chunk_indices, indexer, indexer_data, resources)
-            .await?;
+            .await;
         self.cache().invalidate_chunk(chunk_indices).await;
-        Ok(())
+        result
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -142,15 +143,22 @@ where
         subset_data: T,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        self.array()
+        let result = self
+            .array()
             .async_store_array_subset(array_subset, subset_data, resources)
-            .await?;
-        if let Some(chunks) = self.array().chunks_in_array_subset(array_subset)? {
-            self.cache().invalidate_chunks(&chunks).await;
-        } else {
-            self.cache().invalidate().await;
-        }
-        Ok(())
+            .await;
+        let invalidated = match self.array().chunks_in_array_subset(array_subset) {
+            Ok(Some(chunks)) => {
+                self.cache().invalidate_chunks(&chunks).await;
+                Ok(())
+            }
+            Ok(None) => {
+                self.cache().invalidate().await;
+                Ok(())
+            }
+            Err(err) => Err(err.into()),
+        };
+        result.and(invalidated)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -162,11 +170,11 @@ where
         let compacted = self
             .array()
             .async_compact_chunk(chunk_indices, resources)
-            .await?;
-        if compacted {
+            .await;
+        if !matches!(compacted, Ok(false)) {
             self.cache().invalidate_chunk(chunk_indices).await;
         }
-        Ok(compacted)
+        compacted
     }
 
     #[allow(clippy::must_use_candidate)]
