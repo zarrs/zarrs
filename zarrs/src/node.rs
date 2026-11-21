@@ -785,8 +785,8 @@ mod tests {
         c.metadata.insert("/".to_string(), group_md()); // also base entry after stripping leading slash
         let out = super::expand_consolidated_metadata(&NodePath::root(), c).unwrap();
         let paths: Vec<_> = out.iter().map(|(p, _)| p.as_str().to_string()).collect();
-        assert!(paths.contains(&"/foo".to_string()));
-        assert!(paths.contains(&"/bar".to_string()));
+        assert!(paths.iter().any(|path| path == "/foo"));
+        assert!(paths.iter().any(|path| path == "/bar"));
         assert!(
             !paths.iter().any(|p| p == "/"),
             "base group must be skipped"

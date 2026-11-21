@@ -413,8 +413,11 @@ mod consolidated_open {
             .iter()
             .map(|c| c.name().to_string())
             .collect();
-        assert!(names.contains(&"phantom".to_string()), "names: {names:?}");
-        assert!(names.contains(&"real".to_string()), "names: {names:?}");
+        assert!(
+            names.iter().any(|name| name == "phantom"),
+            "names: {names:?}"
+        );
+        assert!(names.iter().any(|name| name == "real"), "names: {names:?}");
 
         reset_config();
     }
@@ -441,8 +444,11 @@ mod consolidated_open {
             .iter()
             .map(|c| c.name().to_string())
             .collect();
-        assert!(!names.contains(&"phantom".to_string()), "names: {names:?}");
-        assert!(names.contains(&"real".to_string()), "names: {names:?}");
+        assert!(
+            !names.iter().any(|name| name == "phantom"),
+            "names: {names:?}"
+        );
+        assert!(names.iter().any(|name| name == "real"), "names: {names:?}");
 
         reset_config();
     }
@@ -620,7 +626,10 @@ mod consolidated_open {
             .iter()
             .map(|c| c.name().to_string())
             .collect();
-        assert!(names.contains(&"phantom".to_string()), "names: {names:?}");
+        assert!(
+            names.iter().any(|name| name == "phantom"),
+            "names: {names:?}"
+        );
 
         reset_config();
     }
@@ -639,8 +648,11 @@ mod consolidated_open {
             .iter()
             .map(|a| a.path().as_str().to_string())
             .collect();
-        assert!(names.contains(&"/phantom".to_string()), "names: {names:?}");
-        assert!(names.contains(&"/real".to_string()), "names: {names:?}");
+        assert!(
+            names.iter().any(|name| name == "/phantom"),
+            "names: {names:?}"
+        );
+        assert!(names.iter().any(|name| name == "/real"), "names: {names:?}");
 
         // The phantom array carries the consolidated metadata's shape (42).
         let phantom = arrays
@@ -665,8 +677,11 @@ mod consolidated_open {
             .iter()
             .map(|a| a.path().as_str().to_string())
             .collect();
-        assert!(!names.contains(&"/phantom".to_string()), "names: {names:?}");
-        assert!(names.contains(&"/real".to_string()), "names: {names:?}");
+        assert!(
+            !names.iter().any(|name| name == "/phantom"),
+            "names: {names:?}"
+        );
+        assert!(names.iter().any(|name| name == "/real"), "names: {names:?}");
 
         reset_config();
     }
@@ -680,8 +695,11 @@ mod consolidated_open {
         let group = zarrs::group::Group::open(store, "/").unwrap();
         let nodes = group.traverse().unwrap();
         let paths: Vec<_> = nodes.iter().map(|(p, _)| p.as_str().to_string()).collect();
-        assert!(paths.contains(&"/phantom".to_string()), "paths: {paths:?}");
-        assert!(paths.contains(&"/real".to_string()), "paths: {paths:?}");
+        assert!(
+            paths.iter().any(|path| path == "/phantom"),
+            "paths: {paths:?}"
+        );
+        assert!(paths.iter().any(|path| path == "/real"), "paths: {paths:?}");
 
         reset_config();
     }
@@ -884,7 +902,7 @@ mod consolidated_open {
             .iter()
             .map(|c| c.name().to_string())
             .collect();
-        assert!(names.contains(&"only".to_string()), "names: {names:?}");
+        assert!(names.iter().any(|name| name == "only"), "names: {names:?}");
 
         reset_config();
     }
@@ -930,7 +948,7 @@ mod consolidated_open {
             .iter()
             .map(|c| c.name().to_string())
             .collect();
-        assert!(names.contains(&"only".to_string()), "names: {names:?}");
+        assert!(names.iter().any(|name| name == "only"), "names: {names:?}");
 
         reset_config();
     }
