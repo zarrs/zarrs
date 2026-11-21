@@ -14,8 +14,7 @@ use crate::array::array_bytes_internal::{
     FixedDecodeBuffers, merge_cached_chunks, optional_innermost_with_depth,
 };
 use crate::array::chunk_cache::{
-    AsyncChunkCache, SealedAsync, async_retrieve_chunk_bytes, async_retrieve_chunk_overlap_bytes,
-    async_retrieve_chunk_overlap_into,
+    AsyncArrayCache, async_retrieve_chunk_overlap_bytes, async_retrieve_chunk_overlap_into,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayIndices, DataType};
@@ -35,7 +34,7 @@ async fn async_retrieve_array_subset_bytes<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache + ?Sized,
+    C: AsyncArrayCache + ?Sized,
 {
     match chunks.num_elements_usize() {
         0 => super::fill_value_bytes(array, array_subset.num_elements()).map(Arc::new),
@@ -104,7 +103,7 @@ async fn async_retrieve_multi_chunk_variable<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache + ?Sized,
+    C: AsyncArrayCache + ?Sized,
 {
     let retrieve_chunk = |chunk_indices: ArrayIndices| async move {
         let chunk_subset = array.chunk_subset(&chunk_indices)?;
@@ -161,7 +160,7 @@ async fn async_retrieve_multi_chunk_fixed<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache + ?Sized,
+    C: AsyncArrayCache + ?Sized,
 {
     // Zero-sized data has no bytes to decode, unlike the masks of zero-sized optional data
     if optional_depth == 0 && data_type_size == 0 {
@@ -200,7 +199,7 @@ where
 impl<TStorage, C> ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache,
+    C: AsyncArrayCache,
 {
     pub(in crate::array) async fn async_retrieve_chunk_into_with_options(
         &self,
@@ -209,15 +208,15 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        C::Value::async_retrieve_chunk_into(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            output_target,
-            options,
-            resources,
-        )
-        .await
+        self.cache()
+            .async_cached_chunk_into(
+                self.array(),
+                chunk_indices,
+                output_target,
+                options,
+                resources,
+            )
+            .await
     }
 
     pub(in crate::array) async fn async_retrieve_partial_chunk_into_with_options(
@@ -228,16 +227,16 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        C::Value::async_retrieve_partial_chunk_into(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            indexer,
-            output_target,
-            options,
-            resources,
-        )
-        .await
+        self.cache()
+            .async_cached_partial_chunk_into(
+                self.array(),
+                chunk_indices,
+                indexer,
+                output_target,
+                options,
+                resources,
+            )
+            .await
     }
 }
 
@@ -246,7 +245,7 @@ where
 impl<TStorage, C> AsyncRetrieveInto for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache,
+    C: AsyncArrayCache,
 {
     async fn retrieve_chunk_into(
         &self,
@@ -287,7 +286,7 @@ where
 impl<TStorage, C> AsyncArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache,
+    C: AsyncArrayCache,
 {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk<T: FromArrayBytes>(
@@ -311,14 +310,9 @@ where
                 .await
             },
             async || {
-                async_retrieve_chunk_bytes(
-                    self.cache(),
-                    self.array(),
-                    chunk_indices,
-                    options,
-                    resources,
-                )
-                .await
+                self.cache()
+                    .async_cached_chunk_bytes(self.array(), chunk_indices, options, resources)
+                    .await
             },
         )
         .await
@@ -372,15 +366,15 @@ where
                 .await
             },
             async || {
-                C::Value::async_retrieve_partial_chunk_bytes(
-                    self.cache(),
-                    self.array(),
-                    chunk_indices,
-                    indexer,
-                    options,
-                    resources,
-                )
-                .await
+                self.cache()
+                    .async_cached_partial_chunk_bytes(
+                        self.array(),
+                        chunk_indices,
+                        indexer,
+                        options,
+                        resources,
+                    )
+                    .await
             },
         )
         .await
@@ -442,14 +436,10 @@ where
         resources: &Resources,
     ) -> Result<Option<T>, ArrayError> {
         let options = self.codec_options();
-        let Some(bytes) = C::Value::async_retrieve_chunk_bytes_if_exists(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            options,
-            resources,
-        )
-        .await?
+        let Some(bytes) = self
+            .cache()
+            .async_cached_chunk_bytes_if_exists(self.array(), chunk_indices, options, resources)
+            .await?
         else {
             return Ok(None);
         };
@@ -539,14 +529,14 @@ where
         chunk_indices: &[u64],
         resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
-        C::Value::async_partial_decoder(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            self.codec_options(),
-            resources,
-        )
-        .await
+        self.cache()
+            .async_cached_partial_decoder(
+                self.array(),
+                chunk_indices,
+                self.codec_options(),
+                resources,
+            )
+            .await
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -569,7 +559,7 @@ where
 mod tests {
     use super::*;
     use crate::array::chunk_cache::{
-        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
+        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
         AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCacheEncodedLruSizeLimit,
         AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCachePartialDecoderLruSizeLimit,
     };

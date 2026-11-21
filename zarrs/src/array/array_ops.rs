@@ -62,7 +62,6 @@ use std::sync::Arc;
 use super::array_bytes_internal::{FixedDecodeBuffers, reordered};
 use zarrs_codec::ArrayBytesTarget;
 
-use super::chunk_cache::ChunkCache;
 use super::{
     Array, ArrayBuilder, ArrayCached, ArrayCreateError, ArrayError, ArrayIndices, ArrayMetadata,
     ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkGridDecoded,

@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 #[cfg(feature = "async")]
-use super::{AsyncChunkCache, SealedAsync};
-use super::{ChunkCache, SealedSync};
-use crate::array::array_ops::fill_value_bytes;
+use super::AsyncArrayCache;
+use super::SyncArrayCache;
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits,
-    CodecOptions, Indexer, Resources,
+    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, CodecOptions,
+    Indexer, Resources,
 };
 use zarrs_codec::{
     ArrayBytesTarget, CodecError, InvalidNumberOfElementsError, copy_fill_value_into,
@@ -89,27 +88,6 @@ pub(super) fn validate_chunk_indices<TStorage: ?Sized>(
     array.chunk_shape(chunk_indices)
 }
 
-pub(crate) fn retrieve_chunk_bytes<TStorage, C>(
-    cache: &C,
-    array: &Array<TStorage>,
-    chunk_indices: &[u64],
-    options: &CodecOptions,
-    resources: &Resources,
-) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
-where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
-{
-    if let Some(bytes) =
-        C::Value::retrieve_chunk_bytes_if_exists(cache, array, chunk_indices, options, resources)?
-    {
-        Ok(bytes)
-    } else {
-        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        fill_value_bytes(array, chunk_shape.num_elements_u64()).map(Arc::new)
-    }
-}
-
 /// Retrieve `overlap`, a subset of the chunk at `chunk_indices` with array subset `chunk_subset`.
 ///
 /// The complete chunk is retrieved without subsetting if `overlap` covers it.
@@ -124,13 +102,12 @@ pub(crate) fn retrieve_chunk_overlap_bytes<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
+    C: SyncArrayCache + ?Sized,
 {
     if *chunk_subset == overlap {
-        retrieve_chunk_bytes(cache, array, chunk_indices, options, resources)
+        cache.cached_chunk_bytes(array, chunk_indices, options, resources)
     } else {
-        C::Value::retrieve_partial_chunk_bytes(
-            cache,
+        cache.cached_partial_chunk_bytes(
             array,
             chunk_indices,
             &overlap.relative_to(chunk_subset.start())?,
@@ -155,20 +132,12 @@ pub(crate) fn retrieve_chunk_overlap_into<TStorage, C>(
 ) -> Result<(), ArrayError>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
+    C: SyncArrayCache + ?Sized,
 {
     if *chunk_subset == overlap {
-        C::Value::retrieve_chunk_into(
-            cache,
-            array,
-            chunk_indices,
-            output_target,
-            options,
-            resources,
-        )
+        cache.cached_chunk_into(array, chunk_indices, output_target, options, resources)
     } else {
-        C::Value::retrieve_partial_chunk_into(
-            cache,
+        cache.cached_partial_chunk_into(
             array,
             chunk_indices,
             &overlap.relative_to(chunk_subset.start())?,
@@ -176,34 +145,6 @@ where
             options,
             resources,
         )
-    }
-}
-
-#[cfg(feature = "async")]
-pub(crate) async fn async_retrieve_chunk_bytes<TStorage, C>(
-    cache: &C,
-    array: &Array<TStorage>,
-    chunk_indices: &[u64],
-    options: &CodecOptions,
-    resources: &Resources,
-) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
-where
-    TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache + ?Sized,
-{
-    if let Some(bytes) = C::Value::async_retrieve_chunk_bytes_if_exists(
-        cache,
-        array,
-        chunk_indices,
-        options,
-        resources,
-    )
-    .await?
-    {
-        Ok(bytes)
-    } else {
-        let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        fill_value_bytes(array, chunk_shape.num_elements_u64()).map(Arc::new)
     }
 }
 
@@ -220,20 +161,22 @@ pub(crate) async fn async_retrieve_chunk_overlap_bytes<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache + ?Sized,
+    C: AsyncArrayCache + ?Sized,
 {
     if *chunk_subset == overlap {
-        async_retrieve_chunk_bytes(cache, array, chunk_indices, options, resources).await
+        cache
+            .async_cached_chunk_bytes(array, chunk_indices, options, resources)
+            .await
     } else {
-        C::Value::async_retrieve_partial_chunk_bytes(
-            cache,
-            array,
-            chunk_indices,
-            &overlap.relative_to(chunk_subset.start())?,
-            options,
-            resources,
-        )
-        .await
+        cache
+            .async_cached_partial_chunk_bytes(
+                array,
+                chunk_indices,
+                &overlap.relative_to(chunk_subset.start())?,
+                options,
+                resources,
+            )
+            .await
     }
 }
 
@@ -252,29 +195,23 @@ pub(crate) async fn async_retrieve_chunk_overlap_into<TStorage, C>(
 ) -> Result<(), ArrayError>
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + 'static,
-    C: AsyncChunkCache + ?Sized,
+    C: AsyncArrayCache + ?Sized,
 {
     if *chunk_subset == overlap {
-        C::Value::async_retrieve_chunk_into(
-            cache,
-            array,
-            chunk_indices,
-            output_target,
-            options,
-            resources,
-        )
-        .await
+        cache
+            .async_cached_chunk_into(array, chunk_indices, output_target, options, resources)
+            .await
     } else {
-        C::Value::async_retrieve_partial_chunk_into(
-            cache,
-            array,
-            chunk_indices,
-            &overlap.relative_to(chunk_subset.start())?,
-            output_target,
-            options,
-            resources,
-        )
-        .await
+        cache
+            .async_cached_partial_chunk_into(
+                array,
+                chunk_indices,
+                &overlap.relative_to(chunk_subset.start())?,
+                output_target,
+                options,
+                resources,
+            )
+            .await
     }
 }
 

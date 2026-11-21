@@ -8,7 +8,7 @@ use rayon::iter::ParallelIterator;
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
     Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubset, ArraySubsetTraits, COrderBytes,
-    ChunkCache, ChunkGrid, CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits,
+    ChunkGrid, CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
@@ -16,7 +16,7 @@ use crate::array::array_bytes_internal::{
     FixedDecodeBuffers, merge_cached_chunks, optional_innermost_with_depth,
 };
 use crate::array::chunk_cache::{
-    SealedSync, retrieve_chunk_bytes, retrieve_chunk_overlap_bytes, retrieve_chunk_overlap_into,
+    SyncArrayCache, retrieve_chunk_overlap_bytes, retrieve_chunk_overlap_into,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, DataType};
@@ -36,7 +36,7 @@ fn retrieve_array_subset_bytes<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
+    C: SyncArrayCache + ?Sized,
 {
     match chunks.num_elements_usize() {
         0 => super::fill_value_bytes(array, array_subset.num_elements()).map(Arc::new),
@@ -102,7 +102,7 @@ fn retrieve_multi_chunk_variable<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
+    C: SyncArrayCache + ?Sized,
 {
     let indices = chunks.indices();
     let chunk_bytes_and_subsets = indices
@@ -148,7 +148,7 @@ fn retrieve_multi_chunk_fixed<TStorage, C>(
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache + ?Sized,
+    C: SyncArrayCache + ?Sized,
 {
     // Zero-sized data has no bytes to decode, unlike the masks of zero-sized optional data
     if optional_depth == 0 && data_type_size == 0 {
@@ -187,7 +187,7 @@ where
 impl<TStorage, C> ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache,
+    C: SyncArrayCache,
 {
     pub(in crate::array) fn retrieve_chunk_into_with_options(
         &self,
@@ -196,8 +196,7 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        C::Value::retrieve_chunk_into(
-            self.cache(),
+        self.cache().cached_chunk_into(
             self.array(),
             chunk_indices,
             output_target,
@@ -214,8 +213,7 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError> {
-        C::Value::retrieve_partial_chunk_into(
-            self.cache(),
+        self.cache().cached_partial_chunk_into(
             self.array(),
             chunk_indices,
             indexer,
@@ -230,7 +228,7 @@ where
 impl<TStorage, C> ArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableStorageTraits + 'static,
-    C: ChunkCache,
+    C: SyncArrayCache,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk<T: FromArrayBytes>(
@@ -248,13 +246,8 @@ where
                 self.retrieve_chunk_into_with_options(chunk_indices, target, options, resources)
             },
             || {
-                retrieve_chunk_bytes(
-                    self.cache(),
-                    self.array(),
-                    chunk_indices,
-                    options,
-                    resources,
-                )
+                self.cache()
+                    .cached_chunk_bytes(self.array(), chunk_indices, options, resources)
             },
         )
     }
@@ -305,8 +298,7 @@ where
                 )
             },
             || {
-                C::Value::retrieve_partial_chunk_bytes(
-                    self.cache(),
+                self.cache().cached_partial_chunk_bytes(
                     self.array(),
                     chunk_indices,
                     indexer,
@@ -367,8 +359,7 @@ where
         resources: &Resources,
     ) -> Result<Option<T>, ArrayError> {
         let options = self.codec_options();
-        let Some(bytes) = C::Value::retrieve_chunk_bytes_if_exists(
-            self.cache(),
+        let Some(bytes) = self.cache().cached_chunk_bytes_if_exists(
             self.array(),
             chunk_indices,
             options,
@@ -473,13 +464,8 @@ where
         resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
         let options = self.codec_options();
-        C::Value::partial_decoder(
-            self.cache(),
-            self.array(),
-            chunk_indices,
-            options,
-            resources,
-        )
+        self.cache()
+            .cached_partial_decoder(self.array(), chunk_indices, options, resources)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -505,7 +491,7 @@ mod tests {
 
     use super::*;
     use crate::array::chunk_cache::{
-        ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruChunkLimitThreadLocal,
+        ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruChunkLimitThreadLocal,
         ChunkCacheDecodedLruSizeLimit, ChunkCacheDecodedLruSizeLimitThreadLocal,
         ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruChunkLimitThreadLocal,
         ChunkCacheEncodedLruSizeLimit, ChunkCacheEncodedLruSizeLimitThreadLocal,
