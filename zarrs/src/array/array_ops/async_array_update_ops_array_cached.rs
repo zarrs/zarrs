@@ -227,13 +227,13 @@ mod tests {
         AsyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
     async fn test_async_partial_encoder_invalidates<C>(cache: C)
     where
         C: AsyncChunkCacheTraits + 'static,
     {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();

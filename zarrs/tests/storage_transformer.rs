@@ -157,13 +157,12 @@ fn metadata_uses_storage_transformers() -> TestResult {
 async fn async_metadata_uses_storage_transformers() -> TestResult {
     use zarrs::storage::AsyncWritableStorageTraits;
 
-    let store = Arc::new(zarrs::storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs::storage::store::MemoryStore::new());
     let array = array_builder().build(store.clone(), "/array")?;
     assert!(array.async_store_metadata().await.is_err());
 
     let key = meta_key_v3(array.path());
-    store
-        .set(&key, serde_json::to_vec(array.metadata())?.into())
+    AsyncWritableStorageTraits::set(&store, &key, serde_json::to_vec(array.metadata())?.into())
         .await?;
     let opened = Array::async_open(store.clone(), "/array").await?;
     assert_eq!(

@@ -132,13 +132,13 @@ pub async fn async_node_exists_listable<TStorage: ?Sized + AsyncListableStorageT
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
     use zarrs_storage::{AsyncWritableStorageTraits, StoreKey};
 
     #[test]
     fn get_child_nodes_ignores_unrecognized_prefixes() {
         futures::executor::block_on(async {
-            let store = Arc::new(AsyncMemoryStore::new());
+            let store = Arc::new(MemoryStore::new());
             store
                 .set(
                     &StoreKey::new("root/fakenode/content/zarr.json").unwrap(),

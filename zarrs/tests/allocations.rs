@@ -543,8 +543,8 @@ fn store_chunks_sharded() {
 #[cfg(feature = "async")]
 #[test]
 fn async_retrieve_chunk_zstd() {
-    use zarrs::storage::store::AsyncMemoryStore;
-    let store = Arc::new(AsyncMemoryStore::new());
+    use zarrs::storage::store::MemoryStore;
+    let store = Arc::new(MemoryStore::new());
     let array = ArrayBuilder::new(SHAPE.to_vec(), SHAPE.to_vec(), data_type::uint16(), 0u16)
         .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
         .build(store, "/")
@@ -569,10 +569,10 @@ fn async_retrieve_chunk_zstd() {
 #[cfg(feature = "async")]
 #[test]
 fn async_store_array_subset_many_chunks_zstd() {
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
     let array = ArrayBuilder::new(SHAPE.to_vec(), vec![64, 64], data_type::uint16(), 0u16)
         .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
-        .build(Arc::new(AsyncMemoryStore::new()), "/")
+        .build(Arc::new(MemoryStore::new()), "/")
         .unwrap();
     let data = data();
     let ((), stats) = measure("async_store_array_subset_many_chunks_zstd", || {
@@ -616,11 +616,11 @@ fn retrieve_array_subset_many_chunks_zstd_cached() {
 }
 
 #[cfg(feature = "async")]
-fn async_array_many_chunks() -> Array<zarrs::storage::store::AsyncMemoryStore> {
-    use zarrs::storage::store::AsyncMemoryStore;
+fn async_array_many_chunks() -> Array<zarrs::storage::store::MemoryStore> {
+    use zarrs::storage::store::MemoryStore;
     let array = ArrayBuilder::new(SHAPE.to_vec(), vec![64, 64], data_type::uint16(), 0u16)
         .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
-        .build(Arc::new(AsyncMemoryStore::new()), "/")
+        .build(Arc::new(MemoryStore::new()), "/")
         .unwrap();
     futures::executor::block_on(array.async_store_array_subset(
         &array.subset_all(),
@@ -776,11 +776,11 @@ fn collection_indexer() {
 #[test]
 fn collection_async_partial_decode() {
     use zarrs::storage::byte_range::ByteRange;
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
     use zarrs::storage::{AsyncWritableStorageTraits, StoreKey};
     use zarrs_codec::AsyncBytesPartialDecoderTraits;
 
-    let store = AsyncMemoryStore::new();
+    let store = MemoryStore::new();
     let key = StoreKey::new("data").unwrap();
     futures::executor::block_on(store.set(&key, vec![42].into())).unwrap();
     let decoder = (store, key);

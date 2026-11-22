@@ -17,13 +17,13 @@ use zarrs::array::cache::{
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, AsyncArrayPartialEncoderTraits, CodecOptions, data_type,
 };
-use zarrs_storage::store::AsyncMemoryStore;
+use zarrs_storage::store::MemoryStore;
 
 type TestResult = Result<(), Box<dyn Error>>;
 
 /// Build the array for `case` in a fresh store, with the chunk under test written.
-async fn build(case: &Case) -> Result<Arc<Array<AsyncMemoryStore>>, Box<dyn Error>> {
-    let store = Arc::new(AsyncMemoryStore::new());
+async fn build(case: &Case) -> Result<Arc<Array<MemoryStore>>, Box<dyn Error>> {
+    let store = Arc::new(MemoryStore::new());
     let array = case.builder().build_arc(store, "/array")?;
     array
         .async_store_chunk(
@@ -111,7 +111,7 @@ async fn async_local_subchunk_grid_exposed_by_partial_encoders() -> TestResult {
 /// A cache only exposes subchunks if it caches something that can still resolve them.
 async fn check_cache<C: AsyncChunkCacheTraits + 'static>(
     case: &Case,
-    array: &Arc<Array<AsyncMemoryStore>>,
+    array: &Arc<Array<MemoryStore>>,
     cache: C,
     expect_subchunks: bool,
 ) -> TestResult {
@@ -162,7 +162,7 @@ async fn async_local_subchunk_grid_via_chunk_caches() -> TestResult {
 async fn async_local_subchunk_grid_absent_with_array_partial_decoder_cache() -> TestResult {
     // `vlen-utf8` does not support partial decoding, so the codec chain inserts an
     // `ArrayPartialDecoderCache` at the top of the partial decoder chain.
-    let store = Arc::new(AsyncMemoryStore::new());
+    let store = Arc::new(MemoryStore::new());
     let array =
         ArrayBuilder::new(vec![4], vec![4], data_type::string(), "").build(store, "/array")?;
     array
@@ -196,7 +196,7 @@ async fn async_local_subchunk_grids_preserves_hierarchy_depth_with_numcodecs_pac
     use zarrs::array::codec::NumcodecsPackBitsCodec;
     use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
-    let store = Arc::new(AsyncMemoryStore::new());
+    let store = Arc::new(MemoryStore::new());
     let sharding = ShardingCodecBuilder::new(vec![nz(3)], &data_type::uint8()).build_arc();
     let mut builder = ArrayBuilder::new(
         vec![4, 4],

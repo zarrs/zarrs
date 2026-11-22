@@ -582,7 +582,7 @@ mod consolidated_open {
 
         reset_config();
 
-        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+        let store = Arc::new(zarrs_storage::store::MemoryStore::new());
 
         // Manually serialize a root v3 group with a phantom child via consolidated metadata.
         let phantom_md: NodeMetadata = serde_json::from_str(
@@ -609,13 +609,13 @@ mod consolidated_open {
             "consolidated_metadata": serde_json::to_value(&consolidated).unwrap(),
         });
 
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
+        AsyncWritableStorageTraits::set(
+            &store,
+            &StoreKey::new("zarr.json").unwrap(),
+            serde_json::to_vec(&root_md).unwrap().into(),
+        )
+        .await
+        .unwrap();
 
         let h = Hierarchy::async_open(&store, "/").await.unwrap();
         assert!(h.tree().contains("phantom"));
@@ -915,15 +915,15 @@ mod consolidated_open {
 
         reset_config();
 
-        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+        let store = Arc::new(zarrs_storage::store::MemoryStore::new());
         let root_md = serde_json::json!({"zarr_format": 3, "node_type": "group"});
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
+        AsyncWritableStorageTraits::set(
+            &store,
+            &StoreKey::new("zarr.json").unwrap(),
+            serde_json::to_vec(&root_md).unwrap().into(),
+        )
+        .await
+        .unwrap();
         let arr_md = serde_json::json!({
             "zarr_format": 3,
             "node_type": "array",
@@ -934,13 +934,13 @@ mod consolidated_open {
             "fill_value": 0,
             "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
         });
-        store
-            .set(
-                &StoreKey::new("only/zarr.json").unwrap(),
-                serde_json::to_vec(&arr_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
+        AsyncWritableStorageTraits::set(
+            &store,
+            &StoreKey::new("only/zarr.json").unwrap(),
+            serde_json::to_vec(&arr_md).unwrap().into(),
+        )
+        .await
+        .unwrap();
 
         let node = Node::async_open(store.clone(), "/").await.unwrap();
         let names: Vec<_> = node
@@ -1043,14 +1043,14 @@ mod consolidated_open {
             "consolidated_metadata": consolidated_value,
         });
 
-        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
+        let store = Arc::new(zarrs_storage::store::MemoryStore::new());
+        AsyncWritableStorageTraits::set(
+            &store,
+            &StoreKey::new("zarr.json").unwrap(),
+            serde_json::to_vec(&root_md).unwrap().into(),
+        )
+        .await
+        .unwrap();
 
         // Node::async_open propagates the error (covers expand `?` in async path).
         assert!(Node::async_open(store.clone(), "/").await.is_err());
@@ -1166,14 +1166,14 @@ mod consolidated_open {
             "consolidated_metadata": consolidated_value,
         });
 
-        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
+        let store = Arc::new(zarrs_storage::store::MemoryStore::new());
+        AsyncWritableStorageTraits::set(
+            &store,
+            &StoreKey::new("zarr.json").unwrap(),
+            serde_json::to_vec(&root_md).unwrap().into(),
+        )
+        .await
+        .unwrap();
 
         let group = zarrs::group::Group::async_open(store.clone(), "/")
             .await
@@ -1228,14 +1228,14 @@ mod consolidated_open {
             "zarr_format": 3,
             "node_type": "group",
         });
-        let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
-        store
-            .set(
-                &StoreKey::new("zarr.json").unwrap(),
-                serde_json::to_vec(&root_md).unwrap().into(),
-            )
-            .await
-            .unwrap();
+        let store = Arc::new(zarrs_storage::store::MemoryStore::new());
+        AsyncWritableStorageTraits::set(
+            &store,
+            &StoreKey::new("zarr.json").unwrap(),
+            serde_json::to_vec(&root_md).unwrap().into(),
+        )
+        .await
+        .unwrap();
 
         global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::Must);
 

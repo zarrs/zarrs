@@ -65,9 +65,9 @@ fn missing_cached_chunks_preserve_lossy_fill_value() -> Result<(), Box<dyn Error
 #[tokio::test]
 async fn async_missing_cached_chunks_preserve_lossy_fill_value() -> Result<(), Box<dyn Error>> {
     use zarrs::array::cache::AsyncChunkCachePartialDecoder;
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
-    let array = builder().build_arc(Arc::new(AsyncMemoryStore::new()), "/array")?;
+    let array = builder().build_arc(Arc::new(MemoryStore::new()), "/array")?;
     let cached = ArrayCached::new(array, AsyncChunkCachePartialDecoder::new_chunk_limit(4));
     let resources = Resources::default();
     let subset = cached.array().subset_all();

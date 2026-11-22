@@ -61,21 +61,27 @@ fn partial_decode_collections() {
 fn async_partial_decode_collections() {
     use zarrs_codec::AsyncBytesPartialDecoderTraits;
     use zarrs_storage::AsyncWritableStorageTraits;
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
     futures::executor::block_on(async {
-        let store = AsyncMemoryStore::new();
+        let store = MemoryStore::new();
         let key = StoreKey::new("data").unwrap();
-        store.set(&key, vec![42, 43].into()).await.unwrap();
+        AsyncWritableStorageTraits::set(&store, &key, vec![42, 43].into())
+            .await
+            .unwrap();
         let decoder = (store, key);
         let options = CodecOptions::default();
         for count in [0, 1, 1024] {
             let ranges = (0..count).map(|i| ByteRange::FromStart(i % 2, Some(1)));
-            let values = decoder
-                .partial_decode_many(Box::new(ranges), &options, &Resources::default())
-                .await
-                .unwrap()
-                .unwrap();
+            let values = AsyncBytesPartialDecoderTraits::partial_decode_many(
+                &decoder,
+                Box::new(ranges),
+                &options,
+                &Resources::default(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
             assert_eq!(values.len(), usize::try_from(count).unwrap());
             for (i, value) in values.iter().enumerate() {
                 assert_eq!(value.as_ref(), &[if i % 2 == 0 { 42 } else { 43 }]);
@@ -86,23 +92,27 @@ fn async_partial_decode_collections() {
             ByteRange::FromStart(2, Some(1)),
         ];
         assert!(
-            decoder
-                .partial_decode_many(
-                    Box::new(ranges.into_iter()),
-                    &options,
-                    &Resources::default()
-                )
-                .await
-                .is_err()
+            AsyncBytesPartialDecoderTraits::partial_decode_many(
+                &decoder,
+                Box::new(ranges.into_iter()),
+                &options,
+                &Resources::default(),
+            )
+            .await
+            .is_err()
         );
-        let missing = (AsyncMemoryStore::new(), StoreKey::new("missing").unwrap());
+        let missing = (MemoryStore::new(), StoreKey::new("missing").unwrap());
         let ranges = std::iter::once_with(|| panic!("missing values must not consume ranges"));
         assert!(
-            missing
-                .partial_decode_many(Box::new(ranges), &options, &Resources::default())
-                .await
-                .unwrap()
-                .is_none()
+            AsyncBytesPartialDecoderTraits::partial_decode_many(
+                &missing,
+                Box::new(ranges),
+                &options,
+                &Resources::default(),
+            )
+            .await
+            .unwrap()
+            .is_none()
         );
     });
 }

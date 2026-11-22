@@ -144,7 +144,7 @@ mod asynchronous {
         Arc, Array, ArrayBytes, Criterion, Duration, LatencyStore, Resources, Throughput, builder,
         compressible_u16, label, latencies_sharded, num_elements, read_subsets,
     };
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
     fn runtimes() -> [(&'static str, tokio::runtime::Runtime); 2] {
         [
@@ -169,10 +169,10 @@ mod asynchronous {
         sharded: bool,
         latency: Duration,
     ) -> (
-        Arc<LatencyStore<AsyncMemoryStore>>,
-        Array<LatencyStore<AsyncMemoryStore>>,
+        Arc<LatencyStore<MemoryStore>>,
+        Array<LatencyStore<MemoryStore>>,
     ) {
-        let inner = Arc::new(AsyncMemoryStore::new());
+        let inner = Arc::new(MemoryStore::new());
         let array = builder(sharded).build(inner.clone(), "/").unwrap();
         array
             .async_store_array_subset(
@@ -225,10 +225,7 @@ mod asynchronous {
         let data = compressible_u16(num_elements());
         for (runtime_name, runtime) in runtimes() {
             for (latency, sharded) in latencies_sharded() {
-                let store = Arc::new(LatencyStore::new(
-                    Arc::new(AsyncMemoryStore::new()),
-                    latency,
-                ));
+                let store = Arc::new(LatencyStore::new(Arc::new(MemoryStore::new()), latency));
                 let array = builder(sharded).build(store.clone(), "/").unwrap();
                 group.throughput(Throughput::Bytes(data.len() as u64 * 2));
                 let id = format!(

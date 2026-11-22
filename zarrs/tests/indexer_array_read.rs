@@ -66,9 +66,9 @@ fn decoded_cache_validates_absent_chunk_indexer() -> Result<(), Box<dyn std::err
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std::error::Error>> {
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
-    let store = Arc::new(AsyncMemoryStore::new());
+    let store = Arc::new(MemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![4, 4], data_type::uint16(), 0u16)
         .build(store, "/array")?;
     array

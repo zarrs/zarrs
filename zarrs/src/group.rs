@@ -1186,8 +1186,7 @@ mod tests {
     #[test]
     fn group_invalid_metadata() {
         let store: std::sync::Arc<MemoryStore> = std::sync::Arc::new(MemoryStore::new());
-        store
-            .set(&StoreKey::new("zarr.json").unwrap(), vec![0].into())
+        WritableStorageTraits::set(&store, &StoreKey::new("zarr.json").unwrap(), vec![0].into())
             .unwrap();
         assert_eq!(
             Group::open(store, "/").unwrap_err().to_string(),
@@ -1198,7 +1197,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn group_metadata_write_read_async() {
-        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+        let store = std::sync::Arc::new(zarrs_storage::store::MemoryStore::new());
         let group_path = "/group";
         let group = GroupBuilder::new()
             .build(store.clone(), group_path)
@@ -1271,7 +1270,7 @@ mod tests {
         use zarrs_storage::AsyncReadableWritableListableStorage;
 
         let store: AsyncReadableWritableListableStorage =
-            std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+            std::sync::Arc::new(zarrs_storage::store::MemoryStore::new());
 
         let builder = GroupBuilder::default();
         let root = builder

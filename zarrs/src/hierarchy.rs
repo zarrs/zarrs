@@ -415,7 +415,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[test]
     fn hierarchy_try_from_async_array() {
-        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+        let store = std::sync::Arc::new(zarrs_storage::store::MemoryStore::new());
         let array_builder =
             ArrayBuilder::new(vec![1], vec![1], crate::array::data_type::float32(), 0.0f32);
 
@@ -441,7 +441,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_try_from_group() {
-        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+        let store = std::sync::Arc::new(zarrs_storage::store::MemoryStore::new());
         let group_path = "/group";
         let group_builder = GroupBuilder::new();
         let group = group_builder.build(store.clone(), group_path).unwrap();
@@ -477,7 +477,7 @@ mod tests {
     async fn hierarchy_async_try_from_invalid_async_group() {
         use zarrs_storage::AsyncWritableStorageTraits;
 
-        let store = std::sync::Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+        let store = std::sync::Arc::new(zarrs_storage::store::MemoryStore::new());
 
         let root = Group::new_with_metadata(
             store.clone(),
@@ -489,13 +489,13 @@ mod tests {
         assert!(Hierarchy::try_from_async_group(&root).await.is_ok());
 
         // Inject fauly subgroup
-        store
-            .set(
-                &StoreKey::new("subgroup/zarr.json").unwrap(),
-                vec![0].into(),
-            )
-            .await
-            .unwrap();
+        AsyncWritableStorageTraits::set(
+            &store,
+            &StoreKey::new("subgroup/zarr.json").unwrap(),
+            vec![0].into(),
+        )
+        .await
+        .unwrap();
 
         assert!(Hierarchy::try_from_async_group(&root).await.is_err());
     }
@@ -650,7 +650,7 @@ mod tests {
         use zarrs_storage::AsyncReadableWritableListableStorage;
 
         let store: AsyncReadableWritableListableStorage =
-            Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+            Arc::new(zarrs_storage::store::MemoryStore::new());
 
         let _group = async_helper_create_dataset(&store).await;
 

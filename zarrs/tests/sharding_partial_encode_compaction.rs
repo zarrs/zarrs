@@ -55,7 +55,7 @@ fn sharding_partial_encode_compacts_whole_rewrites() -> TestResult {
 #[tokio::test]
 async fn async_sharding_partial_encode_compacts_whole_rewrites() -> TestResult {
     for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
-        let store = Arc::new(zarrs::storage::store::AsyncMemoryStore::new());
+        let store = Arc::new(zarrs::storage::store::MemoryStore::new());
         let array = builder(location).build(store, "/")?;
         array
             .async_store_chunk(&[0], (1..=8u8).collect::<Vec<_>>(), &Resources::default())

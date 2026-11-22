@@ -19,7 +19,7 @@ use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::{AsyncReadableStorageTraits, StorageHandle};
 
-type AsyncStore = zarrs_storage::store::AsyncMemoryStore;
+type AsyncStore = zarrs_storage::store::MemoryStore;
 type TestResult = Result<(), Box<dyn Error>>;
 
 const fn nz(value: u64) -> NonZeroU64 {
@@ -27,7 +27,7 @@ const fn nz(value: u64) -> NonZeroU64 {
 }
 
 fn fixed_fixture() -> Array<AsyncStore> {
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let mut builder = ArrayBuilder::new(vec![5, 5], vec![3, 3], data_type::uint8(), 0u8);
     builder.subchunk_shape(vec![1, 1]);
     builder.build(store, "/array").unwrap()
@@ -763,7 +763,7 @@ async fn array_subchunk_cached_implements_complete_async_operation_suite() -> Te
 
 #[tokio::test]
 async fn array_supports_async_variable_length_operation_suite() -> TestResult {
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::string(), "")
         .build(store, "/array")?;
     exercise_variable_length_ops(&array).await
@@ -771,7 +771,7 @@ async fn array_supports_async_variable_length_operation_suite() -> TestResult {
 
 #[tokio::test]
 async fn array_supports_async_optional_operation_suite() -> TestResult {
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let array = ArrayBuilder::new(
         vec![4, 4],
         vec![2, 2],
@@ -784,7 +784,7 @@ async fn array_supports_async_optional_operation_suite() -> TestResult {
 
 #[tokio::test]
 async fn array_supports_async_nested_subchunk_grid_levels() -> TestResult {
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let data_type = data_type::uint16();
     let inner = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
     let mut outer = ShardingCodecBuilder::new(vec![nz(4), nz(4)], &data_type);
@@ -851,7 +851,7 @@ async fn async_chunk_ops_reject_incompatible_chunk_dimensionality() -> TestResul
     use zarrs::array::ArrayError;
     use zarrs::storage::AsyncListableStorageTraits;
 
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
         .build(store.clone(), "/array")?;
     let encoded = zarrs::array::CowBytes::from(vec![0u8; 4]);

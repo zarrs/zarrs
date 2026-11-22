@@ -1333,13 +1333,13 @@ fn retrieve_multi_chunk_reshaped_target_forwards_deferred_placement() {
 #[tokio::test]
 async fn async_retrieve_multi_chunk_reshaped_target_forwards_deferred_placement() {
     use zarrs::array::ArrayBuilder;
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
     let calls = Arc::default();
     let array = ArrayBuilder::new(vec![4, 2], vec![2, 2], data_type::uint16(), 0u16)
         .array_to_bytes_codec(Arc::new(BytesCodec::new(Some(endian(false)))))
         .bytes_to_bytes_codecs(vec![producer(&calls, 1, true, false, false)])
-        .build(Arc::new(AsyncMemoryStore::new()), "/multi_chunk_async")
+        .build(Arc::new(MemoryStore::new()), "/multi_chunk_async")
         .unwrap();
     array
         .async_store_array_subset(

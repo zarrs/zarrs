@@ -162,9 +162,9 @@ fn squeeze_rejects_out_of_bounds_scattered_write() -> Result<(), Box<dyn std::er
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_chunk_write_updates_scattered_indices() -> Result<(), Box<dyn std::error::Error>> {
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
-    let store = Arc::new(AsyncMemoryStore::new());
+    let store = Arc::new(MemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![4, 4], data_type::uint16(), 0u16)
         .build(store, "/array")?;
     array
@@ -190,9 +190,9 @@ async fn async_chunk_write_updates_scattered_indices() -> Result<(), Box<dyn std
 #[tokio::test]
 async fn async_partial_encoding_sharded_scattered_write() -> Result<(), Box<dyn std::error::Error>>
 {
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
-    let store = Arc::new(AsyncMemoryStore::new());
+    let store = Arc::new(MemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![4, 4], data_type::uint16(), 0u16)
         .array_to_bytes_codec(
             ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())

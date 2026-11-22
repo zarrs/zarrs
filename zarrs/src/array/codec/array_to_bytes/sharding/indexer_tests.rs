@@ -490,7 +490,7 @@ async fn async_sharding_indexer_batches() {
         let resources = Resources::default().with_compute_target(concurrency);
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> = if absent {
             Arc::new((
-                zarrs_storage::store::AsyncMemoryStore::new(),
+                zarrs_storage::store::MemoryStore::new(),
                 zarrs_storage::StoreKey::new("absent").unwrap(),
             ))
         } else {

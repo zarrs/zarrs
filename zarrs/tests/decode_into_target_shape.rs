@@ -337,11 +337,9 @@ fn array_retrieve_into_target_shape() -> Result<(), Box<dyn std::error::Error>> 
 #[tokio::test]
 async fn async_array_retrieve_into_target_shape() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::array::cache::AsyncChunkCacheEncoded;
-    use zarrs_storage::store::AsyncMemoryStore;
 
     for data_type in data_types() {
-        let array =
-            Arc::new(array_builder(&data_type).build(Arc::new(AsyncMemoryStore::new()), "/")?);
+        let array = Arc::new(array_builder(&data_type).build(Arc::new(MemoryStore::new()), "/")?);
         array
             .async_store_array_subset(
                 &array.subset_all(),

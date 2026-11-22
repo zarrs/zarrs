@@ -79,11 +79,13 @@ async fn async_partial_encode_rejects_overflowing_shard_index() {
     for location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
         for encoded in indexes(location) {
             let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
-                zarrs::storage::store::AsyncMemoryStore::new(),
+                zarrs::storage::store::MemoryStore::new(),
             )));
             let array = builder(location).build(store.clone(), "/").unwrap();
             let key = array.chunk_key(&[0, 0]).unwrap();
-            store.set(&key, encoded.clone().into()).await.unwrap();
+            AsyncWritableStorageTraits::set(&store, &key, encoded.clone().into())
+                .await
+                .unwrap();
             let encoder = array
                 .async_partial_encoder(&[0, 0], &Resources::default())
                 .await
@@ -103,7 +105,14 @@ async fn async_partial_encode_rejects_overflowing_shard_index() {
                 );
                 assert_eq!(store.writes(), 0);
                 assert_eq!(store.keys_erased(), 0);
-                assert_eq!(store.get(&key).await.unwrap().unwrap().as_ref(), encoded);
+                assert_eq!(
+                    AsyncReadableStorageTraits::get(&store, &key)
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .as_ref(),
+                    encoded
+                );
             }
         }
     }

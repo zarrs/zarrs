@@ -345,7 +345,7 @@ mod async_tests {
         AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
         AsyncChunkCacheTraits, AsyncChunkCacheType,
     };
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
     async fn check_async_cached_reads<T, C>(
         cache_name: &str,
@@ -360,7 +360,7 @@ mod async_tests {
     {
         let resources = Resources::default();
         let array = builder
-            .build(Arc::new(AsyncMemoryStore::new()), "/array")
+            .build(Arc::new(MemoryStore::new()), "/array")
             .unwrap();
         let all = ArraySubset::new_with_shape(SHAPE);
         array
@@ -521,7 +521,7 @@ mod async_tests {
     async fn async_retrieve_out_of_bounds_rejected_before_allocation() {
         let resources = Resources::default();
         let array = builder(data_type::uint16(), 0u16)
-            .build(Arc::new(AsyncMemoryStore::new()), "/array")
+            .build(Arc::new(MemoryStore::new()), "/array")
             .unwrap();
         let cached = ArrayCached::new(array.clone(), AsyncChunkCacheDecoded::new_chunk_limit(4));
 
