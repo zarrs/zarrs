@@ -22,8 +22,6 @@
 //!  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
 //!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 //!
-//! There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
-//!
 //! `zarrs` consumers can create custom cache policies by implementing the [`ChunkCache`] trait.
 //! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
 //! [`ArrayCached`](super::ArrayCached) accepts any [`SyncArrayCache`], which every [`ChunkCache`] is.
@@ -318,16 +316,12 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         F: FnOnce() -> Result<Self::Value, ArrayError>;
 
     /// Invalidate all cached chunks, returning the number of chunks invalidated.
-    ///
-    /// For a thread-local cache, clears only the current thread's cache.
     fn invalidate(&self) -> usize;
 
     /// Invalidate a cached chunk, returning true if the chunk was cached.
-    ///
     fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool;
 
     /// Invalidate cached chunks, returning the number of chunks invalidated.
-    ///
     fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
         let mut invalidated = 0;
         for chunk_indices in chunks.iter_indices() {
@@ -336,17 +330,15 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         invalidated
     }
 
-    /// Return the number of chunks in the cache. For a thread-local cache, returns the number of chunks cached on the current thread.
+    /// Return the number of chunks in the cache.
     #[must_use]
     fn len(&self) -> usize;
 
     /// Return the size of the cached chunks in bytes, the sum of their [`ChunkCacheType::size`].
-    ///
-    /// For a thread-local cache, returns the size of the chunks cached on the current thread.
     #[must_use]
     fn size(&self) -> usize;
 
-    /// Returns true if the cache is empty. For a thread-local cache, returns if the cache is empty on the current thread.
+    /// Returns true if the cache is empty.
     #[must_use]
     fn is_empty(&self) -> bool {
         self.len() == 0

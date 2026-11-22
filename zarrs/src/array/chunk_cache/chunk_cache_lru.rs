@@ -1,6 +1,6 @@
 #[cfg(feature = "async")]
 use std::future::Future;
-use std::sync::{Arc, atomic};
+use std::sync::Arc;
 
 #[cfg(feature = "async")]
 use zarrs_storage::MaybeSend;
@@ -111,20 +111,6 @@ impl<CT: SyncChunkCacheType> ChunkCacheLruChunkLimit<CT> {
     }
 }
 
-/// A thread local chunk cache with a fixed chunk capacity per thread.
-pub struct ChunkCacheLruChunkLimitThreadLocal<CT: SyncChunkCacheType> {
-    cache: platform::ThreadLocalCacheChunkLimit<CT>,
-}
-
-impl<CT: SyncChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
-    /// Create a new [`ChunkCacheLruChunkLimitThreadLocal`] with a capacity in bytes of `capacity`.
-    #[must_use]
-    pub fn new(capacity: u64) -> Self {
-        let cache = platform::ThreadLocalCacheChunkLimit::new_with_chunk_capacity(capacity);
-        Self { cache }
-    }
-}
-
 /// A chunk cache with a fixed size capacity.
 pub struct ChunkCacheLruSizeLimit<CT: SyncChunkCacheType> {
     cache: platform::CacheSizeLimit<CT>,
@@ -135,20 +121,6 @@ impl<CT: SyncChunkCacheType> ChunkCacheLruSizeLimit<CT> {
     #[must_use]
     pub fn new(capacity: u64) -> Self {
         let cache = platform::CacheSizeLimit::new_with_size_capacity(capacity);
-        Self { cache }
-    }
-}
-
-/// A thread local chunk cache with a fixed size capacity per thread.
-pub struct ChunkCacheLruSizeLimitThreadLocal<CT: SyncChunkCacheType> {
-    cache: platform::ThreadLocalCacheSizeLimit<CT>,
-}
-
-impl<CT: SyncChunkCacheType> ChunkCacheLruSizeLimitThreadLocal<CT> {
-    /// Create a new [`ChunkCacheLruSizeLimitThreadLocal`] with a capacity in bytes of `capacity`.
-    #[must_use]
-    pub fn new(capacity: u64) -> Self {
-        let cache = platform::ThreadLocalCacheSizeLimit::new_with_size_capacity(capacity);
         Self { cache }
     }
 }
@@ -195,15 +167,7 @@ impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruChunkLimit<CT> {
     impl_ChunkCacheLruCommon!();
 }
 
-impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruChunkLimitThreadLocal<CT> {
-    impl_ChunkCacheLruCommon!();
-}
-
 impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruSizeLimit<CT> {
-    impl_ChunkCacheLruCommon!();
-}
-
-impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruSizeLimitThreadLocal<CT> {
     impl_ChunkCacheLruCommon!();
 }
 
@@ -291,46 +255,22 @@ impl<CT: AsyncChunkCacheType> AsyncChunkCache for AsyncChunkCacheLruSizeLimit<CT
 /// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
 pub type ChunkCacheEncodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheTypeEncoded>;
 
-/// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
-pub type ChunkCacheEncodedLruChunkLimitThreadLocal =
-    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeEncoded>;
-
 /// An LRU (least recently used) encoded chunk cache with a fixed size capacity.
 pub type ChunkCacheEncodedLruSizeLimit = ChunkCacheLruSizeLimit<ChunkCacheTypeEncoded>;
-
-/// An LRU (least recently used) encoded chunk cache with a fixed size capacity.
-pub type ChunkCacheEncodedLruSizeLimitThreadLocal =
-    ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeEncoded>;
 
 /// An LRU (least recently used) decoded chunk cache with a fixed chunk capacity.
 pub type ChunkCacheDecodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheTypeDecoded>;
 
-/// An LRU (least recently used) decoded chunk cache with a fixed chunk capacity.
-pub type ChunkCacheDecodedLruChunkLimitThreadLocal =
-    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeDecoded>;
-
 /// An LRU (least recently used) decoded chunk cache with a fixed size capacity .
 pub type ChunkCacheDecodedLruSizeLimit = ChunkCacheLruSizeLimit<ChunkCacheTypeDecoded>;
-
-/// An LRU (least recently used) decoded chunk cache with a fixed size capacity.
-pub type ChunkCacheDecodedLruSizeLimitThreadLocal =
-    ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeDecoded>;
 
 /// An LRU (least recently used) partial decoder chunk cache with a fixed chunk capacity.
 pub type ChunkCachePartialDecoderLruChunkLimit =
     ChunkCacheLruChunkLimit<ChunkCacheTypePartialDecoder>;
 
-/// An LRU (least recently used) partial decoder chunk cache with a fixed chunk capacity.
-pub type ChunkCachePartialDecoderLruChunkLimitThreadLocal =
-    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypePartialDecoder>;
-
 /// An LRU (least recently used) partial decoder chunk cache with a fixed size capacity.
 pub type ChunkCachePartialDecoderLruSizeLimit =
     ChunkCacheLruSizeLimit<ChunkCacheTypePartialDecoder>;
-
-/// An LRU (least recently used) partial decoder chunk cache with a fixed chunk capacity.
-pub type ChunkCachePartialDecoderLruSizeLimitThreadLocal =
-    ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypePartialDecoder>;
 
 /// An LRU (least recently used) asynchronous encoded chunk cache with a fixed chunk capacity.
 #[cfg(feature = "async")]

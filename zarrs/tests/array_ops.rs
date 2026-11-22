@@ -6,8 +6,7 @@ use std::sync::Arc;
 use zarrs::array::Resources;
 
 use zarrs::array::chunk_cache::{
-    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruChunkLimitThreadLocal,
-    ChunkCacheDecodedLruSizeLimit, ChunkCacheDecodedLruSizeLimitThreadLocal,
+    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
     ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, ChunkCacheTypeDecoded,
 };
 use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
@@ -1263,9 +1262,7 @@ where
 #[test]
 fn array_cached_cache_size_sums_cached_chunks() -> TestResult {
     assert_decoded_cache_size(ChunkCacheDecodedLruChunkLimit::new(16))?;
-    assert_decoded_cache_size(ChunkCacheDecodedLruChunkLimitThreadLocal::new(16))?;
-    assert_decoded_cache_size(ChunkCacheDecodedLruSizeLimit::new(1024))?;
-    assert_decoded_cache_size(ChunkCacheDecodedLruSizeLimitThreadLocal::new(1024))
+    assert_decoded_cache_size(ChunkCacheDecodedLruSizeLimit::new(1024))
 }
 
 fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult

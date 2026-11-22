@@ -1,18 +1,16 @@
 use std::num::NonZeroUsize;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, atomic};
 
 use lru::LruCache;
 
 use super::{
     Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits, ChunkCacheType,
-    ChunkIndices, atomic,
+    ChunkIndices,
 };
 
 pub(super) struct CacheChunkLimit<CT: ChunkCacheType> {
     cache: Mutex<LruCache<ChunkIndices, CT>>,
 }
-
-pub(super) type ThreadLocalCacheChunkLimit<CT> = CacheChunkLimit<CT>;
 
 impl<CT: ChunkCacheType> CacheChunkLimit<CT> {
     fn get(&self) -> MutexGuard<'_, LruCache<ChunkIndices, CT>> {
@@ -76,8 +74,6 @@ pub(super) struct CacheSizeLimit<CT: ChunkCacheType> {
     capacity: u64,
     size: std::sync::atomic::AtomicUsize,
 }
-
-pub(super) type ThreadLocalCacheSizeLimit<CT> = CacheSizeLimit<CT>;
 
 impl<CT: ChunkCacheType> CacheSizeLimit<CT> {
     fn get(&self) -> MutexGuard<'_, LruCache<ChunkIndices, CT>> {

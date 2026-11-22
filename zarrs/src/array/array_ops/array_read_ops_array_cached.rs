@@ -491,12 +491,9 @@ mod tests {
 
     use super::*;
     use crate::array::chunk_cache::{
-        ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruChunkLimitThreadLocal,
-        ChunkCacheDecodedLruSizeLimit, ChunkCacheDecodedLruSizeLimitThreadLocal,
-        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruChunkLimitThreadLocal,
-        ChunkCacheEncodedLruSizeLimit, ChunkCacheEncodedLruSizeLimitThreadLocal,
-        ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruChunkLimitThreadLocal,
-        ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
+        ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
+        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
+        ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruSizeLimit,
         ChunkCacheType, ChunkCacheTypeDecoded,
     };
     use crate::array::{ArrayBuilder, ArrayError, ArrayIndices, ArraySubset, FillValue, data_type};
@@ -719,49 +716,37 @@ mod tests {
     #[test]
     fn all_lru_policies_support_encoded_values() {
         test_cache(ChunkCacheEncodedLruChunkLimit::new(2));
-        test_cache(ChunkCacheEncodedLruChunkLimitThreadLocal::new(2));
         test_cache(ChunkCacheEncodedLruSizeLimit::new(1024));
-        test_cache(ChunkCacheEncodedLruSizeLimitThreadLocal::new(1024));
         test_cache_sharded(ChunkCacheEncodedLruChunkLimit::new(4));
-        test_cache_sharded(ChunkCacheEncodedLruChunkLimitThreadLocal::new(4));
         test_cache_sharded(ChunkCacheEncodedLruSizeLimit::new(4096));
-        test_cache_sharded(ChunkCacheEncodedLruSizeLimitThreadLocal::new(4096));
         test_cache_nested_optional(ChunkCacheEncodedLruChunkLimit::new(4));
-        test_cache_nested_optional(ChunkCacheEncodedLruSizeLimitThreadLocal::new(4096));
+        test_cache_nested_optional(ChunkCacheEncodedLruSizeLimit::new(4096));
         test_cache_variable(ChunkCacheEncodedLruChunkLimit::new(9));
-        test_cache_variable(ChunkCacheEncodedLruSizeLimitThreadLocal::new(4096));
+        test_cache_variable(ChunkCacheEncodedLruSizeLimit::new(4096));
     }
 
     #[test]
     fn all_lru_policies_support_decoded_values() {
         test_cache(ChunkCacheDecodedLruChunkLimit::new(2));
-        test_cache(ChunkCacheDecodedLruChunkLimitThreadLocal::new(2));
         test_cache(ChunkCacheDecodedLruSizeLimit::new(1024));
-        test_cache(ChunkCacheDecodedLruSizeLimitThreadLocal::new(1024));
         test_cache_sharded(ChunkCacheDecodedLruChunkLimit::new(4));
-        test_cache_sharded(ChunkCacheDecodedLruChunkLimitThreadLocal::new(4));
         test_cache_sharded(ChunkCacheDecodedLruSizeLimit::new(4096));
-        test_cache_sharded(ChunkCacheDecodedLruSizeLimitThreadLocal::new(4096));
         test_cache_nested_optional(ChunkCacheDecodedLruChunkLimit::new(4));
-        test_cache_nested_optional(ChunkCacheDecodedLruSizeLimitThreadLocal::new(4096));
+        test_cache_nested_optional(ChunkCacheDecodedLruSizeLimit::new(4096));
         test_cache_variable(ChunkCacheDecodedLruChunkLimit::new(9));
-        test_cache_variable(ChunkCacheDecodedLruSizeLimitThreadLocal::new(4096));
+        test_cache_variable(ChunkCacheDecodedLruSizeLimit::new(4096));
     }
 
     #[test]
     fn all_lru_policies_support_partial_decoder_values() {
         test_cache(ChunkCachePartialDecoderLruChunkLimit::new(2));
-        test_cache(ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(2));
         test_cache(ChunkCachePartialDecoderLruSizeLimit::new(1024));
-        test_cache(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(1024));
         test_cache_sharded(ChunkCachePartialDecoderLruChunkLimit::new(4));
-        test_cache_sharded(ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(4));
         test_cache_sharded(ChunkCachePartialDecoderLruSizeLimit::new(4096));
-        test_cache_sharded(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(4096));
         test_cache_nested_optional(ChunkCachePartialDecoderLruChunkLimit::new(4));
-        test_cache_nested_optional(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(4096));
+        test_cache_nested_optional(ChunkCachePartialDecoderLruSizeLimit::new(4096));
         test_cache_variable(ChunkCachePartialDecoderLruChunkLimit::new(9));
-        test_cache_variable(ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(4096));
+        test_cache_variable(ChunkCachePartialDecoderLruSizeLimit::new(4096));
     }
 
     #[derive(Default)]

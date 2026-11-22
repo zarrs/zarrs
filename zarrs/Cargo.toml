@@ -62,7 +62,6 @@ half.workspace = true
 inherent = "1.0.13"
 inventory.workspace = true
 itertools = "0.15.0"
-lru = "0.19.0"
 moka = { version = "0.12.8", features = ["sync"] }
 ndarray = { version = "0.17.1", optional = true }
 num.workspace = true
@@ -73,7 +72,6 @@ rayon_iter_concurrent_limit = "0.3.0"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = { version = "1.0.71", features = ["float_roundtrip", "preserve_order"] }
 thiserror.workspace = true
-thread_local = "1.1.8"
 unsafe_cell_slice = "0.2.4"
 zarrs_chunk_key_encoding.workspace = true
 zarrs_filesystem = { workspace = true, optional = true }
@@ -103,6 +101,7 @@ zstd = { version = "0.14.4", features = ["zstdmt"], optional = true }
 blosc-src = { version = "0.3.6", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+lru = "0.19.0"
 quick_cache = { version = "0.7.0" }
 uuid = { version = "^1.1.0", features = ["v4", "js"] }
 blusc = { version = "0.0.7", optional = true }

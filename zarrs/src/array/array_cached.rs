@@ -49,9 +49,6 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 /// - `partial_encoder` — invalidates the affected chunk after each mutation
 ///   attempt.
 ///
-/// For thread-local caches, invalidation only affects the thread performing the
-/// mutation.
-///
 /// Invalidation makes a cache coherent with writes that *precede* the retrievals of
 /// the chunks they invalidate. It does not make concurrent reads and writes of the same
 /// chunk safe, which [`Array`] does not support (see its *Parallel Writing* section). A

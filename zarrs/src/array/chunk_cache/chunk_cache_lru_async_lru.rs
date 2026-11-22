@@ -5,13 +5,13 @@
 //! The cache lock is never held across an `await`.
 
 use std::num::NonZeroUsize;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, atomic};
 
 use lru::LruCache;
 
 use super::{
     Arc, ArrayError, AsyncCacheTraits, CacheChunkLimitTraits, CacheSizeLimitTraits, ChunkCacheType,
-    ChunkIndices, Future, atomic,
+    ChunkIndices, Future,
 };
 
 pub(super) struct CacheChunkLimit<CT: ChunkCacheType> {
