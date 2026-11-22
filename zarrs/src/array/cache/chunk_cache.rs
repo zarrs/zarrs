@@ -3,7 +3,7 @@ use std::sync::Arc;
 #[cfg(feature = "async")]
 use super::{
     AsyncChunkCacheInit, AsyncChunkCacheTraits, AsyncChunkCacheType,
-    ChunkCacheTypeAsyncPartialDecoder,
+    AsyncChunkCacheTypePartialDecoder,
 };
 use super::{
     ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, SyncChunkCacheTraits,
@@ -221,7 +221,7 @@ pub type AsyncChunkCacheDecoded = AsyncChunkCache<ChunkCacheTypeDecoded>;
 
 /// An asynchronous partial decoder chunk cache.
 #[cfg(feature = "async")]
-pub type AsyncChunkCachePartialDecoder = AsyncChunkCache<ChunkCacheTypeAsyncPartialDecoder>;
+pub type AsyncChunkCachePartialDecoder = AsyncChunkCache<AsyncChunkCacheTypePartialDecoder>;
 
 #[cfg(test)]
 mod tests {

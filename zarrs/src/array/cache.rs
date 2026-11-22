@@ -8,7 +8,7 @@
 //! - [`SyncChunkCacheTypePartialDecoder`]: caches partial decoders.
 #![cfg_attr(
     feature = "async",
-    doc = "  - The asynchronous counterpart is [`ChunkCacheTypeAsyncPartialDecoder`]."
+    doc = "  - The asynchronous counterpart is [`AsyncChunkCacheTypePartialDecoder`]."
 )]
 //!   - Preferred where chunks are repeatedly *partially retrieved*.
 //!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
@@ -99,9 +99,9 @@ pub type SyncChunkCacheTypePartialDecoder = Arc<dyn SyncArrayPartialDecoderTrait
 
 /// The chunk type of an asynchronous partial decoder chunk cache.
 #[cfg(feature = "async")]
-pub type ChunkCacheTypeAsyncPartialDecoder = Arc<dyn AsyncArrayPartialDecoderTraits>;
+pub type AsyncChunkCacheTypePartialDecoder = Arc<dyn AsyncArrayPartialDecoderTraits>;
 
-/// A chunk cache type ([`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], [`SyncChunkCacheTypePartialDecoder`], or `ChunkCacheTypeAsyncPartialDecoder`).
+/// A chunk cache type ([`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], [`SyncChunkCacheTypePartialDecoder`], or `AsyncChunkCacheTypePartialDecoder`).
 ///
 /// Retrieval is provided by the [`SyncChunkCacheType`] and `AsyncChunkCacheType` subtraits.
 pub trait ChunkCacheType:
@@ -115,7 +115,7 @@ pub trait ChunkCacheType:
 ///
 /// This is implemented for [`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], and
 /// [`SyncChunkCacheTypePartialDecoder`].
-/// It is not implemented for `ChunkCacheTypeAsyncPartialDecoder`, which caches asynchronous
+/// It is not implemented for `AsyncChunkCacheTypePartialDecoder`, which caches asynchronous
 /// partial decoders that cannot operate over synchronous storage.
 ///
 /// The retrieval operations themselves live on a sealed supertrait, and are internal to `zarrs`.
@@ -126,7 +126,7 @@ impl<T: ChunkCacheType + chunk_cache_type_sealed::SealedSync> SyncChunkCacheType
 /// A chunk cache type supporting asynchronous retrieval.
 ///
 /// This is implemented for [`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], and
-/// [`ChunkCacheTypeAsyncPartialDecoder`].
+/// [`AsyncChunkCacheTypePartialDecoder`].
 /// It is not implemented for [`SyncChunkCacheTypePartialDecoder`], which caches synchronous
 /// partial decoders that cannot be created from asynchronous storage.
 ///
@@ -150,7 +150,7 @@ mod chunk_cache_type_sealed {
     #[cfg(feature = "async")]
     use super::{
         AsyncArrayPartialDecoderTraits, AsyncCachedArray, AsyncChunkCacheTraits,
-        ChunkCacheTypeAsyncPartialDecoder, MaybeSend,
+        AsyncChunkCacheTypePartialDecoder, MaybeSend,
     };
     use zarrs_codec::ArrayBytesTarget;
 
@@ -160,7 +160,7 @@ mod chunk_cache_type_sealed {
     impl Sealed for ChunkCacheTypeDecoded {}
     impl Sealed for SyncChunkCacheTypePartialDecoder {}
     #[cfg(feature = "async")]
-    impl Sealed for ChunkCacheTypeAsyncPartialDecoder {}
+    impl Sealed for AsyncChunkCacheTypePartialDecoder {}
 
     /// The synchronous retrieval operations of [`SyncChunkCacheType`](super::SyncChunkCacheType).
     ///
@@ -299,7 +299,7 @@ pub trait SyncChunkCacheTraits: MaybeSend + MaybeSync {
     ///
     /// The [`SyncChunkCacheType`] bound is what confines this trait to chunk types that support
     /// synchronous retrieval, so an unusable combination such as a
-    /// [`ChunkCache`]`<ChunkCacheTypeAsyncPartialDecoder>` is rejected where it is
+    /// [`ChunkCache`]`<AsyncChunkCacheTypePartialDecoder>` is rejected where it is
     /// written rather than at an unrelated retrieval call site.
     type Value: SyncChunkCacheType;
 

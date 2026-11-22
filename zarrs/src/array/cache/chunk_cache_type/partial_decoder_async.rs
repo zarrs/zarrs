@@ -5,7 +5,7 @@ use super::{
     validate_partial_chunk_indexer, validate_target_num_elements,
 };
 use crate::array::cache::{
-    AsyncCachedArray, AsyncChunkCacheTraits, ChunkCacheType, ChunkCacheTypeAsyncPartialDecoder,
+    AsyncCachedArray, AsyncChunkCacheTraits, AsyncChunkCacheTypePartialDecoder, ChunkCacheType,
     SealedAsync,
 };
 use crate::array::{
@@ -14,7 +14,7 @@ use crate::array::{
 };
 use zarrs_codec::{ArrayBytesTarget, AsyncArrayPartialDecoderTraits};
 
-impl ChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
+impl ChunkCacheType for AsyncChunkCacheTypePartialDecoder {
     fn size(&self) -> usize {
         self.as_ref().size_held()
     }
@@ -29,9 +29,9 @@ async fn async_retrieve_partial_decoder<C>(
     chunk_indices: &[u64],
     options: &CodecOptions,
     resources: &Resources,
-) -> Result<ChunkCacheTypeAsyncPartialDecoder, ArrayError>
+) -> Result<AsyncChunkCacheTypePartialDecoder, ArrayError>
 where
-    C: AsyncChunkCacheTraits<Value = ChunkCacheTypeAsyncPartialDecoder> + ?Sized,
+    C: AsyncChunkCacheTraits<Value = AsyncChunkCacheTypePartialDecoder> + ?Sized,
 {
     cache
         .try_get_or_insert_with(
@@ -46,7 +46,7 @@ where
         .map_err(cache_error)
 }
 
-impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
+impl SealedAsync for AsyncChunkCacheTypePartialDecoder {
     async fn async_partial_decoder<C>(
         cache: &C,
         array: &dyn AsyncCachedArray,
