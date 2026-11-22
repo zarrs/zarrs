@@ -819,7 +819,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         resources: &Resources,
     ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
-            sharding_partial_encoder::ShardingPartialEncoder::new(
+            sharding_partial_encoder::SyncShardingPartialEncoder::new(
                 input_output_handle,
                 shape,
                 self.subchunk_shape.clone(),

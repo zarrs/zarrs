@@ -27,7 +27,7 @@ use zarrs_codec::{
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
 
-pub(crate) struct ShardingPartialEncoder {
+pub(crate) struct SyncShardingPartialEncoder {
     input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
     subchunk_shape: ChunkShape,
     chunk_grid: RegularBoundedChunkGrid,
@@ -40,7 +40,7 @@ pub(crate) struct ShardingPartialEncoder {
     sharding_options: ShardingCodecOptions,
 }
 
-impl ShardingPartialEncoder {
+impl SyncShardingPartialEncoder {
     /// Create a new partial encoder for the sharding codec.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -274,7 +274,7 @@ impl ShardingPartialEncoder {
     }
 }
 
-impl SyncArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
+impl SyncArrayPartialDecoderSubchunkingTraits for SyncShardingPartialEncoder {
     fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
@@ -284,7 +284,7 @@ impl SyncArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
     }
 }
 
-impl SyncArrayPartialDecoderTraits for ShardingPartialEncoder {
+impl SyncArrayPartialDecoderTraits for SyncShardingPartialEncoder {
     fn data_type(&self) -> &DataType {
         self.inner_codecs.data_type()
     }
@@ -322,7 +322,7 @@ impl SyncArrayPartialDecoderTraits for ShardingPartialEncoder {
     }
 }
 
-impl SyncArrayPartialEncoderTraits for ShardingPartialEncoder {
+impl SyncArrayPartialEncoderTraits for SyncShardingPartialEncoder {
     fn erase(&self) -> Result<(), super::CodecError> {
         let mut shard_index = self.shard_index.lock().unwrap();
         self.input_output_handle.erase()?;
