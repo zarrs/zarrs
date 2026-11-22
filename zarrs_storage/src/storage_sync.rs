@@ -261,7 +261,7 @@ where
 }
 
 /// A supertrait of [`SyncReadableWritableStorageTraits`] and [`SyncListableStorageTraits`].
-pub trait ReadableWritableListableStorageTraits:
+pub trait SyncReadableWritableListableStorageTraits:
     SyncReadableWritableStorageTraits + SyncListableStorageTraits
 {
     /// Return a readable and writable version of the store.
@@ -274,7 +274,7 @@ pub trait ReadableWritableListableStorageTraits:
     fn listable(self: Arc<Self>) -> Arc<dyn SyncListableStorageTraits>;
 }
 
-impl<T> ReadableWritableListableStorageTraits for T
+impl<T> SyncReadableWritableListableStorageTraits for T
 where
     T: SyncReadableWritableStorageTraits + SyncListableStorageTraits + 'static,
 {

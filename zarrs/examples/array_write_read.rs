@@ -11,19 +11,19 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use zarrs::array::{ArraySubset, Resources, ZARR_NAN_F32, data_type};
 use zarrs::node::Node;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
-use zarrs::storage::{ReadableWritableListableStorage, store};
+use zarrs::storage::{SyncReadableWritableListableStorage, store};
 
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let resources = Resources::default();
 
     // Create a store
     // let path = tempfile::TempDir::new()?;
-    // let mut store: ReadableWritableListableStorage =
+    // let mut store: SyncReadableWritableListableStorage =
     //     Arc::new(zarrs::filesystem::FilesystemStore::new(path.path())?);
-    // let mut store: ReadableWritableListableStorage = Arc::new(
+    // let mut store: SyncReadableWritableListableStorage = Arc::new(
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/array_write_read.zarr")?,
     // );
-    let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
+    let mut store: SyncReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
     {

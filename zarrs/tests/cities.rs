@@ -11,7 +11,7 @@ use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::array_to_bytes::vlen_utf8::VlenUtf8Codec;
 use zarrs::array::codec::{VlenCodecConfiguration, ZstdCodec};
 use zarrs::array::{ArrayBuilder, ArrayBytes, ArrayMetadataOptions, data_type};
-use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::SyncReadableWritableListableStorage;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::UnboundArrayToBytesCodecTraits;
 use zarrs_filesystem::FilesystemStore;
@@ -33,7 +33,7 @@ fn cities_impl(
     vlen_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     write_to_file: bool,
 ) -> Result<u64, Box<dyn Error>> {
-    let store: ReadableWritableListableStorage = if write_to_file {
+    let store: SyncReadableWritableListableStorage = if write_to_file {
         Arc::new(FilesystemStore::new("tests/data/v3/cities.zarr")?)
     } else {
         Arc::new(MemoryStore::default())

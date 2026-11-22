@@ -103,7 +103,7 @@
 //! // Create a filesystem store
 //! let store_path: PathBuf = "/path/to/hierarchy.zarr".into();
 //! # let store_path: PathBuf = "tests/data/array_write_read.zarr".into();
-//! let store: zarrs::storage::ReadableWritableListableStorage = Arc::new(
+//! let store: zarrs::storage::SyncReadableWritableListableStorage = Arc::new(
 //!     // zarrs::filesystem requires the filesystem feature
 //!     zarrs::filesystem::FilesystemStore::new(&store_path)?
 //! );

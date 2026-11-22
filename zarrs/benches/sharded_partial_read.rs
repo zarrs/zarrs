@@ -19,7 +19,7 @@ use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::ArraySubset;
 use zarrs::filesystem::FilesystemStore;
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{ReadableWritableListableStorage, SyncReadableStorage};
+use zarrs::storage::{SyncReadableStorage, SyncReadableWritableListableStorage};
 
 /// If `true`, benchmark with an in-memory store; if `false`, use a filesystem store.
 const USE_MEMORY_STORE: bool = false;
@@ -53,7 +53,7 @@ fn random_data(n: usize) -> Vec<f64> {
         .collect()
 }
 
-fn make_store() -> ReadableWritableListableStorage {
+fn make_store() -> SyncReadableWritableListableStorage {
     if USE_MEMORY_STORE {
         Arc::new(MemoryStore::new())
     } else {
@@ -63,7 +63,7 @@ fn make_store() -> ReadableWritableListableStorage {
     }
 }
 
-fn populate_array(store: ReadableWritableListableStorage) {
+fn populate_array(store: SyncReadableWritableListableStorage) {
     let array = zarrs::array::ArrayBuilder::new(
         SHAPE.to_vec(),
         SHARD_SHAPE.to_vec(),
@@ -89,7 +89,7 @@ fn populate_array(store: ReadableWritableListableStorage) {
 /// Returns a store loaded with array data, writing it first if needed.
 fn open_store() -> SyncReadableStorage {
     if USE_MEMORY_STORE {
-        let store: ReadableWritableListableStorage = Arc::new(MemoryStore::new());
+        let store: SyncReadableWritableListableStorage = Arc::new(MemoryStore::new());
         populate_array(Arc::clone(&store));
         store
     } else {

@@ -24,7 +24,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::{Crc32cCodec, ShardingCodecBuilder, ZstdCodec};
 use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
-use zarrs::storage::ReadableWritableListableStorageTraits;
+use zarrs::storage::SyncReadableWritableListableStorageTraits;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayBytesFixedDisjointView, ArrayBytesTarget, CodecOptions};
 
@@ -200,7 +200,7 @@ fn partial_write(c: &mut Criterion) {
     let data = compressible_u16(shape.iter().product::<u64>() as usize);
     #[cfg(feature = "filesystem")]
     let dir = tempfile::TempDir::new().unwrap();
-    let stores: Vec<(&str, Arc<dyn ReadableWritableListableStorageTraits>)> = vec![
+    let stores: Vec<(&str, Arc<dyn SyncReadableWritableListableStorageTraits>)> = vec![
         ("memory", Arc::new(MemoryStore::new())),
         #[cfg(feature = "filesystem")]
         (

@@ -12,7 +12,7 @@ use zarrs::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGridConfigurati
 use zarrs::array::{ArraySubset, Resources, ZARR_NAN_F32, codec, data_type};
 use zarrs::node::Node;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
-use zarrs::storage::{ReadableWritableListableStorage, store};
+use zarrs::storage::{SyncReadableWritableListableStorage, store};
 use zarrs_metadata::v3::MetadataV3;
 
 fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,9 +20,9 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a store
     // let path = tempfile::TempDir::new()?;
-    // let mut store: ReadableWritableListableStorage =
+    // let mut store: SyncReadableWritableListableStorage =
     //     Arc::new(zarrs::filesystem::FilesystemStore::new(path.path())?);
-    let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
+    let mut store: SyncReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
     {
