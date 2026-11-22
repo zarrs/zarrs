@@ -109,7 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fix invalidating a whole chunk cache to discard retrievals in progress, as invalidating a chunk does, so a chunk read before a write is not cached after it
 - Subchunks
   - **Breaking**: Remove `[Async]ArrayShardedReadableExt[Cache]`, whose methods are now part of `[Async]ArrayReadOps`
-    - `[async_]retrieve_encoded_subchunk` and `[async_]subchunk_byte_range` are removed; use `[Async]ShardingPartialDecoder::{retrieve_subchunk_encoded,subchunk_byte_range}` for low-level encoded subchunk access
+    - `[async_]retrieve_encoded_subchunk` and `[async_]subchunk_byte_range` are removed; use `ShardingPartialDecoder::{[async_]retrieve_subchunk_encoded,subchunk_byte_range}` for low-level encoded subchunk access
   - **Breaking**: Remove `ArrayShardedExt`, whose `subchunk_grid` and `subchunk_shape` are now part of `ArrayOps`
     - `is_sharded` and `is_exclusively_sharded` are removed; query `ArrayOps::subchunk_grid()` instead
   - **Breaking**: `ArrayOps::subchunk_grid()` returns `ChunkGridDecodedRef<'_>`, which distinguishes an absent subchunk grid from one that is only resolvable per chunk
@@ -209,7 +209,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `SubchunkWriteOrder::{Lexicographic,Colexicographic,Morton}` for writing subchunks in row-major, column-major, or Morton (Z-order) order
   - *Deprecated*: `SubchunkWriteOrder::C` is soft deprecated in favour of `SubchunkWriteOrder::Lexicographic` and will be removed in a future release
   - **Breaking**: Remove `SubchunkWriteOrder::Random`; use `SubchunkWriteOrder::Unordered` for the same behaviour
-- Expose `ShardingCodecBound` and `[Async]ShardingPartialDecoder` APIs for low-level encoded subchunk access (see `sharding` module docs)
+- Expose `ShardingCodecBound` and the generic `ShardingPartialDecoder<T>` API (supporting both sync and async) for low-level encoded subchunk access (see `sharding` module docs)
   - **Breaking**: `ShardingCodec::{compact,decode_into}` move to `ShardingCodecBound`, and `ShardingCodec::decode_index` is removed
 - Support efficient asynchronous partial encoding, and partial encoding with generic indexers
 - Limit partial-encode subchunk concurrency and split the concurrent target between subchunks and their inner codecs, including async partial encoding
@@ -332,7 +332,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Storage
 
-`zarrs_storage` 0.4.5 → 0.5.0 (**Breaking**): `set`/`set_partial` take `CowBytes`; `zarrs_filesystem` 0.3.14 → 0.4.0 (**Breaking**): no per-key serialisation, byte-range fixes
+`zarrs_storage` 0.4.5 → 0.5.0 (**Breaking**): `MemoryStore` supports both sync and async (removing `AsyncMemoryStore`), `set`/`set_partial` take `CowBytes`; `zarrs_filesystem` 0.3.14 → 0.4.0 (**Breaking**): no per-key serialisation, byte-range fixes
 
 - Fix partial encoding to check whether the storage transformed by the storage transformers of an array supports partial sets, rather than the underlying store
 - Fix `[async_]erase_metadata` to erase array metadata through the storage transformers of the array, consistent with `[async_]store_metadata`

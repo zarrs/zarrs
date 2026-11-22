@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `From<CowBytes>` for `ArrayBytes`
 
 ### Changed
+- **Breaking**: Unify `ByteIntervalPartialDecoder` and `AsyncByteIntervalPartialDecoder` into a generic `ByteIntervalPartialDecoder<T: ?Sized>` supporting both sync and async partial decoding
 - **Breaking**: `ArrayBytes` and `ArrayBytesTarget` are non-exhaustive, so downstream matches require a wildcard arm
 - **Breaking**: `update_array_bytes` takes `&DataType` instead of `DataTypeSize`, checking fixed, variable, and nested optional layouts against both the original bytes and update bytes
 - **Breaking**: Box `CodecError::CodecCreateError` to retain the error-size limits after `DataType` becomes an enum; conversion from `CodecCreateError` is retained
@@ -112,8 +113,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Reject incompatible data type layouts when extracting array bytes with arbitrary indexers, and preserve optional layers in empty outputs from default partial decoders
-- `[Async]ByteIntervalPartialDecoder` no longer reads beyond its interval for a `ByteRange::FromStart(offset, None)` with a nonzero `offset`
-- `[Async]ByteIntervalPartialDecoder` returns `CodecError::InvalidByteRangeError` for a byte range outside of its interval, or an interval end that overflows, instead of panicking or reading bytes outside of its interval
+- `ByteIntervalPartialDecoder` no longer reads beyond its interval for a `ByteRange::FromStart(offset, None)` with a nonzero `offset`
+- `ByteIntervalPartialDecoder` returns `CodecError::InvalidByteRangeError` for a byte range outside of its interval, or an interval end that overflows, instead of panicking or reading bytes outside of its interval
 - `BytesPartialDecoderTraits` for `Mutex<Option<Vec<u8>>>` returns `InvalidByteRangeError` instead of panicking on out-of-bounds suffix, offset, or overflowing byte ranges
 - `ArrayBytes::validate` rejects overflowing fixed byte lengths and optional masks of the wrong length, including expected mask counts greater than `usize::MAX`. `ArrayBytesMask::new` rejects mask values other than 0 or 1
 - `ArrayBytes::new_fill_value` returns an error if the element count or a required fill buffer exceeds platform limits
