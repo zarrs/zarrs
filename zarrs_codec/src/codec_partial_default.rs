@@ -7,9 +7,9 @@ use zarrs_data_type::FillValue;
 use super::{
     ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderSubchunkingTraits,
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, CowBytes,
-    DataType, Resources,
+    ArrayToBytesCodecTraits, BytesPartialEncoderTraits, BytesRepresentation,
+    BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, CowBytes, DataType, Resources,
+    SyncBytesPartialDecoderTraits,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -303,7 +303,7 @@ impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits
 impl<T: ?Sized> ArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
-    T: BytesPartialDecoderTraits,
+    T: SyncBytesPartialDecoderTraits,
 {
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()
@@ -442,10 +442,10 @@ where
     }
 }
 
-impl<T: ?Sized> BytesPartialDecoderTraits
+impl<T: ?Sized> SyncBytesPartialDecoderTraits
     for CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>
 where
-    T: BytesPartialDecoderTraits,
+    T: SyncBytesPartialDecoderTraits,
 {
     fn exists(&self) -> Result<bool, StorageError> {
         self.input_output_handle.exists()

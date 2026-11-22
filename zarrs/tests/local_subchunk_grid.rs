@@ -10,10 +10,10 @@ use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, Codec,
-    CodecChain, CodecChainBound, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, ComputeResources, CowBytes, DataType, FillValue, RecommendedConcurrency,
-    Resources, UnboundArrayToBytesCodecTraits, data_type,
+    BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, Codec, CodecChain,
+    CodecChainBound, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    ComputeResources, CowBytes, DataType, FillValue, RecommendedConcurrency, Resources,
+    SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
@@ -39,7 +39,7 @@ struct DynamicLocalSubchunkCodecBound {
 }
 
 struct DynamicLocalSubchunkPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+    input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
     shape: ChunkShape,
     data_type: DataType,
 }
@@ -241,7 +241,7 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,

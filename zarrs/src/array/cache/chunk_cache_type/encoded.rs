@@ -36,7 +36,7 @@ fn partial_decoder_over_encoded(
     options: &CodecOptions,
     resources: &Resources,
 ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
-    let input: Arc<dyn zarrs_codec::BytesPartialDecoderTraits> = match encoded {
+    let input: Arc<dyn zarrs_codec::SyncBytesPartialDecoderTraits> = match encoded {
         Some(encoded) => Arc::new(CowBytes::Shared(encoded)),
         None => Arc::new(Mutex::new(None)),
     };

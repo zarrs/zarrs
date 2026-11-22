@@ -70,11 +70,11 @@ pub use zarrs_codec::{
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
-    BytesDecodeInput, BytesDecodeSource, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes,
-    IncompatibleOptionalMaskError, RecommendedConcurrency, Resources,
+    BytesDecodeInput, BytesDecodeSource, BytesPartialEncoderTraits, BytesRepresentation,
+    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes, IncompatibleOptionalMaskError,
+    RecommendedConcurrency, Resources, SyncBytesPartialDecoderTraits,
     UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, WithOptionalMaskError,
     copy_fill_value_into, update_array_bytes,
 };
@@ -413,10 +413,10 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
 ///   - Array-to-bytes codecs: [`UnboundArrayToBytesCodecTraits`] and bound [`ArrayToBytesCodecTraits`]
 ///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
-///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
+///     - [`SyncBytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Bytes-to-bytes codecs: [`BytesToBytesCodecTraits`]
 ///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
-///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
+///     - [`SyncBytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Chunk grids ([`zarrs_chunk_grid`]): [`ChunkGridTraits`]
 ///   - Chunk key encodings ([`zarrs_chunk_key_encoding`]): [`ChunkKeyEncodingTraits`]
 ///   - Storage transformers ([`crate::array::storage_transformer`]): [`StorageTransformerTraits`]

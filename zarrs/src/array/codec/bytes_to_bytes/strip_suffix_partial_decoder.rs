@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions, Resources};
+use zarrs_codec::{CodecError, CodecOptions, Resources, SyncBytesPartialDecoderTraits};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
 
@@ -33,7 +33,7 @@ impl<T: ?Sized> StripSuffixPartialDecoder<T> {
     }
 }
 
-impl<T: BytesPartialDecoderTraits + ?Sized + 'static> BytesPartialDecoderTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncBytesPartialDecoderTraits
     for StripSuffixPartialDecoder<T>
 {
     fn exists(&self) -> Result<bool, StorageError> {
@@ -152,7 +152,7 @@ mod tests {
     const SUFFIX_SIZE: usize = 2;
 
     fn decode(byte_range: ByteRange) -> Vec<u8> {
-        let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
+        let input: Arc<dyn SyncBytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
         let decoder = StripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
         decoder
             .partial_decode(byte_range, &CodecOptions::default(), &Resources::default())

@@ -85,8 +85,8 @@ mod tests {
     use super::*;
     use crate::array::BytesRepresentation;
     use zarrs_codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits,
-        CodecOptions,
+        BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, CodecOptions,
+        SyncBytesPartialDecoderTraits,
     };
     use zarrs_storage::byte_range::ByteRange;
 

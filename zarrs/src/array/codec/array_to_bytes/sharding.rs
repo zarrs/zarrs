@@ -108,8 +108,8 @@ pub use sharding_codec_builder::ShardingCodecBuilder;
 pub(crate) use sharding_options::RequireDivisibleSubchunks;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, ChunkGridDecoded, Codec,
-    CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3, Resources,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, ChunkGridDecoded, Codec, CodecError, CodecOptions,
+    CodecPluginV3, CodecTraitsV3, Resources, SyncBytesPartialDecoderTraits,
 };
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
@@ -658,7 +658,7 @@ fn get_concurrent_target_and_partial_resources(
 
 /// Returns `None` if there is no shard.
 fn decode_shard_index_partial_decoder(
-    input_handle: &(impl BytesPartialDecoderTraits + ?Sized),
+    input_handle: &(impl SyncBytesPartialDecoderTraits + ?Sized),
     index_codecs: &CodecChainBound,
     index_location: ShardingIndexLocation,
     shard_shape: &[NonZeroU64],

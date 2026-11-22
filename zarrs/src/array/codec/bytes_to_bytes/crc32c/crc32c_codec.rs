@@ -11,9 +11,9 @@ use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    Resources, SyncBytesPartialDecoderTraits,
 };
 use zarrs_metadata::Configuration;
 
@@ -151,11 +151,11 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncBytesPartialDecoderTraits>, CodecError> {
         match self.0 {
             Crc32cCodecConfigurationLocation::End => Ok(Arc::new(StripSuffixPartialDecoder::new(
                 input_handle,

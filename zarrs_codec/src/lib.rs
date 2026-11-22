@@ -37,7 +37,9 @@ pub use codec_traits::array_to_array::{
 pub use codec_traits::array_to_bytes::{
     ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, UnboundArrayToBytesCodecTraits,
 };
-pub use codec_traits::bytes_partial_sync::{BytesPartialDecoderTraits, BytesPartialEncoderTraits};
+pub use codec_traits::bytes_partial_sync::{
+    BytesPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+};
 pub use codec_traits::bytes_to_bytes::{
     BytesToBytesCodecDecodeInto, BytesToBytesCodecTraits, copy_decoded_bytes_into,
     read_decoded_bytes_into,

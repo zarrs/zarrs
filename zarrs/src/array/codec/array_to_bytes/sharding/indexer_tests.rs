@@ -148,7 +148,7 @@ impl ArrayToBytesCodecTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {
     }
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
@@ -416,7 +416,7 @@ fn sharding_indexer_batches() {
         } = &fixture;
         let options = CodecOptions::default();
         let resources = Resources::default().with_compute_target(concurrency);
-        let input: Arc<dyn BytesPartialDecoderTraits> = if absent {
+        let input: Arc<dyn SyncBytesPartialDecoderTraits> = if absent {
             Arc::new((
                 zarrs_storage::store::MemoryStore::new(),
                 zarrs_storage::StoreKey::new("absent").unwrap(),

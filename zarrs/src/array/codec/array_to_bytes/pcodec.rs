@@ -107,7 +107,7 @@ mod tests {
         data_type, transmute_to_bytes_vec,
     };
     use zarrs_codec::{
-        BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions, ComputeResources,
+        CodecOptions, CodecSpecificOptions, ComputeResources, SyncBytesPartialDecoderTraits,
         UnboundArrayToBytesCodecTraits,
     };
 

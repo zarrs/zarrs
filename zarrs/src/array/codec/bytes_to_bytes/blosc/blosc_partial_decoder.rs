@@ -6,7 +6,7 @@ use super::{
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions, Resources};
+use zarrs_codec::{CodecError, CodecOptions, Resources, SyncBytesPartialDecoderTraits};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRangeIterator, InvalidByteRangeError};
 
@@ -65,7 +65,7 @@ impl<T: ?Sized> BloscPartialDecoder<T> {
     }
 }
 
-impl<T: BytesPartialDecoderTraits + ?Sized + 'static> BytesPartialDecoderTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncBytesPartialDecoderTraits
     for BloscPartialDecoder<T>
 {
     fn exists(&self) -> Result<bool, StorageError> {

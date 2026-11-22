@@ -302,7 +302,7 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
 
 fn sharding_partial_decoder<A: ArrayReadOps>(
     array: &A,
-) -> Result<ShardingPartialDecoder<dyn zarrs::array::BytesPartialDecoderTraits>, Box<dyn Error>>
+) -> Result<ShardingPartialDecoder<dyn zarrs::array::SyncBytesPartialDecoderTraits>, Box<dyn Error>>
 where
     A::Storage: SyncReadableStorageTraits + 'static,
 {
@@ -316,7 +316,7 @@ where
     let storage_transformer = array
         .storage_transformers()
         .create_readable_transformer(storage_handle)?;
-    let input_handle: Arc<dyn zarrs::array::BytesPartialDecoderTraits> =
+    let input_handle: Arc<dyn zarrs::array::SyncBytesPartialDecoderTraits> =
         Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
 
     Ok(ShardingPartialDecoder::new(

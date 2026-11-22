@@ -13,12 +13,12 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
-    BytesDecodeInput, BytesDecodeSource, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    BytesDecodeInput, BytesDecodeSource, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    SyncBytesPartialDecoderTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -818,7 +818,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        mut input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
@@ -1312,11 +1312,11 @@ mod tests {
 
         fn partial_decoder(
             self: Arc<Self>,
-            input_handle: Arc<dyn BytesPartialDecoderTraits>,
+            input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
             decoded_representation: &BytesRepresentation,
             _options: &CodecOptions,
             _resources: &Resources,
-        ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
+        ) -> Result<Arc<dyn SyncBytesPartialDecoderTraits>, CodecError> {
             if decoded_representation != &self.expected_decoded_representation {
                 return Err(CodecError::Other(format!(
                     "wrong decoded representation: expected {:?}, got {:?}",
@@ -1495,7 +1495,7 @@ mod tests {
         )
         .unwrap();
 
-        let encoded_input: Arc<dyn BytesPartialDecoderTraits> =
+        let encoded_input: Arc<dyn SyncBytesPartialDecoderTraits> =
             Arc::new(CowBytes::from(vec![0; 9]));
         codec
             .partial_decoder(

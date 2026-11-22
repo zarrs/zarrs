@@ -52,7 +52,7 @@ macro_rules! vlen_v2_codec {
         use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
         use zarrs_codec::{
             ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-            ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+            ArrayToBytesCodecTraits, SyncBytesPartialDecoderTraits, BytesPartialEncoderTraits,
             CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
             RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
@@ -208,7 +208,7 @@ macro_rules! vlen_v2_codec {
 
             fn partial_decoder(
                 self: Arc<Self>,
-                input_handle: Arc<dyn BytesPartialDecoderTraits>,
+                input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
                 resources: &Resources,

@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use zarrs_codec::{
     ArrayBytes, ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes, InvalidBytesLengthError,
-    Resources,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, BytesPartialEncoderTraits,
+    CodecError, CodecOptions, CowBytes, InvalidBytesLengthError, Resources,
+    SyncBytesPartialDecoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -82,7 +82,7 @@ fn split_subsets<'a>(
         .collect())
 }
 
-impl<T: ArrayPartialDecoderTraits + ?Sized> BytesPartialDecoderTraits
+impl<T: ArrayPartialDecoderTraits + ?Sized> SyncBytesPartialDecoderTraits
     for NumcodecsPackBitsPartial<T>
 {
     fn exists(&self) -> Result<bool, StorageError> {

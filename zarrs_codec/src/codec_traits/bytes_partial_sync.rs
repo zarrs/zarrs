@@ -11,7 +11,7 @@ use zarrs_storage::{
 use crate::{CodecError, CodecOptions, CowBytes, Resources};
 
 /// Partial bytes decoder traits.
-pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
+pub trait SyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns whether the chunk exists.
     ///
     /// # Errors
@@ -76,7 +76,7 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 
 /// Partial bytes encoder traits.
 pub trait BytesPartialEncoderTraits:
-    BytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
+    SyncBytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Erase the chunk.
     ///
@@ -129,7 +129,7 @@ pub trait BytesPartialEncoderTraits:
     fn supports_partial_encode(&self) -> bool;
 }
 
-impl BytesPartialDecoderTraits for CowBytes<'static> {
+impl SyncBytesPartialDecoderTraits for CowBytes<'static> {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(true)
     }
@@ -157,7 +157,7 @@ impl BytesPartialDecoderTraits for CowBytes<'static> {
     }
 }
 
-impl BytesPartialDecoderTraits for Vec<u8> {
+impl SyncBytesPartialDecoderTraits for Vec<u8> {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(true)
     }
@@ -185,7 +185,7 @@ impl BytesPartialDecoderTraits for Vec<u8> {
     }
 }
 
-impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
+impl SyncBytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(self.lock().unwrap().is_some())
     }
@@ -258,7 +258,7 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
     }
 }
 
-impl<TStorage: SyncReadableStorageTraits + 'static> BytesPartialDecoderTraits
+impl<TStorage: SyncReadableStorageTraits + 'static> SyncBytesPartialDecoderTraits
     for (TStorage, StoreKey)
 {
     fn exists(&self) -> Result<bool, StorageError> {

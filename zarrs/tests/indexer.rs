@@ -15,7 +15,7 @@ use zarrs::array::{
     IndexerError, data_type,
 };
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecOptions, CodecSpecificOptions,
+    BytesPartialEncoderTraits, CodecOptions, CodecSpecificOptions, SyncBytesPartialDecoderTraits,
     UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::FillValue;

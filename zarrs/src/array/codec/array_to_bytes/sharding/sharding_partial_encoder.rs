@@ -20,8 +20,8 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions, Resources, update_array_bytes,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialEncoderTraits, CodecError,
+    CodecOptions, Resources, SyncBytesPartialDecoderTraits, update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -303,7 +303,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
+        let handle: Arc<dyn SyncBytesPartialDecoderTraits> = self.input_output_handle.clone();
         super::sharding_partial_decoder_sync::partial_decode(
             &handle,
             &self.chunk_grid,

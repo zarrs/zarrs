@@ -9,7 +9,7 @@ use crate::{CodecError, CodecOptions, CowBytes, Resources};
 
 #[cfg(feature = "async")]
 use crate::AsyncBytesPartialDecoderTraits;
-use crate::BytesPartialDecoderTraits;
+use crate::SyncBytesPartialDecoderTraits;
 
 /// Map byte ranges within the interval `byte_offset..byte_offset + byte_length` to byte ranges of the whole input.
 ///
@@ -33,7 +33,7 @@ fn interval_byte_ranges(
         .collect()
 }
 
-/// A partial decoder for a byte interval of a [`BytesPartialDecoderTraits`] or
+/// A partial decoder for a byte interval of a [`SyncBytesPartialDecoderTraits`] or
 /// `AsyncBytesPartialDecoderTraits` partial decoder.
 ///
 /// Modifies byte range requests to a specific byte interval in an inner bytes partial decoder.
@@ -55,7 +55,7 @@ impl<T: ?Sized> ByteIntervalPartialDecoder<T> {
     }
 }
 
-impl<T: BytesPartialDecoderTraits + ?Sized + 'static> BytesPartialDecoderTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncBytesPartialDecoderTraits
     for ByteIntervalPartialDecoder<T>
 {
     fn exists(&self) -> Result<bool, StorageError> {
@@ -118,7 +118,8 @@ mod tests {
     use super::*;
 
     fn decode(byte_range: ByteRange) -> Vec<u8> {
-        let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new((0..10u8).collect::<Vec<u8>>());
+        let input: Arc<dyn SyncBytesPartialDecoderTraits> =
+            Arc::new((0..10u8).collect::<Vec<u8>>());
         let decoder = ByteIntervalPartialDecoder::new(input, 2, 5);
         decoder
             .partial_decode(byte_range, &CodecOptions::default(), &Resources::default())
@@ -138,7 +139,8 @@ mod tests {
 
     #[test]
     fn byte_interval_partial_decoder_out_of_bounds() {
-        let input: Arc<dyn BytesPartialDecoderTraits> = Arc::new((0..10u8).collect::<Vec<u8>>());
+        let input: Arc<dyn SyncBytesPartialDecoderTraits> =
+            Arc::new((0..10u8).collect::<Vec<u8>>());
         let options = CodecOptions::default();
         let decoder = ByteIntervalPartialDecoder::new(input.clone(), 2, 5);
         for byte_range in [

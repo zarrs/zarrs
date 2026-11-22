@@ -257,8 +257,8 @@ mod tests {
         data_type,
     };
     use zarrs_codec::{
-        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions, CodecSpecificOptions,
-        ComputeResources, UnboundArrayToBytesCodecTraits,
+        ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions, ComputeResources,
+        SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits,
     };
 
     const JSON_REVERSIBLE: &str = r#"{

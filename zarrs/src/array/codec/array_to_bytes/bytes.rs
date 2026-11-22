@@ -113,8 +113,8 @@ mod tests {
         data_type,
     };
     use zarrs_codec::{
-        BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-        CodecTraits, ComputeResources, UnboundArrayToBytesCodecTraits,
+        CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+        SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits,
     };
 
     #[test]

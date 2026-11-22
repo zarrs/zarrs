@@ -549,8 +549,8 @@ mod tests {
     use crate::array::element::{Element, ElementOwned};
     use crate::array::{ArrayBytes, ArraySubset, CowBytes, data_type};
     use zarrs_codec::{
-        BytesPartialDecoderTraits, Codec, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-        ComputeResources, Resources, UnboundArrayToBytesCodecTraits,
+        Codec, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, ComputeResources,
+        Resources, SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits,
     };
     use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
@@ -1338,7 +1338,7 @@ mod tests {
     /// Returns each requested byte range without its last byte, like a store that clamps ranges.
     struct TruncatingPartialDecoder(CowBytes<'static>);
 
-    impl BytesPartialDecoderTraits for TruncatingPartialDecoder {
+    impl SyncBytesPartialDecoderTraits for TruncatingPartialDecoder {
         fn exists(&self) -> Result<bool, zarrs_storage::StorageError> {
             Ok(true)
         }

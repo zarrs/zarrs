@@ -404,8 +404,8 @@ mod tests {
     use std::sync::Arc;
 
     use zarrs_codec::{
-        BytesPartialDecoderTraits, Codec, CodecCreateError, CodecMetadataOptions, CodecOptions,
-        CodecSpecificOptions, ComputeResources, CowBytes, Resources,
+        Codec, CodecCreateError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+        ComputeResources, CowBytes, Resources, SyncBytesPartialDecoderTraits,
         UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
     use zarrs_metadata::v2::MetadataV2;
@@ -603,14 +603,14 @@ mod tests {
         Ok(())
     }
 
-    /// Counts the calls to [`BytesPartialDecoderTraits::partial_decode_many`] and [`BytesPartialDecoderTraits::exists`].
+    /// Counts the calls to [`SyncBytesPartialDecoderTraits::partial_decode_many`] and [`SyncBytesPartialDecoderTraits::exists`].
     struct CountingPartialDecoder(
         CowBytes<'static>,
         std::sync::atomic::AtomicUsize,
         std::sync::atomic::AtomicUsize,
     );
 
-    impl BytesPartialDecoderTraits for CountingPartialDecoder {
+    impl SyncBytesPartialDecoderTraits for CountingPartialDecoder {
         fn exists(&self) -> Result<bool, zarrs_storage::StorageError> {
             self.2.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(true)
