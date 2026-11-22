@@ -13,11 +13,11 @@ use crate::array::{
     ArrayBytes, ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    Resources, SyncArrayPartialDecoderTraits, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -316,11 +316,11 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 self.clone(),

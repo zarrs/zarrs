@@ -16,8 +16,8 @@ use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    InvalidNumberOfElementsError, copy_fill_value_into,
+    ArrayBytesTarget, ArrayToBytesCodecTraits, InvalidNumberOfElementsError,
+    SyncArrayPartialDecoderTraits, copy_fill_value_into,
 };
 use zarrs_storage::Bytes;
 
@@ -273,7 +273,7 @@ impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> ArrayReadOps for Ar
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
         self.partial_decoder_with_options(chunk_indices, self.codec_options(), resources)
     }
 }
@@ -536,7 +536,7 @@ impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
         let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.readable_storage()?;
         let input_handle = Arc::new((storage_transformer, chunk_key));

@@ -31,13 +31,13 @@ use crate::array::{
     CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeInput,
     ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
     CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, SyncBytesPartialDecoderTraits,
-    SyncBytesPartialEncoderTraits, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
-    decode_into_array_bytes_target,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
+    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits, UnboundArrayToBytesCodecTraits,
+    copy_fill_value_into, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -774,7 +774,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(ShardingPartialDecoder::new(
             input_handle,
             shape,

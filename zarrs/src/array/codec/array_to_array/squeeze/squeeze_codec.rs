@@ -7,11 +7,12 @@ use zarrs_plugin::ZarrVersion;
 use crate::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGrid};
 use crate::array::{ArrayIndices, ArraySubset, ChunkGrid, ChunkShape, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
+    ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
+    UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -334,11 +335,11 @@ impl ArrayToArrayCodecTraits for SqueezeCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 self.clone(),

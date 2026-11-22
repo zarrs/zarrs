@@ -18,7 +18,7 @@ use crate::array::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits};
+use zarrs_codec::{ArrayBytesTarget, ArrayToBytesCodecTraits, SyncArrayPartialDecoderTraits};
 
 impl ChunkCacheType for ChunkCacheTypeEncoded {
     fn size(&self) -> usize {
@@ -35,7 +35,7 @@ fn partial_decoder_over_encoded(
     chunk_shape: &ChunkShape,
     options: &CodecOptions,
     resources: &Resources,
-) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
     let input: Arc<dyn zarrs_codec::SyncBytesPartialDecoderTraits> = match encoded {
         Some(encoded) => Arc::new(CowBytes::Shared(encoded)),
         None => Arc::new(Mutex::new(None)),
@@ -153,7 +153,7 @@ impl SealedSync for ChunkCacheTypeEncoded {
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>
     where
         C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
@@ -274,7 +274,7 @@ async fn async_partial_decoder_sync<C>(
     chunk_indices: &[u64],
     options: &CodecOptions,
     resources: &Resources,
-) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>
 where
     C: AsyncChunkCacheTraits<Value = ChunkCacheTypeEncoded> + ?Sized,
 {

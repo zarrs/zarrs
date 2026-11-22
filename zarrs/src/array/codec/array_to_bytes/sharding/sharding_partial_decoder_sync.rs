@@ -18,9 +18,9 @@ use crate::array::{
     DataType, Indexer, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    ByteIntervalPartialDecoder, CodecError, CodecOptions, ExpectedOptionalBytesError,
-    InvalidNumberOfElementsError, SyncArrayPartialDecoderSubchunkingTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
+    CodecError, CodecOptions, ExpectedOptionalBytesError, InvalidNumberOfElementsError,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
     SyncBytesPartialDecoderTraits, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
@@ -190,7 +190,7 @@ impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecode
     }
 }
 
-impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecoderTraits
     for ShardingPartialDecoder<T>
 {
     fn data_type(&self) -> &DataType {
@@ -310,7 +310,7 @@ fn get_subchunk_partial_decoder<T: SyncBytesPartialDecoderTraits + ?Sized + 'sta
     resources: &Resources,
     byte_offset: ByteOffset,
     byte_length: ByteLength,
-) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
     inner_codecs
         .clone()
         .partial_decoder(

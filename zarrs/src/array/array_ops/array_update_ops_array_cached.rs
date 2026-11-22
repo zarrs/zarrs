@@ -10,8 +10,8 @@ use super::{
 use crate::array::cache::SyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError,
-    SyncArrayPartialDecoderSubchunkingTraits,
+    ArrayBytesTarget, ArrayPartialEncoderTraits, CodecError,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
 };
 use zarrs_storage::StorageError;
 
@@ -37,7 +37,7 @@ where
     }
 }
 
-impl<TStorage, C, E> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
+impl<TStorage, C, E> SyncArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,

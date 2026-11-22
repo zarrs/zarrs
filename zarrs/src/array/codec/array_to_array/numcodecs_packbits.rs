@@ -32,13 +32,13 @@ use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesDecodeInput, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, ChunkGridEncodedRef, Codec, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3, CodecSpecificOptions,
-    CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecGeometryTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    BytesDecodeInput, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
+    Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecPluginV2,
+    CodecPluginV3, CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3,
+    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    Resources, SyncArrayPartialDecoderTraits, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -329,11 +329,11 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         let packed_handle = self.packed_handle(input_handle.clone(), shape)?;
         let inner =
             self.packbits

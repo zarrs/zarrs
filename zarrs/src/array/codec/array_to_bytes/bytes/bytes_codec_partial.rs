@@ -6,8 +6,8 @@ use super::bytes_codec::decoded_len;
 use super::{BytesDataTypeTraitsArc, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
-    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    CodecError, CodecOptions, Resources, SyncBytesPartialDecoderTraits,
+    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    Resources, SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits,
     SyncBytesPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
@@ -137,7 +137,7 @@ impl<T: ?Sized> BytesCodecPartial<T> {
 /// The `bytes` codec encodes a chunk as a whole, so it has no subchunks.
 impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits for BytesCodecPartial<T> {}
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for BytesCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for BytesCodecPartial<T>
 where
     T: SyncBytesPartialDecoderTraits,
 {

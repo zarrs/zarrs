@@ -6,8 +6,8 @@ use std::sync::Arc;
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
 use crate::array::{ArrayBytes, CowBytes, DataType, FillValue};
 use zarrs_codec::{
-    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, CodecError, CodecOptions,
-    Resources, SyncBytesPartialDecoderTraits,
+    ArrayPartialDecoderNoSubchunkingTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -64,7 +64,7 @@ fn decode_vlen_bytes<'a>(
 /// The `vlen_*` codecs encode a chunk as a whole, so they have no subchunks.
 impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits for VlenV2PartialDecoder<T> {}
 
-impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecoderTraits
     for VlenV2PartialDecoder<T>
 {
     fn data_type(&self) -> &DataType {

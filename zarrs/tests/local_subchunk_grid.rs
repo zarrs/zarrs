@@ -9,10 +9,10 @@ use serial_test::serial;
 use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, Codec, CodecChain,
-    CodecChainBound, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    ComputeResources, CowBytes, DataType, FillValue, RecommendedConcurrency, Resources,
+    Array, ArrayBuilder, ArrayBytes, ArrayToBytesCodecTraits, BytesRepresentation, ChunkGrid,
+    ChunkShape, ChunkShapeTraits, Codec, CodecChain, CodecChainBound, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, ComputeResources, CowBytes, DataType,
+    FillValue, RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
     SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
@@ -246,7 +246,7 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(DynamicLocalSubchunkPartialDecoder {
             input_handle,
             shape: shape.to_vec(),
@@ -278,7 +278,7 @@ impl SyncArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDec
     }
 }
 
-impl ArrayPartialDecoderTraits for DynamicLocalSubchunkPartialDecoder {
+impl SyncArrayPartialDecoderTraits for DynamicLocalSubchunkPartialDecoder {
     fn data_type(&self) -> &DataType {
         &self.data_type
     }

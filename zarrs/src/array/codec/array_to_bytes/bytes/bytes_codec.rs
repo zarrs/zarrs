@@ -3,12 +3,12 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecTraits, BytesDecodeInput, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesDecodeInput, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits, UnboundArrayToBytesCodecTraits,
-    decode_into_array_bytes_target,
+    SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
@@ -296,7 +296,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
             shape,

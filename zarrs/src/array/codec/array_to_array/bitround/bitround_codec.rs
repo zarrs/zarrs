@@ -9,11 +9,11 @@ use super::{
 use crate::array::{DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    SyncArrayPartialDecoderTraits, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -210,11 +210,11 @@ impl ArrayToArrayCodecTraits for BitroundCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncArrayPartialDecoderTraits>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_handle,
             &self.data_type,

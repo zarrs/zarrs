@@ -8,10 +8,10 @@ use crate::array::{
     FillValue,
 };
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    Resources, SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
+    SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -326,7 +326,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(vlen_partial_decoder::VlenPartialDecoder::new(
             input_handle,
             shape.to_vec(),

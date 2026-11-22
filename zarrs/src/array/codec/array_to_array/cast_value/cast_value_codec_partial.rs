@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
-    Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    ArrayBytes, ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -135,9 +135,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for CastValueCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for CastValueCodecPartial<T>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
         &self.decoded_data_type

@@ -13,7 +13,7 @@ use super::{CachedArrayMeta, SyncCachedArray, SyncChunkCacheTraits};
 use crate::array::{ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayPartialDecoderTraits, Resources};
+use zarrs_codec::{Resources, SyncArrayPartialDecoderTraits};
 
 mod decoded;
 
@@ -200,7 +200,7 @@ pub struct NoCache;
         types(
             AsyncArrayCacheOps => SyncArrayCacheOps,
             AsyncCachedArray => SyncCachedArray,
-            AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits,
+            AsyncArrayPartialDecoderTraits => SyncArrayPartialDecoderTraits,
         )
     ),
     async(

@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions, CowBytes, InvalidBytesLengthError,
-    Resources, SyncArrayPartialDecoderSubchunkingTraits, SyncBytesPartialDecoderTraits,
-    SyncBytesPartialEncoderTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits,
+    CodecError, CodecOptions, CowBytes, InvalidBytesLengthError, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -82,7 +82,7 @@ fn split_subsets<'a>(
         .collect())
 }
 
-impl<T: ArrayPartialDecoderTraits + ?Sized> SyncBytesPartialDecoderTraits
+impl<T: SyncArrayPartialDecoderTraits + ?Sized> SyncBytesPartialDecoderTraits
     for NumcodecsPackBitsPartial<T>
 {
     fn exists(&self) -> Result<bool, StorageError> {
@@ -273,8 +273,10 @@ impl<T: ?Sized, D: ?Sized> NumcodecsPackBitsPartialDecoder<T, D> {
     }
 }
 
-impl<T: SyncArrayPartialDecoderSubchunkingTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Sized>
-    SyncArrayPartialDecoderSubchunkingTraits for NumcodecsPackBitsPartialDecoder<T, D>
+impl<
+    T: SyncArrayPartialDecoderSubchunkingTraits + ?Sized,
+    D: SyncArrayPartialDecoderTraits + ?Sized,
+> SyncArrayPartialDecoderSubchunkingTraits for NumcodecsPackBitsPartialDecoder<T, D>
 {
     fn local_subchunk_grids(
         &self,
@@ -288,8 +290,8 @@ impl<T: SyncArrayPartialDecoderSubchunkingTraits + ?Sized, D: ArrayPartialDecode
     }
 }
 
-impl<T: ArrayPartialDecoderTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Sized>
-    ArrayPartialDecoderTraits for NumcodecsPackBitsPartialDecoder<T, D>
+impl<T: SyncArrayPartialDecoderTraits + ?Sized, D: SyncArrayPartialDecoderTraits + ?Sized>
+    SyncArrayPartialDecoderTraits for NumcodecsPackBitsPartialDecoder<T, D>
 {
     fn data_type(&self) -> &DataType {
         self.inner.data_type()

@@ -7,8 +7,8 @@ use super::{
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits,
-    CodecError, CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions,
+    Resources, SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -95,9 +95,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for TransposeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for TransposeCodecPartial<T>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
         &self.data_type

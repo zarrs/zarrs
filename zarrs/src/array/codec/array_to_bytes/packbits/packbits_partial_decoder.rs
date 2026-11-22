@@ -10,8 +10,8 @@ use super::packbits_codec::PackBitsCodecBound;
 use super::unpack;
 use crate::array::{ArrayBytes, ChunkShape, CowBytes, DataType};
 use zarrs_codec::{
-    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, CodecError, CodecOptions,
-    InvalidBytesLengthError, SyncBytesPartialDecoderTraits,
+    ArrayPartialDecoderNoSubchunkingTraits, CodecError, CodecOptions, InvalidBytesLengthError,
+    SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -186,7 +186,7 @@ impl<T: ?Sized> PackBitsPartialDecoder<T> {
 /// The `packbits` codec encodes a chunk as a whole, so it has no subchunks.
 impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits for PackBitsPartialDecoder<T> {}
 
-impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecoderTraits
     for PackBitsPartialDecoder<T>
 {
     fn data_type(&self) -> &DataType {

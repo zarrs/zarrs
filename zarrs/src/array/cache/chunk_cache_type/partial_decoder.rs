@@ -11,7 +11,7 @@ use crate::array::{
     ArrayBytes, ArrayError, ArraySubset, ChunkShapeTraits, CodecOptions, Indexer, Resources,
     chunk_shape_to_array_shape,
 };
-use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesTarget, SyncArrayPartialDecoderTraits};
 
 impl ChunkCacheType for ChunkCacheTypePartialDecoder {
     fn size(&self) -> usize {
@@ -46,7 +46,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>
     where
         C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {

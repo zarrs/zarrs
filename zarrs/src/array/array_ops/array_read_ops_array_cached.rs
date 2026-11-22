@@ -20,7 +20,7 @@ use crate::array::cache::{
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, DataType};
-use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesTarget, SyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
 /// Retrieve `array_subset`, which spans `chunks`, with elements in C order.
@@ -471,7 +471,7 @@ where
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
         let options = self.codec_options();
         self.cache().cached_partial_decoder(
             self.array().as_ref(),

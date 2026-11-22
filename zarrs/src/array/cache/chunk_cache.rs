@@ -227,7 +227,9 @@ pub type AsyncChunkCachePartialDecoder = AsyncChunkCache<ChunkCacheTypeAsyncPart
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use zarrs_codec::{ArrayBytes, ArrayPartialDecoderTraits, CodecError, CodecOptions, Resources};
+    use zarrs_codec::{
+        ArrayBytes, CodecError, CodecOptions, Resources, SyncArrayPartialDecoderTraits,
+    };
     use zarrs_storage::Bytes;
 
     use super::*;
@@ -719,7 +721,7 @@ mod tests {
 
     impl zarrs_codec::ArrayPartialDecoderNoSubchunkingTraits for GrowingPartialDecoder {}
 
-    impl ArrayPartialDecoderTraits for GrowingPartialDecoder {
+    impl SyncArrayPartialDecoderTraits for GrowingPartialDecoder {
         fn data_type(&self) -> &DataType {
             unreachable!()
         }
@@ -805,7 +807,7 @@ mod tests {
 
     impl zarrs_codec::ArrayPartialDecoderNoSubchunkingTraits for DropQueriesCache {}
 
-    impl ArrayPartialDecoderTraits for DropQueriesCache {
+    impl SyncArrayPartialDecoderTraits for DropQueriesCache {
         fn data_type(&self) -> &DataType {
             unreachable!()
         }

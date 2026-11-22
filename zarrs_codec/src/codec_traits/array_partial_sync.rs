@@ -69,7 +69,7 @@ where
 }
 
 /// Partial array decoder traits.
-pub trait ArrayPartialDecoderTraits:
+pub trait SyncArrayPartialDecoderTraits:
     SyncArrayPartialDecoderSubchunkingTraits + Any + MaybeSend + MaybeSync
 {
     /// Return the data type of the partial decoder.
@@ -145,7 +145,7 @@ pub trait ArrayPartialDecoderTraits:
 
 /// Partial array encoder traits.
 pub trait ArrayPartialEncoderTraits:
-    ArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
+    SyncArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Erase the chunk.
     ///

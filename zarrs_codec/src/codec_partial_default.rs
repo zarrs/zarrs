@@ -5,11 +5,11 @@ use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, CowBytes,
-    DataType, Resources, SyncArrayPartialDecoderSubchunkingTraits, SyncBytesPartialDecoderTraits,
-    SyncBytesPartialEncoderTraits,
+    ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialEncoderTraits, ArraySubset,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecTraits,
+    ChunkShape, CodecError, CodecOptions, CowBytes, DataType, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -148,7 +148,7 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
 impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn local_subchunk_grids(
         &self,
@@ -163,10 +163,10 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits
+impl<T: ?Sized> SyncArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()
@@ -300,7 +300,7 @@ impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits
 {
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits
+impl<T: ?Sized> SyncArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
     T: SyncBytesPartialDecoderTraits,

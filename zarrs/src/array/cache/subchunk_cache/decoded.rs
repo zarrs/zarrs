@@ -31,8 +31,9 @@ use crate::array::{
     CodecOptions, DataType, FillValue, Indexer,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderTraits, CodecError, RecommendedConcurrency, Resources,
-    SyncArrayPartialDecoderSubchunkingTraits, copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesTarget, CodecError, RecommendedConcurrency, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits, copy_fill_value_into,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
@@ -67,7 +68,8 @@ impl<D: ?Sized, F> LazyDecoder<D, F> {
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
-            Fut => Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>,
+            AsyncArrayPartialDecoderTraits => SyncArrayPartialDecoderTraits,
+            Fut => Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>,
         )
     ),
     async(feature = "async")
@@ -377,8 +379,9 @@ impl<'a> ChunkSubchunks<'a> {
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncArrayPartialDecoderTraits => SyncArrayPartialDecoderTraits,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
-            Fut => Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>,
+            Fut => Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>,
         )
     ),
     async(feature = "async")
@@ -646,6 +649,7 @@ impl ChunkSubchunks<'_> {
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncArrayPartialDecoderTraits => SyncArrayPartialDecoderTraits,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),
@@ -914,6 +918,7 @@ impl<S: ?Sized, D: ?Sized> SubchunkCachePartialDecoder<S, D> {
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
             AsyncArrayPartialDecoderSubchunkingTraits => SyncArrayPartialDecoderSubchunkingTraits,
+            AsyncArrayPartialDecoderTraits => SyncArrayPartialDecoderTraits,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),
@@ -945,6 +950,7 @@ where
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncArrayPartialDecoderTraits => SyncArrayPartialDecoderTraits,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),

@@ -51,7 +51,7 @@ macro_rules! vlen_v2_codec {
         #[cfg(feature = "async")]
         use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
         use zarrs_codec::{
-            ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+            ArrayCodecTraits, SyncArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
             ArrayToBytesCodecTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
             CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
@@ -212,7 +212,7 @@ macro_rules! vlen_v2_codec {
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
                 resources: &Resources,
-            ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+            ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
                 self.inner.clone().partial_decoder(input_handle, shape, options, resources)
             }
 

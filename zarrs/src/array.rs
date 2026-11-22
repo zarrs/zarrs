@@ -68,15 +68,15 @@ pub use zarrs_codec::{
     ArrayBytesOffsetsIter, ArrayBytesOffsetsOutOfBoundsError, ArrayBytesOffsetsRangesIter,
     ArrayBytesOffsetsSlice, ArrayBytesOptional, ArrayBytesTarget, ArrayBytesTargetOptional,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeInput,
-    BytesDecodeSource, BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded,
-    ChunkGridDecodedRef, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes,
-    IncompatibleOptionalMaskError, RecommendedConcurrency, Resources,
-    SyncArrayPartialDecoderSubchunkingTraits, SyncBytesPartialDecoderTraits,
-    SyncBytesPartialEncoderTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
-    WithOptionalMaskError, copy_fill_value_into, update_array_bytes,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ArrayToBytesCodecTraits, BytesDecodeInput, BytesDecodeSource, BytesRepresentation,
+    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes, IncompatibleOptionalMaskError,
+    RecommendedConcurrency, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, WithOptionalMaskError,
+    copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -352,7 +352,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// **Standard [`Array`] retrieve methods do not perform any caching**.
 /// For this reason, retrieving multiple subsets in a chunk with [`retrieve_partial_chunk`](Array::retrieve_partial_chunk) is very inefficient and strongly discouraged.
 /// For example, consider that a compressed chunk may need to be retrieved and decoded in its entirety even if only a small part of the data is needed.
-/// In such situations, prefer to initialise a partial decoder for a chunk with [`partial_decoder`](Array::partial_decoder) and then retrieve multiple chunk subsets with [`partial_decode`](zarrs_codec::ArrayPartialDecoderTraits::partial_decode).
+/// In such situations, prefer to initialise a partial decoder for a chunk with [`partial_decoder`](Array::partial_decoder) and then retrieve multiple chunk subsets with [`partial_decode`](zarrs_codec::SyncArrayPartialDecoderTraits::partial_decode).
 /// The underlying codec chain will use a cache where efficient to optimise multiple partial decoding requests (see [`CodecChain`]).
 /// Another alternative is to use [Chunk Caching](#chunk-caching).
 ///
@@ -410,7 +410,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// - Codecs ([`zarrs_codec`]): [`CodecTraits`], [`CodecTraitsV2`], [`CodecTraitsV3`])
 ///   - Array-to-array codecs: [`UnboundArrayToArrayCodecTraits`] and bound [`ArrayToArrayCodecTraits`]
 ///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
-///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
+///     - [`SyncArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
 ///   - Array-to-bytes codecs: [`UnboundArrayToBytesCodecTraits`] and bound [`ArrayToBytesCodecTraits`]
 ///     - [`SyncBytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
 ///     - [`SyncBytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]

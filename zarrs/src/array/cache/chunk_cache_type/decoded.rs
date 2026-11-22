@@ -18,8 +18,8 @@ use crate::array::{
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits,
-    CodecError, copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesTarget, ArrayPartialDecoderNoSubchunkingTraits, CodecError,
+    SyncArrayPartialDecoderTraits, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
 
@@ -33,7 +33,7 @@ struct CachedArrayBytesPartialDecoder {
 /// A cache of decoded chunk bytes cannot expose encoded subchunks.
 impl ArrayPartialDecoderNoSubchunkingTraits for CachedArrayBytesPartialDecoder {}
 
-impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
+impl SyncArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
@@ -98,15 +98,15 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
     fn data_type(&self) -> &DataType {
-        ArrayPartialDecoderTraits::data_type(self)
+        SyncArrayPartialDecoderTraits::data_type(self)
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
-        ArrayPartialDecoderTraits::exists(self)
+        SyncArrayPartialDecoderTraits::exists(self)
     }
 
     fn size_held(&self) -> usize {
-        ArrayPartialDecoderTraits::size_held(self)
+        SyncArrayPartialDecoderTraits::size_held(self)
     }
 
     async fn partial_decode<'a>(
@@ -115,7 +115,7 @@ impl AsyncArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        ArrayPartialDecoderTraits::partial_decode(self, indexer, options, resources)
+        SyncArrayPartialDecoderTraits::partial_decode(self, indexer, options, resources)
     }
 
     async fn partial_decode_into(
@@ -125,7 +125,7 @@ impl AsyncArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
-        ArrayPartialDecoderTraits::partial_decode_into(
+        SyncArrayPartialDecoderTraits::partial_decode_into(
             self,
             indexer,
             output_target,
@@ -283,7 +283,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>
     where
         C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {

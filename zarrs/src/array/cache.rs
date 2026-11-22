@@ -66,7 +66,7 @@ use super::{ArrayBytes, ArrayError};
 use crate::array::{ArrayIndices, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions, Resources};
+use zarrs_codec::{CodecOptions, Resources, SyncArrayPartialDecoderTraits};
 
 use zarrs_storage::{Bytes, MaybeSend, MaybeSync};
 
@@ -95,7 +95,7 @@ pub type ChunkCacheTypeEncoded = Option<Bytes>;
 pub type ChunkCacheTypeDecoded = Option<Arc<ArrayBytes<'static>>>;
 
 /// The chunk type of a partial decoder chunk cache.
-pub type ChunkCacheTypePartialDecoder = Arc<dyn ArrayPartialDecoderTraits>;
+pub type ChunkCacheTypePartialDecoder = Arc<dyn SyncArrayPartialDecoderTraits>;
 
 /// The chunk type of an asynchronous partial decoder chunk cache.
 #[cfg(feature = "async")]
@@ -143,9 +143,9 @@ mod chunk_cache_type_sealed {
     use std::sync::Arc;
 
     use super::{
-        ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCacheType, ChunkCacheTypeDecoded,
-        ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, CodecOptions, Indexer, Resources,
-        SyncCachedArray, SyncChunkCacheTraits,
+        ArrayBytes, ArrayError, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
+        ChunkCacheTypePartialDecoder, CodecOptions, Indexer, Resources,
+        SyncArrayPartialDecoderTraits, SyncCachedArray, SyncChunkCacheTraits,
     };
     #[cfg(feature = "async")]
     use super::{
@@ -173,7 +173,7 @@ mod chunk_cache_type_sealed {
             chunk_indices: &[u64],
             options: &CodecOptions,
             resources: &Resources,
-        ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+        ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>
         where
             C: SyncChunkCacheTraits<Value = Self> + ?Sized;
 
