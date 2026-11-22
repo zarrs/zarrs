@@ -16,8 +16,8 @@ use zarrs::array::codec::array_to_bytes::sharding::{
 use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
-    ArrayMetadataOptions, ArrayOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
-    ChunkGridDecodedRef, CodecOptions, SyncArrayReadOps, data_type,
+    ArrayMetadataOptions, ArrayOps, ArraySubset, ArrayUpdateOps, ChunkGridDecodedRef, CodecOptions,
+    SyncArrayReadOps, SyncArrayWriteOps, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -46,7 +46,7 @@ fn fixture() -> (Arc<Array<TestStore>>, Arc<TestStore>) {
     (array, store)
 }
 
-fn populate<A: ArrayWriteOps>(array: &A) -> TestResult {
+fn populate<A: SyncArrayWriteOps>(array: &A) -> TestResult {
     array.store_chunk(
         &[0, 0],
         &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
@@ -198,7 +198,7 @@ fn retrieve_chunk_into<A: SyncArrayReadOps>(
     Ok(output)
 }
 
-fn exercise_array_read_ops<A: SyncArrayReadOps + ArrayWriteOps>(array: &A) -> TestResult {
+fn exercise_array_read_ops<A: SyncArrayReadOps + SyncArrayWriteOps>(array: &A) -> TestResult {
     populate(array)?;
     let chunk_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let chunks = ArraySubset::new_with_ranges(&[0..1, 0..2]);

@@ -1,6 +1,6 @@
 use super::{
-    Arc, Array, ArrayError, ArraySubsetTraits, ArrayWriteOps, Indexer, IntoArrayBytes,
-    SyncArrayReadOps, SyncReadableStorageTraits,
+    Arc, Array, ArrayError, ArraySubsetTraits, Indexer, IntoArrayBytes, SyncArrayReadOps,
+    SyncArrayWriteOps, SyncReadableStorageTraits,
 };
 #[cfg(doc)]
 use super::{ArrayOps, ArraySubset};
@@ -10,13 +10,13 @@ use zarrs_codec::{Resources, SyncArrayPartialEncoderTraits};
 ///
 /// These operations encode and decode with the array's
 /// [`codec_options`](ArrayOps::codec_options).
-pub trait ArrayUpdateOps: SyncArrayReadOps + ArrayWriteOps {
+pub trait ArrayUpdateOps: SyncArrayReadOps + SyncArrayWriteOps {
     /// Encode `indexer_data` and store it in the elements selected by `indexer` in the chunk at `chunk_indices`.
     ///
     /// `indexer` is relative to the chunk. It may be an [`ArraySubset`] or any other
     /// [`Indexer`], such as a list of chunk-relative indices.
     ///
-    /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) where possible, since this function may decode the chunk before updating it and reencoding it.
+    /// Prefer to use [`store_chunk`](crate::array::SyncArrayWriteOps::store_chunk) where possible, since this function may decode the chunk before updating it and reencoding it.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
@@ -38,7 +38,7 @@ pub trait ArrayUpdateOps: SyncArrayReadOps + ArrayWriteOps {
 
     /// Encode `subset_data` and store in `array_subset`.
     ///
-    /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) or [`store_chunks`](crate::array::ArrayWriteOps::store_chunks) where possible, since this will decode and encode each chunk intersecting `array_subset`.
+    /// Prefer to use [`store_chunk`](crate::array::SyncArrayWriteOps::store_chunk) or [`store_chunks`](crate::array::SyncArrayWriteOps::store_chunks) where possible, since this will decode and encode each chunk intersecting `array_subset`.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if

@@ -44,9 +44,9 @@
 //! options too:
 //!
 //! ```rust
-//! # use zarrs::array::{ArrayOps, ArrayWriteOps};
+//! # use zarrs::array::{ArrayOps, SyncArrayWriteOps};
 //! # use zarrs::config::MetadataEraseVersion;
-//! fn erase_all_metadata<A: ArrayWriteOps>(
+//! fn erase_all_metadata<A: SyncArrayWriteOps>(
 //!     array: &A,
 //! ) -> Result<(), zarrs::storage::StorageError> {
 //!     array
@@ -124,7 +124,7 @@ pub use array_mut_ops::ArrayMutOps;
 pub use array_ops::ArrayOps;
 pub use array_read_ops::SyncArrayReadOps;
 pub use array_update_ops::ArrayUpdateOps;
-pub use array_write_ops::ArrayWriteOps;
+pub use array_write_ops::SyncArrayWriteOps;
 #[cfg(feature = "async")]
 pub use async_array_read_ops::AsyncArrayReadOps;
 #[cfg(feature = "async")]

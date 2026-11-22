@@ -1,5 +1,5 @@
 #[cfg(doc)]
-use super::ArrayWriteOps;
+use super::SyncArrayWriteOps;
 use super::{
     ArrayError, ArrayOps, ArraySubsetTraits, Indexer, IntoArrayBytes, MaybeSend, StorageError,
 };
@@ -13,15 +13,15 @@ use zarrs_codec::{CowBytes, Resources};
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncArrayWriteOps: ArrayOps {
-    /// Async variant of [`ArrayWriteOps::store_metadata`].
+    /// Async variant of [`SyncArrayWriteOps::store_metadata`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_store_metadata(&self) -> Result<(), StorageError>;
 
-    /// Async variant of [`ArrayWriteOps::erase_metadata`].
+    /// Async variant of [`SyncArrayWriteOps::erase_metadata`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_erase_metadata(&self) -> Result<(), StorageError>;
 
-    /// Async variant of [`ArrayWriteOps::store_chunk`].
+    /// Async variant of [`SyncArrayWriteOps::store_chunk`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_store_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
@@ -30,7 +30,7 @@ pub trait AsyncArrayWriteOps: ArrayOps {
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayWriteOps::store_chunks`].
+    /// Async variant of [`SyncArrayWriteOps::store_chunks`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_store_chunks<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
@@ -39,11 +39,11 @@ pub trait AsyncArrayWriteOps: ArrayOps {
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayWriteOps::erase_chunk`].
+    /// Async variant of [`SyncArrayWriteOps::erase_chunk`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayWriteOps::erase_chunks`].
+    /// Async variant of [`SyncArrayWriteOps::erase_chunks`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_erase_chunks(
         &self,
@@ -51,7 +51,7 @@ pub trait AsyncArrayWriteOps: ArrayOps {
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayWriteOps::store_encoded_chunk`].
+    /// Async variant of [`SyncArrayWriteOps::store_encoded_chunk`].
     ///
     /// # Safety
     /// The responsibility is on the caller to ensure the chunk is encoded correctly

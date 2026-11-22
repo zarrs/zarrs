@@ -101,7 +101,9 @@ use zarrs_plugin::{ExtensionAliasesV3, ExtensionName, ZarrVersion};
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
-pub use self::array_ops::{ArrayMutOps, ArrayOps, ArrayUpdateOps, ArrayWriteOps, SyncArrayReadOps};
+pub use self::array_ops::{
+    ArrayMutOps, ArrayOps, ArrayUpdateOps, SyncArrayReadOps, SyncArrayWriteOps,
+};
 #[cfg(feature = "async")]
 pub use self::array_ops::{AsyncArrayReadOps, AsyncArrayUpdateOps, AsyncArrayWriteOps};
 use self::chunk_grid::RegularChunkGrid;
