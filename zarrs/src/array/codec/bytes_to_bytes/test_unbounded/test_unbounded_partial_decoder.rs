@@ -8,18 +8,20 @@ use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
 
 /// Partial decoder for the `test_unbounded` codec.
-pub(crate) struct TestUnboundedPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+pub(crate) struct TestUnboundedPartialDecoder<T: ?Sized> {
+    input_handle: Arc<T>,
 }
 
-impl TestUnboundedPartialDecoder {
+impl<T: ?Sized> TestUnboundedPartialDecoder<T> {
     /// Create a new partial decoder for the `test_unbounded` codec.
-    pub(crate) fn new(input_handle: Arc<dyn BytesPartialDecoderTraits>) -> Self {
+    pub(crate) fn new(input_handle: Arc<T>) -> Self {
         Self { input_handle }
     }
 }
 
-impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> BytesPartialDecoderTraits
+    for TestUnboundedPartialDecoder<T>
+{
     fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists()
     }
@@ -54,23 +56,11 @@ impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
 }
 
 #[cfg(feature = "async")]
-/// Asynchronous partial decoder for the `test_unbounded` codec.
-pub(crate) struct AsyncTestUnboundedPartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-}
-
-#[cfg(feature = "async")]
-impl AsyncTestUnboundedPartialDecoder {
-    /// Create a new partial decoder for the `test_unbounded` codec.
-    pub(crate) fn new(input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>) -> Self {
-        Self { input_handle }
-    }
-}
-
-#[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncBytesPartialDecoderTraits
+    for TestUnboundedPartialDecoder<T>
+{
     async fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists().await
     }

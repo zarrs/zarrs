@@ -117,7 +117,7 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
         _resources: &Resources,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
-            test_unbounded_partial_decoder::AsyncTestUnboundedPartialDecoder::new(r),
+            test_unbounded_partial_decoder::TestUnboundedPartialDecoder::new(r),
         ))
     }
 
