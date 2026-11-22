@@ -10,7 +10,7 @@ use zarrs_codec::{Resources, SyncArrayPartialEncoderTraits};
 ///
 /// These operations encode and decode with the array's
 /// [`codec_options`](ArrayOps::codec_options).
-pub trait ArrayUpdateOps: SyncArrayReadOps + SyncArrayWriteOps {
+pub trait SyncArrayUpdateOps: SyncArrayReadOps + SyncArrayWriteOps {
     /// Encode `indexer_data` and store it in the elements selected by `indexer` in the chunk at `chunk_indices`.
     ///
     /// `indexer` is relative to the chunk. It may be an [`ArraySubset`] or any other

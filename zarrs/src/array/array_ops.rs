@@ -123,7 +123,7 @@ mod async_array_write_ops_array_cached;
 pub use array_mut_ops::ArrayMutOps;
 pub use array_ops::ArrayOps;
 pub use array_read_ops::SyncArrayReadOps;
-pub use array_update_ops::ArrayUpdateOps;
+pub use array_update_ops::SyncArrayUpdateOps;
 pub use array_write_ops::SyncArrayWriteOps;
 #[cfg(feature = "async")]
 pub use async_array_read_ops::AsyncArrayReadOps;

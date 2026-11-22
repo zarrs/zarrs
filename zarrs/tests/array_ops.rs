@@ -16,8 +16,8 @@ use zarrs::array::codec::array_to_bytes::sharding::{
 use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
-    ArrayMetadataOptions, ArrayOps, ArraySubset, ArrayUpdateOps, ChunkGridDecodedRef, CodecOptions,
-    SyncArrayReadOps, SyncArrayWriteOps, data_type,
+    ArrayMetadataOptions, ArrayOps, ArraySubset, ChunkGridDecodedRef, CodecOptions,
+    SyncArrayReadOps, SyncArrayUpdateOps, SyncArrayWriteOps, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -902,7 +902,7 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
     Ok(())
 }
 
-fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
+fn exercise_array_write_update_ops<A: SyncArrayUpdateOps>(array: &A) -> TestResult {
     array.store_metadata()?;
     array
         .with_metadata_options(ArrayMetadataOptions::default())
@@ -1001,13 +1001,13 @@ fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-fn exercise_all<A: ArrayUpdateOps>(array: &A) -> TestResult {
+fn exercise_all<A: SyncArrayUpdateOps>(array: &A) -> TestResult {
     exercise_array_ops(array)?;
     exercise_array_read_ops(array)?;
     exercise_array_write_update_ops(array)
 }
 
-fn exercise_variable_length_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
+fn exercise_variable_length_ops<A: SyncArrayUpdateOps>(array: &A) -> TestResult {
     let first_chunk = ["a", "bb", "ccc", "dddd"];
     let second_chunk = ["eeeee", "ffffff", "ggggggg", "hhhhhhhh"];
     array.store_chunk(&[0, 0], &first_chunk, &Resources::default())?;
@@ -1040,7 +1040,7 @@ fn exercise_variable_length_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-fn exercise_optional_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
+fn exercise_optional_ops<A: SyncArrayUpdateOps>(array: &A) -> TestResult {
     let first_chunk = [Some(1u8), None, Some(3), Some(4)];
     let second_chunk = [None, Some(6u8), None, Some(8)];
     array.store_chunk(&[0, 0], &first_chunk, &Resources::default())?;

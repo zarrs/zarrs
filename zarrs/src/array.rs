@@ -102,7 +102,7 @@ use zarrs_plugin::{ExtensionAliasesV3, ExtensionName, ZarrVersion};
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
 pub use self::array_ops::{
-    ArrayMutOps, ArrayOps, ArrayUpdateOps, SyncArrayReadOps, SyncArrayWriteOps,
+    ArrayMutOps, ArrayOps, SyncArrayReadOps, SyncArrayUpdateOps, SyncArrayWriteOps,
 };
 #[cfg(feature = "async")]
 pub use self::array_ops::{AsyncArrayReadOps, AsyncArrayUpdateOps, AsyncArrayWriteOps};

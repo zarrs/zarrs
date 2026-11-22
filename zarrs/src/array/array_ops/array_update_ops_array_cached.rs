@@ -3,8 +3,8 @@ use std::sync::Arc;
 use zarrs_codec::Resources;
 
 use super::{
-    Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ArrayUpdateOps, ChunkGrid,
-    CodecOptions, DataType, IntoArrayBytes, SyncReadableStorageTraits,
+    Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ChunkGrid, CodecOptions,
+    DataType, IntoArrayBytes, SyncArrayUpdateOps, SyncReadableStorageTraits,
     SyncReadableWritableStorageTraits,
 };
 use crate::array::cache::SyncArrayCache;
@@ -116,7 +116,7 @@ where
 }
 
 #[inherent]
-impl<TStorage, C> ArrayUpdateOps for ArrayCached<TStorage, C>
+impl<TStorage, C> SyncArrayUpdateOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,

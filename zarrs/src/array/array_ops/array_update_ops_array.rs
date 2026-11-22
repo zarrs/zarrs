@@ -9,7 +9,7 @@ use rayon::iter::ParallelIterator;
 
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{
-    Array, ArrayError, ArrayUpdateOps, CodecOptions, Indexer, IntoArrayBytes,
+    Array, ArrayError, CodecOptions, Indexer, IntoArrayBytes, SyncArrayUpdateOps,
     SyncReadableStorageTraits, SyncReadableWritableStorageTraits, SyncWritableStorageTraits,
     recommended_codec_concurrency,
 };
@@ -20,7 +20,7 @@ use zarrs_codec::{
 };
 
 #[inherent]
-impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> ArrayUpdateOps
+impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> SyncArrayUpdateOps
     for Array<TStorage>
 {
     #[allow(clippy::missing_errors_doc)]
