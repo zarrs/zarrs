@@ -75,7 +75,7 @@ pub trait SyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 }
 
 /// Partial bytes encoder traits.
-pub trait BytesPartialEncoderTraits:
+pub trait SyncBytesPartialEncoderTraits:
     SyncBytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Erase the chunk.
@@ -217,7 +217,7 @@ impl SyncBytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
     }
 }
 
-impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
+impl SyncBytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
     fn erase(&self) -> Result<(), CodecError> {
         *self.lock().unwrap() = None;
         Ok(())
@@ -292,7 +292,7 @@ impl<TStorage: SyncReadableStorageTraits + 'static> SyncBytesPartialDecoderTrait
     }
 }
 
-impl<Tstorage: SyncReadableWritableStorageTraits + 'static> BytesPartialEncoderTraits
+impl<Tstorage: SyncReadableWritableStorageTraits + 'static> SyncBytesPartialEncoderTraits
     for (Tstorage, StoreKey)
 {
     fn erase(&self) -> Result<(), CodecError> {

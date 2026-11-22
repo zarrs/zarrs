@@ -7,10 +7,10 @@ use zarrs_data_type::{DataType, FillValue};
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
     ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, BytesDecodeInput, BytesPartialEncoderTraits, BytesRepresentation,
-    ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes, Resources,
-    SyncBytesPartialDecoderTraits, decode_into_array_bytes_target,
+    ArrayPartialEncoderTraits, BytesDecodeInput, BytesRepresentation, ChunkGridDecoded,
+    ChunkGridDecodedRef, CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, CowBytes, Resources, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
@@ -280,7 +280,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Returns a [`CodecError`] if initialisation fails.
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,

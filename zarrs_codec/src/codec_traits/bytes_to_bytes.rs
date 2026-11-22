@@ -4,10 +4,10 @@ use std::sync::Arc;
 #[cfg(feature = "async")]
 use crate::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
 use crate::{
-    BytesPartialEncoderTraits, BytesRepresentation, BytesToBytesCodecPartialDefault,
-    CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
-    ComputeResources, CowBytes, InvalidBytesLengthError, RecommendedConcurrency, Resources,
-    SyncBytesPartialDecoderTraits, slice_assume_init_mut, write_copy_of_slice,
+    BytesRepresentation, BytesToBytesCodecPartialDefault, CodecCreateError, CodecError,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes,
+    InvalidBytesLengthError, RecommendedConcurrency, Resources, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits, slice_assume_init_mut, write_copy_of_slice,
 };
 
 /// Traits for bytes to bytes codecs.
@@ -115,11 +115,11 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     #[allow(unused_variables)]
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn BytesPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncBytesPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(BytesToBytesCodecPartialDefault::new_bytes(
             input_output_handle,
             *decoded_representation,

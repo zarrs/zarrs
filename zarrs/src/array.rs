@@ -70,13 +70,13 @@ pub use zarrs_codec::{
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
     ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
-    BytesDecodeInput, BytesDecodeSource, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes, IncompatibleOptionalMaskError,
+    BytesDecodeInput, BytesDecodeSource, BytesRepresentation, BytesToBytesCodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2,
+    CodecTraitsV3, ComputeResources, CowBytes, IncompatibleOptionalMaskError,
     RecommendedConcurrency, Resources, SyncBytesPartialDecoderTraits,
-    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, WithOptionalMaskError,
-    copy_fill_value_into, update_array_bytes,
+    SyncBytesPartialEncoderTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    WithOptionalMaskError, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -412,10 +412,10 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
 ///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
 ///   - Array-to-bytes codecs: [`UnboundArrayToBytesCodecTraits`] and bound [`ArrayToBytesCodecTraits`]
-///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
+///     - [`SyncBytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
 ///     - [`SyncBytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Bytes-to-bytes codecs: [`BytesToBytesCodecTraits`]
-///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
+///     - [`SyncBytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
 ///     - [`SyncBytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Chunk grids ([`zarrs_chunk_grid`]): [`ChunkGridTraits`]
 ///   - Chunk key encodings ([`zarrs_chunk_key_encoding`]): [`ChunkKeyEncodingTraits`]

@@ -7,7 +7,8 @@ use super::{BytesDataTypeTraitsArc, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
     ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions, Resources, SyncBytesPartialDecoderTraits,
+    CodecError, CodecOptions, Resources, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -245,7 +246,7 @@ where
 
 impl<T: ?Sized> ArrayPartialEncoderTraits for BytesCodecPartial<T>
 where
-    T: BytesPartialEncoderTraits,
+    T: SyncBytesPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()

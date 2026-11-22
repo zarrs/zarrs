@@ -13,12 +13,12 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
-    BytesDecodeInput, BytesDecodeSource, BytesPartialEncoderTraits, BytesToBytesCodecTraits,
-    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
+    BytesDecodeInput, BytesDecodeSource, BytesToBytesCodecTraits, ChunkGridDecoded,
+    ChunkGridDecodedRef, ChunkGridEncoded, Codec, CodecCreateError, CodecError,
     CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    SyncBytesPartialDecoderTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
-    decode_into_array_bytes_target,
+    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -901,7 +901,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn partial_encoder(
         self: Arc<Self>,
-        mut input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        mut input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,

@@ -33,10 +33,10 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeInput,
-    BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
-    SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
+    ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
     decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
@@ -813,7 +813,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
     }
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,

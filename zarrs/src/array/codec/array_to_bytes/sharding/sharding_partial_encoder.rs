@@ -20,14 +20,14 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialEncoderTraits, CodecError,
-    CodecOptions, Resources, SyncBytesPartialDecoderTraits, update_array_bytes,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources,
+    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits, update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
 
 pub(crate) struct ShardingPartialEncoder {
-    input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+    input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
     subchunk_shape: ChunkShape,
     chunk_grid: RegularBoundedChunkGrid,
     inner_codecs: Arc<CodecChainBound>,
@@ -43,7 +43,7 @@ impl ShardingPartialEncoder {
     /// Create a new partial encoder for the sharding codec.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shard_shape: &[std::num::NonZeroU64],
         subchunk_shape: ChunkShape,
         inner_codecs: Arc<CodecChainBound>,

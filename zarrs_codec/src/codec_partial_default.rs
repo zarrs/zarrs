@@ -7,9 +7,9 @@ use zarrs_data_type::FillValue;
 use super::{
     ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderSubchunkingTraits,
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, CowBytes, DataType, Resources,
-    SyncBytesPartialDecoderTraits,
+    ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError,
+    CodecOptions, CowBytes, DataType, Resources, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -364,7 +364,7 @@ where
 impl<T: ?Sized> ArrayPartialEncoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
-    T: BytesPartialEncoderTraits,
+    T: SyncBytesPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()
@@ -488,10 +488,10 @@ where
     }
 }
 
-impl<T: ?Sized> BytesPartialEncoderTraits
+impl<T: ?Sized> SyncBytesPartialEncoderTraits
     for CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>
 where
-    T: BytesPartialEncoderTraits,
+    T: SyncBytesPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()

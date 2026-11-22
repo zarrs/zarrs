@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use zarrs_codec::{
     ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecTraits, BytesDecodeInput, BytesPartialEncoderTraits, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    ComputeResources, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, SyncBytesPartialDecoderTraits,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    ArrayToBytesCodecTraits, BytesDecodeInput, CodecCreateError, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target,
 };
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
@@ -310,7 +310,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
