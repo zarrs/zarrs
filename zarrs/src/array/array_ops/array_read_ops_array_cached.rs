@@ -7,8 +7,8 @@ use rayon::iter::ParallelIterator;
 
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
-    Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubset, ArraySubsetTraits, COrderBytes,
-    ChunkGrid, CodecOptions, FromArrayBytes, Indexer, SyncReadableStorageTraits,
+    Array, ArrayCached, ArrayError, ArraySubset, ArraySubsetTraits, COrderBytes, ChunkGrid,
+    CodecOptions, FromArrayBytes, Indexer, SyncArrayReadOps, SyncReadableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
@@ -230,7 +230,7 @@ where
 }
 
 #[inherent]
-impl<TStorage, C> ArrayReadOps for ArrayCached<TStorage, C>
+impl<TStorage, C> SyncArrayReadOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,

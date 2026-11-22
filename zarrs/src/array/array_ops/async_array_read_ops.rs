@@ -1,5 +1,5 @@
 #[cfg(doc)]
-use super::ArrayReadOps;
+use super::SyncArrayReadOps;
 use super::{ArrayError, ArrayOps, ArraySubsetTraits, ChunkGrid, FromArrayBytes, Indexer};
 use std::sync::Arc;
 use zarrs_codec::{ArrayBytesTarget, AsyncArrayPartialDecoderTraits, Resources};
@@ -11,7 +11,7 @@ use zarrs_storage::Bytes;
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncArrayReadOps: ArrayOps {
-    /// Async variant of [`ArrayReadOps::retrieve_chunk`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_chunk`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_chunk<T: FromArrayBytes>(
         &self,
@@ -19,7 +19,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<T, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunk_into`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_chunk_into`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_chunk_into(
         &self,
@@ -28,7 +28,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunks`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_chunks`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
@@ -40,7 +40,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .await
     }
 
-    /// Async variant of [`ArrayReadOps::retrieve_partial_chunk`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_partial_chunk`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_partial_chunk<T: FromArrayBytes>(
         &self,
@@ -49,7 +49,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<T, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_partial_chunk_into`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_partial_chunk_into`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_partial_chunk_into(
         &self,
@@ -59,7 +59,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_array_subset`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_array_subset`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_array_subset<T: FromArrayBytes>(
         &self,
@@ -67,7 +67,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<T, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunk_if_exists`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_chunk_if_exists`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
@@ -75,7 +75,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<Option<T>, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_encoded_chunk`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_encoded_chunk`].
     ///
     /// Retrieve the encoded bytes of a chunk.
     ///
@@ -87,7 +87,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         chunk_indices: &[u64],
     ) -> Result<Option<Bytes>, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_encoded_chunks`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_encoded_chunks`].
     ///
     /// Retrieve the encoded bytes of the chunks selected by `chunks`.
     ///
@@ -102,7 +102,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<Vec<Option<Bytes>>, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_subchunk`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_subchunk`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_subchunk<T: FromArrayBytes>(
         &self,
@@ -113,7 +113,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .await
     }
 
-    /// Async variant of [`ArrayReadOps::retrieve_subchunk_at_level`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_subchunk_at_level`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
@@ -129,7 +129,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .await
     }
 
-    /// Async variant of [`ArrayReadOps::retrieve_subchunks`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_subchunks`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_subchunks<T: FromArrayBytes>(
         &self,
@@ -140,7 +140,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .await
     }
 
-    /// Async variant of [`ArrayReadOps::retrieve_subchunks_at_level`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_subchunks_at_level`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
@@ -159,7 +159,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .await
     }
 
-    /// Async variant of [`ArrayReadOps::retrieve_array_subset_into`].
+    /// Async variant of [`SyncArrayReadOps::retrieve_array_subset_into`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_array_subset_into(
         &self,
@@ -168,7 +168,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::partial_decoder`].
+    /// Async variant of [`SyncArrayReadOps::partial_decoder`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_partial_decoder(
         &self,
@@ -176,7 +176,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
         resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::local_subchunk_grid`].
+    /// Async variant of [`SyncArrayReadOps::local_subchunk_grid`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_local_subchunk_grid(
         &self,
@@ -187,7 +187,7 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .await
     }
 
-    /// Async variant of [`ArrayReadOps::local_subchunk_grid_at_level`].
+    /// Async variant of [`SyncArrayReadOps::local_subchunk_grid_at_level`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_local_subchunk_grid_at_level(
         &self,

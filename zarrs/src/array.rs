@@ -101,7 +101,7 @@ use zarrs_plugin::{ExtensionAliasesV3, ExtensionName, ZarrVersion};
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
-pub use self::array_ops::{ArrayMutOps, ArrayOps, ArrayReadOps, ArrayUpdateOps, ArrayWriteOps};
+pub use self::array_ops::{ArrayMutOps, ArrayOps, ArrayUpdateOps, ArrayWriteOps, SyncArrayReadOps};
 #[cfg(feature = "async")]
 pub use self::array_ops::{AsyncArrayReadOps, AsyncArrayUpdateOps, AsyncArrayWriteOps};
 use self::chunk_grid::RegularChunkGrid;
@@ -261,7 +261,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// A level is a [`ChunkGridDecoded`], which distinguishes a grid resolvable for the whole array
 /// ([`Array`](ChunkGridDecoded::Array)) from one that is only resolvable per chunk
 /// ([`ChunkLocal`](ChunkGridDecoded::ChunkLocal), see
-/// [`local_subchunk_grid`](ArrayReadOps::local_subchunk_grid)) and from an absent grid
+/// [`local_subchunk_grid`](SyncArrayReadOps::local_subchunk_grid)) and from an absent grid
 /// ([`None`](ChunkGridDecoded::None)).
 /// Use [`as_chunk_grid`](ChunkGridDecoded::as_chunk_grid) when only the globally resolvable case
 /// is of interest.
@@ -366,9 +366,9 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// [`Array`] provides methods to query if an array is sharded and retrieve the subchunk shape.
 /// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
-/// [`ArrayReadOps`] adds methods to conveniently access the data in a sharded array:
-///  - [`retrieve_subchunk`](ArrayReadOps::retrieve_subchunk)
-///  - [`retrieve_subchunks`](ArrayReadOps::retrieve_subchunks)
+/// [`SyncArrayReadOps`] adds methods to conveniently access the data in a sharded array:
+///  - [`retrieve_subchunk`](SyncArrayReadOps::retrieve_subchunk)
+///  - [`retrieve_subchunks`](SyncArrayReadOps::retrieve_subchunks)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
 ///

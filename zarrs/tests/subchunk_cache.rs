@@ -22,8 +22,8 @@ use zarrs::array::cache::{
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
-    ArrayError, ArrayReadOps, ArraySubset, CodecOptions, DataType, ElementOrder, FillValue,
-    Resources, data_type,
+    ArrayError, ArraySubset, CodecOptions, DataType, ElementOrder, FillValue, Resources,
+    SyncArrayReadOps, data_type,
 };
 #[cfg(feature = "async")]
 use zarrs::storage::AsyncReadableWritableStorageTraits;
@@ -78,6 +78,7 @@ fn flat_target(
             "Async{}",
             AsyncArrayCache => SyncArrayCache,
             AsyncReadableWritableStorageTraits => SyncReadableWritableStorageTraits,
+            AsyncArrayReadOps => SyncArrayReadOps,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),

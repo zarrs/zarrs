@@ -12,7 +12,7 @@ use zarrs_storage::{Bytes, MaybeSync};
 /// Synchronous array read operations.
 ///
 /// These operations decode with the array's [`codec_options`](ArrayOps::codec_options).
-pub trait ArrayReadOps: ArrayOps + MaybeSync {
+pub trait SyncArrayReadOps: ArrayOps + MaybeSync {
     /// Read and decode the chunk at `chunk_indices` into its bytes or the fill value if it does not exist.
     ///
     /// # Errors

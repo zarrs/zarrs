@@ -16,8 +16,8 @@ use zarrs::array::codec::array_to_bytes::sharding::{
 use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
-    ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
-    ChunkGridDecodedRef, CodecOptions, data_type,
+    ArrayMetadataOptions, ArrayOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
+    ChunkGridDecodedRef, CodecOptions, SyncArrayReadOps, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -146,7 +146,7 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-fn retrieve_into<A: ArrayReadOps>(
+fn retrieve_into<A: SyncArrayReadOps>(
     array: &A,
     subset: &ArraySubset,
     chunk_indices: Option<&[u64]>,
@@ -175,7 +175,7 @@ fn retrieve_into<A: ArrayReadOps>(
     Ok(output)
 }
 
-fn retrieve_chunk_into<A: ArrayReadOps>(
+fn retrieve_chunk_into<A: SyncArrayReadOps>(
     array: &A,
     chunk_indices: &[u64],
 ) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -198,7 +198,7 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
     Ok(output)
 }
 
-fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestResult {
+fn exercise_array_read_ops<A: SyncArrayReadOps + ArrayWriteOps>(array: &A) -> TestResult {
     populate(array)?;
     let chunk_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let chunks = ArraySubset::new_with_ranges(&[0..1, 0..2]);
@@ -300,7 +300,7 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
     Ok(())
 }
 
-fn sharding_partial_decoder<A: ArrayReadOps>(
+fn sharding_partial_decoder<A: SyncArrayReadOps>(
     array: &A,
 ) -> Result<ShardingPartialDecoder<dyn zarrs::array::SyncBytesPartialDecoderTraits>, Box<dyn Error>>
 where

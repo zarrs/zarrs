@@ -1,6 +1,6 @@
 use super::{
-    Arc, Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ArrayWriteOps, Indexer,
-    IntoArrayBytes, SyncReadableStorageTraits,
+    Arc, Array, ArrayError, ArraySubsetTraits, ArrayWriteOps, Indexer, IntoArrayBytes,
+    SyncArrayReadOps, SyncReadableStorageTraits,
 };
 #[cfg(doc)]
 use super::{ArrayOps, ArraySubset};
@@ -10,7 +10,7 @@ use zarrs_codec::{Resources, SyncArrayPartialEncoderTraits};
 ///
 /// These operations encode and decode with the array's
 /// [`codec_options`](ArrayOps::codec_options).
-pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
+pub trait ArrayUpdateOps: SyncArrayReadOps + ArrayWriteOps {
     /// Encode `indexer_data` and store it in the elements selected by `indexer` in the chunk at `chunk_indices`.
     ///
     /// `indexer` is relative to the chunk. It may be an [`ArraySubset`] or any other

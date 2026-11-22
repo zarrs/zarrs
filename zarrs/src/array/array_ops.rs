@@ -24,7 +24,7 @@
 //!
 //! ```rust,no_run
 //! # use std::sync::Arc;
-//! # use zarrs::array::{Array, ArrayOps, ArrayReadOps, CodecOptions, Resources};
+//! # use zarrs::array::{Array, ArrayOps, SyncArrayReadOps, CodecOptions, Resources};
 //! # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 //! # let array = Array::open(store, "/group/array")?;
 //! // Default options and resources
@@ -122,7 +122,7 @@ mod async_array_write_ops_array_cached;
 
 pub use array_mut_ops::ArrayMutOps;
 pub use array_ops::ArrayOps;
-pub use array_read_ops::ArrayReadOps;
+pub use array_read_ops::SyncArrayReadOps;
 pub use array_update_ops::ArrayUpdateOps;
 pub use array_write_ops::ArrayWriteOps;
 #[cfg(feature = "async")]

@@ -17,7 +17,7 @@ use super::super::array_bytes_internal::{FixedDecodeBuffers, optional_innermost_
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::recommended_codec_concurrency;
 
-/// Shared implementation of `ArrayReadOps::retrieve_array_subset_into`.
+/// Shared implementation of `SyncArrayReadOps::retrieve_array_subset_into`.
 ///
 #[expect(clippy::too_many_arguments)]
 pub(super) fn retrieve_array_subset_into<A, RetrieveChunkInto, RetrieveChunkSubsetInto>(

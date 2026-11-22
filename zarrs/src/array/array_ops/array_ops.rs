@@ -150,7 +150,7 @@ pub trait ArrayOps {
     ///
     /// Returns [`ChunkGridDecodedRef::None`] if the array does not expose subchunks, or
     /// [`ChunkGridDecodedRef::ChunkLocal`] if a grid is only resolvable per chunk via
-    /// [`local_subchunk_grid`](crate::array::ArrayReadOps::local_subchunk_grid).
+    /// [`local_subchunk_grid`](crate::array::SyncArrayReadOps::local_subchunk_grid).
     /// Use [`as_chunk_grid`](ChunkGridDecodedRef::as_chunk_grid) to get the grid if it is
     /// resolvable for the whole array.
     #[must_use]

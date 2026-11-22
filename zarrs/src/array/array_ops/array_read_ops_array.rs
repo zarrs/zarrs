@@ -8,8 +8,8 @@ use super::super::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
-    Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkGrid, CodecOptions, FromArrayBytes,
-    Indexer, SyncReadableStorageTraits, recommended_codec_concurrency,
+    Array, ArrayError, ArraySubsetTraits, ChunkGrid, CodecOptions, FromArrayBytes, Indexer,
+    SyncArrayReadOps, SyncReadableStorageTraits, recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
@@ -22,7 +22,7 @@ use zarrs_codec::{
 use zarrs_storage::Bytes;
 
 #[inherent]
-impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> ArrayReadOps for Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> SyncArrayReadOps for Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk<T: FromArrayBytes>(
         &self,
