@@ -12,8 +12,6 @@ use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::{ChunkGridCreateError, ChunkGridTraits};
 
-#[cfg(feature = "async")]
-use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
     CodecChain, RequireDivisibleSubchunks, ShardingCodecConfiguration,
@@ -799,7 +797,7 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
         resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
-            AsyncShardingPartialDecoder::new(
+            ShardingPartialDecoder::async_new(
                 input_handle,
                 shape,
                 self.subchunk_shape.clone(),

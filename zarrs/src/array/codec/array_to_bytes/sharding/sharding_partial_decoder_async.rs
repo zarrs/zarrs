@@ -11,7 +11,8 @@ use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ShardingCodecOptions, ShardingIndexLocation, nested_local_subchunk_grids, subchunk_grid,
+    ShardingCodecOptions, ShardingIndexLocation, ShardingPartialDecoder,
+    nested_local_subchunk_grids, subchunk_grid,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{FixedDecodeBuffers, merge_chunks, optional_innermost};
@@ -28,27 +29,16 @@ use zarrs_codec::{
     decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
-use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
+use zarrs_storage::byte_range::{ByteLength, ByteOffset};
 
-/// Asynchronous partial decoder for the sharding codec.
-pub struct AsyncShardingPartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    subchunk_grid: RegularBoundedChunkGrid,
-    subchunk_shape: ChunkShape,
-    inner_codecs: Arc<CodecChainBound>,
-    shard_index: Option<Vec<u64>>,
-    #[expect(dead_code)] // TODO: Remove when sharding-specific options are added
-    sharding_options: ShardingCodecOptions,
-}
-
-impl AsyncShardingPartialDecoder {
-    /// Create a new partial decoder for the sharding codec.
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized> ShardingPartialDecoder<T> {
+    /// Asynchronously create a new partial decoder for the sharding codec.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the fill value of `inner_codecs` is undefined, or the shard index cannot be retrieved or decoded.
     #[expect(clippy::too_many_arguments)]
-    pub async fn new(
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+    pub async fn async_new(
+        input_handle: Arc<T>,
         shard_shape: &[NonZeroU64],
         subchunk_shape: ChunkShape,
         inner_codecs: Arc<CodecChainBound>,
@@ -83,30 +73,13 @@ impl AsyncShardingPartialDecoder {
         })
     }
 
-    /// Retrieve the byte range of an encoded subchunk.
-    ///
-    /// The `chunk_indices` are relative to the start of the shard.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if `chunk_indices` are out of bounds of the subchunk grid.
-    pub fn subchunk_byte_range(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ByteRange>, CodecError> {
-        super::subchunk_byte_range(
-            self.shard_index.as_deref(),
-            &self.subchunk_grid,
-            chunk_indices,
-        )
-    }
-
-    /// Retrieve the encoded bytes of a subchunk.
+    /// Asynchronously retrieve the encoded bytes of a subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if `chunk_indices` are out of bounds of the subchunk grid or the bytes cannot be retrieved.
-    pub async fn retrieve_subchunk_encoded(
+    pub async fn async_retrieve_subchunk_encoded(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
@@ -124,8 +97,8 @@ impl AsyncShardingPartialDecoder {
 }
 
 #[expect(clippy::too_many_arguments)]
-pub(crate) async fn partial_decode(
-    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+pub(crate) async fn partial_decode<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
@@ -200,7 +173,9 @@ pub(crate) async fn partial_decode(
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncArrayPartialDecoderSubchunkingTraits
+    for ShardingPartialDecoder<T>
+{
     async fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
@@ -215,7 +190,9 @@ impl AsyncArrayPartialDecoderSubchunkingTraits for AsyncShardingPartialDecoder {
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncArrayPartialDecoderTraits
+    for ShardingPartialDecoder<T>
+{
     fn data_type(&self) -> &DataType {
         self.inner_codecs.data_type()
     }
@@ -329,8 +306,8 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     }
 }
 
-async fn get_subchunk_partial_decoder(
-    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+async fn get_subchunk_partial_decoder<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
     options: &CodecOptions,
@@ -364,8 +341,10 @@ async fn get_subchunk_partial_decoder(
 }
 
 #[expect(clippy::too_many_arguments)]
-async fn partial_decode_fixed_array_subset_into(
-    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+async fn partial_decode_fixed_array_subset_into<
+    T: AsyncBytesPartialDecoderTraits + ?Sized + 'static,
+>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
@@ -478,8 +457,8 @@ async fn partial_decode_fixed_array_subset_into(
 }
 
 #[allow(clippy::too_many_lines)]
-async fn partial_decode_fixed_array_subset(
-    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+async fn partial_decode_fixed_array_subset<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     inner_codecs: &Arc<CodecChainBound>,
     shard_index: Option<&[u64]>,
@@ -649,8 +628,10 @@ async fn partial_decode_fixed_array_subset(
 /// Partially decode an array subset by decoding the overlapping region of each subchunk and merging them.
 ///
 /// This supports any data type, including variable length and optional data types.
-async fn partial_decode_merged_array_subset(
-    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+async fn partial_decode_merged_array_subset<
+    T: AsyncBytesPartialDecoderTraits + ?Sized + 'static,
+>(
+    input_handle: &Arc<T>,
     data_type: &DataType,
     fill_value: &FillValue,
     subchunk_grid: &RegularBoundedChunkGrid,
@@ -733,8 +714,8 @@ async fn partial_decode_merged_array_subset(
 }
 
 #[expect(clippy::too_many_arguments)]
-async fn partial_decode_indexer(
-    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+async fn partial_decode_indexer<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
@@ -801,8 +782,8 @@ async fn partial_decode_indexer(
 ///
 /// The `indexer` must be validated against the shard shape.
 #[expect(clippy::too_many_arguments)]
-async fn partial_decode_fixed_indexer_into(
-    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+async fn partial_decode_fixed_indexer_into<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,

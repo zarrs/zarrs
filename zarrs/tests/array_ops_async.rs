@@ -8,7 +8,7 @@ use zarrs::array::Resources;
 
 use zarrs::array::cache::{AsyncChunkCacheDecoded, AsyncChunkCachePartialDecoder, SubchunkCache};
 use zarrs::array::codec::array_to_bytes::sharding::{
-    AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
+    ShardingCodecBound, ShardingCodecBuilder, ShardingPartialDecoder,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
@@ -264,7 +264,7 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
 
 async fn sharding_partial_decoder<A: AsyncArrayReadOps>(
     array: &A,
-) -> Result<AsyncShardingPartialDecoder, Box<dyn Error>>
+) -> Result<ShardingPartialDecoder<dyn zarrs::array::AsyncBytesPartialDecoderTraits>, Box<dyn Error>>
 where
     A::Storage: AsyncReadableStorageTraits + 'static,
 {
@@ -279,9 +279,10 @@ where
         .storage_transformers()
         .create_async_readable_transformer(storage_handle)
         .await?;
-    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
+    let input_handle: Arc<dyn zarrs::array::AsyncBytesPartialDecoderTraits> =
+        Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
 
-    Ok(AsyncShardingPartialDecoder::new(
+    Ok(ShardingPartialDecoder::async_new(
         input_handle,
         &array.chunk_shape(&[0, 0])?,
         sharding_codec.subchunk_shape().clone(),
@@ -305,13 +306,13 @@ async fn sharding_partial_decoder_retrieve_subchunk_encoded() -> TestResult {
 
     assert!(
         decoder
-            .retrieve_subchunk_encoded(&[1, 1], array.codec_options(), &Resources::default())
+            .async_retrieve_subchunk_encoded(&[1, 1], array.codec_options(), &Resources::default())
             .await?
             .is_some()
     );
     assert!(
         decoder
-            .retrieve_subchunk_encoded(&[3, 3], array.codec_options(), &Resources::default())
+            .async_retrieve_subchunk_encoded(&[3, 3], array.codec_options(), &Resources::default())
             .await
             .is_err()
     );
@@ -326,7 +327,7 @@ async fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestRes
     let decoder = sharding_partial_decoder(&array).await?;
     assert_eq!(
         decoder
-            .retrieve_subchunk_encoded(&[0, 0], array.codec_options(), &Resources::default())
+            .async_retrieve_subchunk_encoded(&[0, 0], array.codec_options(), &Resources::default())
             .await?,
         None
     );
@@ -341,7 +342,7 @@ async fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestRes
     let decoder = sharding_partial_decoder(&array).await?;
     assert_eq!(
         decoder
-            .retrieve_subchunk_encoded(&[0, 1], array.codec_options(), &Resources::default())
+            .async_retrieve_subchunk_encoded(&[0, 1], array.codec_options(), &Resources::default())
             .await?,
         None
     );

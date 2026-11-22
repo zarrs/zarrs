@@ -27,24 +27,43 @@ use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 /// Partial decoder for the sharding codec.
-pub struct ShardingPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
-    subchunk_grid: RegularBoundedChunkGrid,
-    subchunk_shape: ChunkShape,
-    inner_codecs: Arc<CodecChainBound>,
-    shard_index: Option<Vec<u64>>,
+pub struct ShardingPartialDecoder<T: ?Sized> {
+    pub(super) input_handle: Arc<T>,
+    pub(super) subchunk_grid: RegularBoundedChunkGrid,
+    pub(super) subchunk_shape: ChunkShape,
+    pub(super) inner_codecs: Arc<CodecChainBound>,
+    pub(super) shard_index: Option<Vec<u64>>,
     #[expect(dead_code)] // TODO: Remove when sharding-specific options are added
-    sharding_options: ShardingCodecOptions,
+    pub(super) sharding_options: ShardingCodecOptions,
 }
 
-impl ShardingPartialDecoder {
+impl<T: ?Sized> ShardingPartialDecoder<T> {
+    /// Retrieve the byte range of an encoded subchunk.
+    ///
+    /// The `chunk_indices` are relative to the start of the shard.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `chunk_indices` are out of bounds of the subchunk grid.
+    pub fn subchunk_byte_range(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ByteRange>, CodecError> {
+        super::subchunk_byte_range(
+            self.shard_index.as_deref(),
+            &self.subchunk_grid,
+            chunk_indices,
+        )
+    }
+}
+
+impl<T: BytesPartialDecoderTraits + ?Sized> ShardingPartialDecoder<T> {
     /// Create a new partial decoder for the sharding codec.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the fill value of `inner_codecs` is undefined, or the shard index cannot be retrieved or decoded.
     #[expect(clippy::too_many_arguments)]
     pub fn new(
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<T>,
         shard_shape: &[NonZeroU64],
         subchunk_shape: ChunkShape,
         inner_codecs: Arc<CodecChainBound>,
@@ -78,23 +97,6 @@ impl ShardingPartialDecoder {
         })
     }
 
-    /// Retrieve the byte range of an encoded subchunk.
-    ///
-    /// The `chunk_indices` are relative to the start of the shard.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if `chunk_indices` are out of bounds of the subchunk grid.
-    pub fn subchunk_byte_range(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ByteRange>, CodecError> {
-        super::subchunk_byte_range(
-            self.shard_index.as_deref(),
-            &self.subchunk_grid,
-            chunk_indices,
-        )
-    }
-
     /// Retrieve the encoded bytes of a subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
@@ -118,8 +120,8 @@ impl ShardingPartialDecoder {
 }
 
 #[expect(clippy::too_many_arguments)]
-pub(crate) fn partial_decode(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
+pub(crate) fn partial_decode<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
@@ -173,7 +175,9 @@ pub(crate) fn partial_decode(
     }
 }
 
-impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderSubchunkingTraits
+    for ShardingPartialDecoder<T>
+{
     fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
@@ -186,7 +190,9 @@ impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialDecoder {
     }
 }
 
-impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderTraits
+    for ShardingPartialDecoder<T>
+{
     fn data_type(&self) -> &DataType {
         self.inner_codecs.data_type()
     }
@@ -296,8 +302,8 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     }
 }
 
-fn get_subchunk_partial_decoder(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
+fn get_subchunk_partial_decoder<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
     options: &CodecOptions,
@@ -330,8 +336,8 @@ fn get_subchunk_partial_decoder(
 }
 
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_fixed_array_subset_into(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
+fn partial_decode_fixed_array_subset_into<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
@@ -417,8 +423,8 @@ fn partial_decode_fixed_array_subset_into(
 ///
 /// This supports any data type, including variable length and optional data types.
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_merged_array_subset(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
+fn partial_decode_merged_array_subset<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
@@ -501,8 +507,8 @@ fn partial_decode_merged_array_subset(
 }
 
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_indexer(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
+fn partial_decode_indexer<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
@@ -560,8 +566,8 @@ fn partial_decode_indexer(
 ///
 /// The `indexer` must be validated against the shard shape.
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_fixed_indexer_into(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
+fn partial_decode_fixed_indexer_into<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+    input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
