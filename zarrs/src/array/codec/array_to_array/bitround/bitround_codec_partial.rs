@@ -3,8 +3,8 @@ use std::sync::Arc;
 use super::BitroundDataTypeTraitsArc;
 use crate::array::DataType;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    Resources, SyncArrayPartialDecoderSubchunkingTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -39,9 +39,9 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
 where
-    T: ArrayPartialDecoderSubchunkingTraits,
+    T: SyncArrayPartialDecoderSubchunkingTraits,
 {
     fn local_subchunk_grids(
         &self,

@@ -19,9 +19,10 @@ use crate::array::{
     transmute_to_bytes,
 };
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources,
-    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits, update_array_bytes,
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits, update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -273,7 +274,7 @@ impl ShardingPartialEncoder {
     }
 }
 
-impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
+impl SyncArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
     fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,

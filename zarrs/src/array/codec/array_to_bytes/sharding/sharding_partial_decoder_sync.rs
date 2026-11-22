@@ -18,9 +18,9 @@ use crate::array::{
     DataType, Indexer, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
-    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder, CodecError,
-    CodecOptions, ExpectedOptionalBytesError, InvalidNumberOfElementsError,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    ByteIntervalPartialDecoder, CodecError, CodecOptions, ExpectedOptionalBytesError,
+    InvalidNumberOfElementsError, SyncArrayPartialDecoderSubchunkingTraits,
     SyncBytesPartialDecoderTraits, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
@@ -175,7 +175,7 @@ pub(crate) fn partial_decode<T: SyncBytesPartialDecoderTraits + ?Sized + 'static
     }
 }
 
-impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderSubchunkingTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecoderSubchunkingTraits
     for ShardingPartialDecoder<T>
 {
     fn local_subchunk_grids(

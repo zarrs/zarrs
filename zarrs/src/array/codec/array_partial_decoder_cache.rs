@@ -2,8 +2,8 @@
 
 use crate::array::{ArrayBytes, ArraySubset, ChunkGrid, ChunkShape, DataType};
 use zarrs_codec::{
-    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, CodecError, CodecOptions,
-    Resources,
+    ArrayPartialDecoderTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
@@ -77,7 +77,7 @@ impl ArrayPartialDecoderCache {
     }
 }
 
-impl ArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
+impl SyncArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
     fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,

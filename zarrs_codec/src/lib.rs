@@ -26,8 +26,8 @@ pub use array_bytes_fixed_disjoint_view::{
 mod codec_traits;
 pub use codec_traits::array::ArrayCodecTraits;
 pub use codec_traits::array_partial_sync::{
-    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderSubchunkingTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    SyncArrayPartialDecoderSubchunkingTraits,
 };
 pub use codec_traits::array_to_array::{
     ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecGeometryTraits,
@@ -453,7 +453,7 @@ mod chunk_grid_mapped {
         /// A chunk grid is resolvable for the whole array.
         Array(ChunkGrid),
         /// No global grid exists, but a grid is resolvable for each chunk via
-        /// [`ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid`](crate::ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid).
+        /// [`SyncArrayPartialDecoderSubchunkingTraits::local_subchunk_grid`](crate::SyncArrayPartialDecoderSubchunkingTraits::local_subchunk_grid).
         ChunkLocal,
     }
 

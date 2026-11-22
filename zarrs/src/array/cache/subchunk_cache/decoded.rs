@@ -31,8 +31,8 @@ use crate::array::{
     CodecOptions, DataType, FillValue, Indexer,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, CodecError,
-    RecommendedConcurrency, Resources, copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesTarget, ArrayPartialDecoderTraits, CodecError, RecommendedConcurrency, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, copy_fill_value_into, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
@@ -913,6 +913,7 @@ impl<S: ?Sized, D: ?Sized> SubchunkCachePartialDecoder<S, D> {
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncArrayPartialDecoderSubchunkingTraits => SyncArrayPartialDecoderSubchunkingTraits,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),

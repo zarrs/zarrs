@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    Resources, SyncArrayPartialDecoderSubchunkingTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -121,9 +121,9 @@ fn require_fixed(data_type: &DataType) -> Result<(), CodecError> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>
 where
-    T: ArrayPartialDecoderSubchunkingTraits,
+    T: SyncArrayPartialDecoderSubchunkingTraits,
 {
     fn local_subchunk_grids(
         &self,

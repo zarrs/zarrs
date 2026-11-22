@@ -10,8 +10,8 @@ use super::{
 use crate::array::cache::SyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError,
+    ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError,
+    SyncArrayPartialDecoderSubchunkingTraits,
 };
 use zarrs_storage::StorageError;
 
@@ -21,7 +21,7 @@ pub(super) struct CachedArrayPartialEncoder<TStorage: ?Sized, C: ?Sized, E: ?Siz
     pub(super) chunk_indices: ArrayIndices,
 }
 
-impl<TStorage, C, E> ArrayPartialDecoderSubchunkingTraits
+impl<TStorage, C, E> SyncArrayPartialDecoderSubchunkingTraits
     for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,

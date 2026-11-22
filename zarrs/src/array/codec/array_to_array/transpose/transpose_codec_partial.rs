@@ -7,8 +7,8 @@ use super::{
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions, Resources,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits,
+    CodecError, CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -78,9 +78,9 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
 where
-    T: ArrayPartialDecoderSubchunkingTraits,
+    T: SyncArrayPartialDecoderSubchunkingTraits,
 {
     fn local_subchunk_grids(
         &self,

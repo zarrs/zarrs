@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions, CowBytes,
-    InvalidBytesLengthError, Resources, SyncBytesPartialDecoderTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions, CowBytes, InvalidBytesLengthError,
+    Resources, SyncArrayPartialDecoderSubchunkingTraits, SyncBytesPartialDecoderTraits,
     SyncBytesPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
@@ -273,8 +273,8 @@ impl<T: ?Sized, D: ?Sized> NumcodecsPackBitsPartialDecoder<T, D> {
     }
 }
 
-impl<T: ArrayPartialDecoderSubchunkingTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Sized>
-    ArrayPartialDecoderSubchunkingTraits for NumcodecsPackBitsPartialDecoder<T, D>
+impl<T: SyncArrayPartialDecoderSubchunkingTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Sized>
+    SyncArrayPartialDecoderSubchunkingTraits for NumcodecsPackBitsPartialDecoder<T, D>
 {
     fn local_subchunk_grids(
         &self,

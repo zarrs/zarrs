@@ -22,10 +22,11 @@ use zarrs::storage::byte_range::ByteRange;
 use zarrs::storage::store::MemoryStore;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecSubchunkingTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
-    UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
+    ArrayCodecTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
+    CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
+    SyncArrayPartialDecoderSubchunkingTraits, UnboundArrayToArrayCodecTraits, register_codec_v3,
+    unregister_codec_v3,
 };
 use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 
@@ -254,7 +255,7 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
     }
 }
 
-impl ArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDecoder {
+impl SyncArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDecoder {
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,

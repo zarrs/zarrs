@@ -5,10 +5,10 @@ use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderSubchunkingTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError,
-    CodecOptions, CowBytes, DataType, Resources, SyncBytesPartialDecoderTraits,
+    ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, CowBytes,
+    DataType, Resources, SyncArrayPartialDecoderSubchunkingTraits, SyncBytesPartialDecoderTraits,
     SyncBytesPartialEncoderTraits,
 };
 use crate::array_bytes::update_array_bytes;
@@ -145,7 +145,7 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
     T: ArrayPartialDecoderTraits,
