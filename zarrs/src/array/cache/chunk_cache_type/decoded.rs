@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-#[cfg(feature = "async")]
-use super::SyncPartialDecoderAsAsync;
 use super::{
     cache_error, copy_array_fill_value_into, validate_chunk_indices,
     validate_partial_chunk_indexer, validate_target_num_elements,
@@ -87,6 +85,52 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
             &self.fill_value,
             indexer,
             output_target,
+        )
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
+    fn data_type(&self) -> &DataType {
+        ArrayPartialDecoderTraits::data_type(self)
+    }
+
+    async fn exists(&self) -> Result<bool, StorageError> {
+        ArrayPartialDecoderTraits::exists(self)
+    }
+
+    fn size_held(&self) -> usize {
+        ArrayPartialDecoderTraits::size_held(self)
+    }
+
+    async fn partial_decode<'a>(
+        &'a self,
+        indexer: &dyn Indexer,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        ArrayPartialDecoderTraits::partial_decode(self, indexer, options, resources)
+    }
+
+    async fn partial_decode_into(
+        &self,
+        indexer: &dyn Indexer,
+        output_target: &mut ArrayBytesTarget<'_>,
+        options: &CodecOptions,
+        resources: &Resources,
+    ) -> Result<(), CodecError> {
+        ArrayPartialDecoderTraits::partial_decode_into(
+            self,
+            indexer,
+            output_target,
+            options,
+            resources,
         )
     }
 
@@ -335,9 +379,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         let bytes = async_retrieve_decoded(cache, array, chunk_indices, options, resources).await?;
-        let decoder =
-            SyncPartialDecoderAsAsync(Arc::new(cached_partial_decoder(array, bytes, chunk_shape)));
-        Ok(Arc::new(decoder) as Arc<dyn AsyncArrayPartialDecoderTraits>)
+        Ok(Arc::new(cached_partial_decoder(array, bytes, chunk_shape)))
     }
 
     async fn async_retrieve_chunk_bytes_if_exists<C>(
