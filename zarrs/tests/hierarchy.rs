@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use serial_test::serial;
 use zarrs::config::{Config, global_config_mut};
-use zarrs::filesystem::FilesystemStore;
+use zarrs::filesystem::SyncFilesystemStore;
 use zarrs::group::Group;
 use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use zarrs::node::Node;
@@ -35,9 +35,9 @@ fn reset_config() {
     *global_config_mut() = Config::default();
 }
 
-fn sync_store() -> Arc<FilesystemStore> {
+fn sync_store() -> Arc<SyncFilesystemStore> {
     Arc::new(
-        FilesystemStore::new("./tests/data/hierarchy.zarr")
+        SyncFilesystemStore::new("./tests/data/hierarchy.zarr")
             .unwrap()
             .sorted(),
     )

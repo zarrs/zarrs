@@ -21,7 +21,7 @@ use zarrs::storage::SyncReadableStorageTraits;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resources = Resources::default();
     // Create an in-memory store
-    // let store = Arc::new(zarrs::filesystem::FilesystemStore::new(
+    // let store = Arc::new(zarrs::filesystem::SyncFilesystemStore::new(
     //     "zarrs/tests/data/v3/array_optional.zarr",
     // )?);
     let store = Arc::new(zarrs::storage::store::MemoryStore::new());

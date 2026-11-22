@@ -14,7 +14,7 @@ use zarrs::array::{ArrayBuilder, ArrayBytes, ArrayMetadataOptions, data_type};
 use zarrs::storage::SyncReadableWritableListableStorage;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::UnboundArrayToBytesCodecTraits;
-use zarrs_filesystem::FilesystemStore;
+use zarrs_filesystem::SyncFilesystemStore;
 
 fn read_cities() -> std::io::Result<Vec<String>> {
     let reader = BufReader::new(File::open("tests/data/cities.csv")?);
@@ -34,7 +34,7 @@ fn cities_impl(
     write_to_file: bool,
 ) -> Result<u64, Box<dyn Error>> {
     let store: SyncReadableWritableListableStorage = if write_to_file {
-        Arc::new(FilesystemStore::new("tests/data/v3/cities.zarr")?)
+        Arc::new(SyncFilesystemStore::new("tests/data/v3/cities.zarr")?)
     } else {
         Arc::new(MemoryStore::default())
     };
@@ -128,7 +128,7 @@ fn cities() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn cities_zarr_python_v2_compat() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/cities_v2.zarr",
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
@@ -144,7 +144,7 @@ fn cities_zarr_python_v2_compat() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/cities_v3.zarr",
     )?);
     let array = zarrs::array::Array::open(store, "/")?;

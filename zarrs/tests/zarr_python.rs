@@ -7,7 +7,7 @@ use zarrs::array::Resources;
 
 use serde::Deserialize;
 use zarrs::array::{Array, ArrayBytes, ArraySubset};
-use zarrs_filesystem::FilesystemStore;
+use zarrs_filesystem::SyncFilesystemStore;
 
 #[cfg(feature = "fletcher32")]
 #[test]
@@ -19,7 +19,7 @@ fn zarr_python_compat_fletcher32_v2() -> Result<(), Box<dyn Error>> {
     //     .and_modify(|e| *e = "numcodecs.fletcher32".to_string());
 
     let path = PathBuf::from("tests/data/zarr_python_compat/fletcher32.zarr");
-    let store = Arc::new(FilesystemStore::new(&path)?);
+    let store = Arc::new(SyncFilesystemStore::new(&path)?);
 
     let array = Array::open(store, "/")?;
     assert_eq!(array.shape(), vec![100, 100]);
@@ -42,7 +42,7 @@ fn zarr_python_compat_adler32_v2() -> Result<(), Box<dyn Error>> {
     //     .and_modify(|e| *e = "numcodecs.adler32".to_string());
 
     let path = PathBuf::from("tests/data/zarr_python_compat/adler32.zarr");
-    let store = Arc::new(FilesystemStore::new(&path)?);
+    let store = Arc::new(SyncFilesystemStore::new(&path)?);
 
     let array = Array::open(store, "/")?;
     assert_eq!(array.shape(), vec![100, 100]);
@@ -76,7 +76,7 @@ fn check_zarr_python_packbits(path: &str, chunks: &[&str]) -> Result<(), Box<dyn
     use zarrs::storage::{StoreKey, SyncReadableStorageTraits};
 
     let path = PathBuf::from(path);
-    let store = Arc::new(FilesystemStore::new(path)?);
+    let store = Arc::new(SyncFilesystemStore::new(path)?);
     let array = Array::open(store.clone(), "/")?;
     assert_eq!(array.shape(), vec![10, 9]);
     let expected = |i: u64, j: u64| (i * 9 + j) * 7 % 11 < 4;
@@ -234,7 +234,7 @@ async fn zarr_python_packbits_v3_async() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/packbits_v3.zarr",
     )?);
     let array = Array::async_open(
@@ -336,7 +336,7 @@ async fn zarr_python_packbits_v3_async() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn zarr_python_v2_compat_str_fv_0() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/str_v2_fv_0.zarr",
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
@@ -351,7 +351,7 @@ fn zarr_python_v2_compat_str_fv_0() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn zarr_python_v2_compat_str_fv_null() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/str_v2_fv_null.zarr",
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
@@ -366,7 +366,7 @@ fn zarr_python_v2_compat_str_fv_null() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn zarr_python_v2_compat_bool_fv_null() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/bool_v2_fv_null.zarr",
     )?);
     let array = Array::open(store, "/")?;
@@ -379,7 +379,7 @@ fn zarr_python_v2_compat_bool_fv_null() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn zarr_python_v2_compat_int_fv_null() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/int_v2_fv_null.zarr",
     )?);
     let array = Array::open(store, "/")?;
@@ -393,7 +393,7 @@ fn zarr_python_v2_compat_int_fv_null() -> Result<(), Box<dyn Error>> {
 #[allow(clippy::approx_constant)]
 #[test]
 fn zarr_python_v2_compat_float_fv_null() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/float_v2_fv_null.zarr",
     )?);
     let array = Array::open(store, "/")?;
@@ -411,7 +411,7 @@ fn zarr_python_v2_compat_float_fv_null() -> Result<(), Box<dyn Error>> {
 fn zarr_python_v3_consolidated_metadata_null() -> Result<(), Box<dyn Error>> {
     use zarrs::group::Group;
 
-    let store = Arc::new(FilesystemStore::new("tests/data/issue_287.zarr")?);
+    let store = Arc::new(SyncFilesystemStore::new("tests/data/issue_287.zarr")?);
     let group = Group::open(store.clone(), "/")?;
 
     // Should be able to open the group without errors
@@ -468,7 +468,7 @@ fn zarr_python_v3_cast_value_matrix_read() -> Result<(), Box<dyn Error>> {
     let mut read = 0usize;
     for case in &manifest.cases {
         let path = root.join(&case.path);
-        let store = Arc::new(FilesystemStore::new(&path)?);
+        let store = Arc::new(SyncFilesystemStore::new(&path)?);
         let array = Array::open(store, "/")
             .map_err(|err| format!("failed to open {}: {err}", case.path))?;
         let subset_all = array.subset_all();

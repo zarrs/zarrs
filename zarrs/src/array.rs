@@ -282,7 +282,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// # use zarrs::array::ArraySubset;
 /// # use zarrs::array::iterators::Indices;
 /// # use rayon::iter::{IntoParallelIterator, ParallelIterator};
-/// # let store = Arc::new(zarrs_filesystem::FilesystemStore::new("tests/data/array_write_read.zarr")?);
+/// # let store = Arc::new(zarrs_filesystem::SyncFilesystemStore::new("tests/data/array_write_read.zarr")?);
 /// # let array = Array::open(store, "/group/array")?;
 /// // Get an iterator over the chunk indices
 /// //   The array shape must have been set (i.e. non-zero), otherwise the
@@ -316,7 +316,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// However, these methods will use a fast path and avoid decoding if the subset covers entire chunks.
 ///
 /// ### Direct IO (Linux)
-/// If using Linux, enabling direct IO with the [`FilesystemStore`](https://docs.rs/zarrs_filesystem/latest/zarrs_filesystem/struct.FilesystemStore.html) may improve write performance.
+/// If using Linux, enabling direct IO with the [`SyncFilesystemStore`](https://docs.rs/zarrs_filesystem/latest/zarrs_filesystem/struct.SyncFilesystemStore.html) may improve write performance.
 ///
 /// Currently, the most performant path for uncompressed writing is to reuse page aligned buffers via [`store_encoded_chunk`](Array::store_encoded_chunk).
 /// See [`zarrs` GitHub issue #58](https://github.com/zarrs/zarrs/pull/58) for a discussion on this method.
@@ -1235,7 +1235,7 @@ fn create_codec_chain_from_v2(
 mod tests {
     use std::num::NonZeroU64;
 
-    use zarrs_filesystem::FilesystemStore;
+    use zarrs_filesystem::SyncFilesystemStore;
 
     use super::*;
     use crate::config::MetadataConvertVersion;
@@ -1623,7 +1623,7 @@ mod tests {
 
     #[allow(dead_code)]
     fn array_v2_to_v3(path_in: &str, path_out: &str) {
-        let store = Arc::new(FilesystemStore::new(path_in).unwrap());
+        let store = Arc::new(SyncFilesystemStore::new(path_in).unwrap());
         let array_in = Array::open(store, "/").unwrap();
 
         println!("{array_in:?}");
@@ -1649,7 +1649,7 @@ mod tests {
             ],
         );
 
-        let store = Arc::new(FilesystemStore::new(path_out).unwrap());
+        let store = Arc::new(SyncFilesystemStore::new(path_out).unwrap());
         let array_out = Array::new_with_metadata(store, "/", array_in.metadata().clone()).unwrap();
         array_out
             .store_array_subset(&subset_all, &elements, &Resources::default())
@@ -1784,7 +1784,7 @@ mod tests {
 
     #[allow(dead_code)]
     fn array_v3_numcodecs(path_in: &str) {
-        let store = Arc::new(FilesystemStore::new(path_in).unwrap());
+        let store = Arc::new(SyncFilesystemStore::new(path_in).unwrap());
         let array_in = Array::open(store, "/").unwrap();
 
         println!(

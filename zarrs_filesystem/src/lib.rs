@@ -46,10 +46,10 @@ use direct_io::{MetadataExt, OpenOptionsExt, O_DIRECT};
 // }
 
 // #[allow(clippy::similar_names)]
-// fn create_store_filesystem(uri: &str) -> Result<FilesystemStore, StorePluginCreateError> {
+// fn create_store_filesystem(uri: &str) -> Result<SyncFilesystemStore, StorePluginCreateError> {
 //     let url = url::Url::parse(uri)?;
 //     let path = std::path::PathBuf::from(url.path());
-//     FilesystemStore::new(path).map_err(|e| StorePluginCreateError::Other(e.to_string()))
+//     SyncFilesystemStore::new(path).map_err(|e| StorePluginCreateError::Other(e.to_string()))
 // }
 
 /// For `O_DIRECT`, we need a buffer that is aligned to the page size and is a
@@ -61,7 +61,7 @@ fn bytes_aligned(size: usize) -> BytesMut {
     bytes.split_off(offset)
 }
 
-/// Options for use with [`FilesystemStore`]
+/// Options for use with [`SyncFilesystemStore`]
 #[non_exhaustive]
 #[derive(Debug, Clone, Default)]
 pub struct FilesystemStoreOptions {
@@ -93,7 +93,7 @@ impl FilesystemStoreOptions {
     /// Cached handles are invalidated on writes and erases through this store, but not on external
     /// modification of the underlying files.
     /// A read that races a write of the same key (which this store does not support, see
-    /// [`FilesystemStore`]) may cache a handle for the pre-write file, which is then served to
+    /// [`SyncFilesystemStore`]) may cache a handle for the pre-write file, which is then served to
     /// subsequent reads until it is evicted.
     /// This option has no effect on reads with [`direct_io`](Self::direct_io) enabled.
     pub fn file_handle_cache_size(&mut self, file_handle_cache_size: usize) -> &mut Self {
@@ -124,14 +124,17 @@ struct CachedFile {
 /// [`list_dir`](SyncListableStorageTraits::list_dir)) must likewise not overlap operations on keys under
 /// that prefix.
 #[derive(Debug)]
-pub struct FilesystemStore {
+pub struct SyncFilesystemStore {
     base_path: PathBuf,
     sort: bool,
     options: FilesystemStoreOptions,
     handle_cache: Option<Mutex<LruCache<StoreKey, Arc<CachedFile>>>>,
 }
 
-impl FilesystemStore {
+/// Alias for [`SyncFilesystemStore`].
+pub type FilesystemStore = SyncFilesystemStore;
+
+impl SyncFilesystemStore {
     /// Create a new file system store at a given `base_path`.
     ///
     /// # Errors
@@ -482,7 +485,7 @@ fn read_range(
     Ok(Bytes::from(buffer))
 }
 
-impl SyncReadableStorageTraits for FilesystemStore {
+impl SyncReadableStorageTraits for SyncFilesystemStore {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
@@ -537,7 +540,7 @@ impl SyncReadableStorageTraits for FilesystemStore {
     }
 }
 
-impl SyncWritableStorageTraits for FilesystemStore {
+impl SyncWritableStorageTraits for SyncFilesystemStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         Self::set_impl(self, key, &value, 0, true)
     }
@@ -585,7 +588,7 @@ impl SyncWritableStorageTraits for FilesystemStore {
     }
 }
 
-impl SyncAtomicRenameStorageTraits for FilesystemStore {
+impl SyncAtomicRenameStorageTraits for SyncFilesystemStore {
     fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
         if source == destination {
             return Ok(());
@@ -605,7 +608,7 @@ impl SyncAtomicRenameStorageTraits for FilesystemStore {
     }
 }
 
-impl SyncListableStorageTraits for FilesystemStore {
+impl SyncListableStorageTraits for SyncFilesystemStore {
     fn list(&self) -> Result<StoreKeys, StorageError> {
         Ok(WalkDir::new(&self.base_path)
             .sort_by_file_name()

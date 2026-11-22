@@ -5,7 +5,7 @@ use std::sync::Arc;
 use zarrs::array::Resources;
 
 use zarrs::array::Array;
-use zarrs_filesystem::FilesystemStore;
+use zarrs_filesystem::SyncFilesystemStore;
 
 /// Test data written by zarr-python's `FixedLengthUTF32` dtype (V3)
 /// and `NumPy`'s <U / >U dtypes (V2).
@@ -20,7 +20,7 @@ const TEST_DATA: [&str; 5] = ["abc", "🎉", "hi", "te", ""];
 
 #[test]
 fn zarr_python_v3_fixed_length_utf32_le() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/fixed_length_utf32_v3_le.zarr",
     )?);
     let array = Array::open(store, "/")?;
@@ -46,7 +46,7 @@ fn zarr_python_v3_fixed_length_utf32_le() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn zarr_python_v2_fixed_length_utf32_lt_u4() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/fixed_length_utf32_v2_le.zarr",
     )?);
     let array = Array::open(store, "/")?;
@@ -65,7 +65,7 @@ fn zarr_python_v2_fixed_length_utf32_lt_u4() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn zarr_python_v2_fixed_length_utf32_gt_u4() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/fixed_length_utf32_v2_be.zarr",
     )?);
     let array = Array::open(store, "/")?;

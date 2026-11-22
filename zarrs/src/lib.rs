@@ -105,7 +105,7 @@
 //! # let store_path: PathBuf = "tests/data/array_write_read.zarr".into();
 //! let store: zarrs::storage::SyncReadableWritableListableStorage = Arc::new(
 //!     // zarrs::filesystem requires the filesystem feature
-//!     zarrs::filesystem::FilesystemStore::new(&store_path)?
+//!     zarrs::filesystem::SyncFilesystemStore::new(&store_path)?
 //! );
 //! # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 //!

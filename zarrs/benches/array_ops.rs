@@ -205,7 +205,7 @@ fn partial_write(c: &mut Criterion) {
         #[cfg(feature = "filesystem")]
         (
             "filesystem",
-            Arc::new(zarrs::filesystem::FilesystemStore::new(dir.path()).unwrap()),
+            Arc::new(zarrs::filesystem::SyncFilesystemStore::new(dir.path()).unwrap()),
         ),
     ];
     for (store_label, store) in stores {

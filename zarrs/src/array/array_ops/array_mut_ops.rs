@@ -23,7 +23,7 @@ pub trait ArrayMutOps: ArrayOps {
     /// # use zarrs::array::Array;
     /// use zarrs::array::codec::ShardingCodecOptions;
     /// use zarrs_codec::CodecSpecificOptions;
-    /// # let store = Arc::new(zarrs_filesystem::FilesystemStore::new("tests/data/array_write_read.zarr")?);
+    /// # let store = Arc::new(zarrs_filesystem::SyncFilesystemStore::new("tests/data/array_write_read.zarr")?);
     /// # let mut array = Array::open(store, "/group/array")?;
     /// let opts = CodecSpecificOptions::default()
     ///     .with_option(ShardingCodecOptions::default());

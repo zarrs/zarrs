@@ -5,7 +5,7 @@ use zarrs::array::Resources;
 
 use clap::Parser;
 use zarrs::array::{Array, ArrayBytes, DataType, FillValue};
-use zarrs::filesystem::FilesystemStore;
+use zarrs::filesystem::SyncFilesystemStore;
 
 /// Command-line arguments for the conformance test binary.
 #[derive(Parser, Debug)]
@@ -56,7 +56,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // Open the array
-    let store = Arc::new(FilesystemStore::new(&args.array_path)?);
+    let store = Arc::new(SyncFilesystemStore::new(&args.array_path)?);
     let array = Array::open(store, "/")?;
 
     // Retrieve the entire array

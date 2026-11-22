@@ -78,7 +78,7 @@ fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
             NumpyTimeUnit::Microsecond,
         ),
     ] {
-        let store = Arc::new(zarrs::filesystem::FilesystemStore::new(path)?);
+        let store = Arc::new(zarrs::filesystem::SyncFilesystemStore::new(path)?);
         let array = zarrs::array::Array::open(store.clone(), "/")?;
         let subset_all = array.subset_all();
 
@@ -307,7 +307,7 @@ fn zarr_python_v3_numpy_timedelta_read() -> Result<(), Box<dyn Error>> {
             NumpyTimeUnit::Microsecond,
         ),
     ] {
-        let store = Arc::new(zarrs::filesystem::FilesystemStore::new(path)?);
+        let store = Arc::new(zarrs::filesystem::SyncFilesystemStore::new(path)?);
         let array = zarrs::array::Array::open(store.clone(), "/")?;
         let subset_all = array.subset_all();
 

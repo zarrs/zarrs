@@ -3,7 +3,7 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use zarrs_filesystem::{FilesystemStore, FilesystemStoreOptions};
+use zarrs_filesystem::{FilesystemStoreOptions, SyncFilesystemStore};
 use zarrs_storage::storage_adapter::atomic_write::AtomicWriteStorageAdapter;
 use zarrs_storage::{
     Bytes, StoreKey, SyncListableStorageTraits, SyncReadableStorageTraits,
@@ -28,22 +28,22 @@ fn try_open_direct_io(path: &str) -> std::io::Result<std::fs::File> {
 }
 
 #[cfg(target_os = "linux")]
-fn create_direct_io_fs() -> Result<FilesystemStore, Box<dyn Error>> {
+fn create_direct_io_fs() -> Result<SyncFilesystemStore, Box<dyn Error>> {
     use zarrs_filesystem::FilesystemStoreOptions;
 
     let path = tempfile::TempDir::new()?;
     let mut opts = FilesystemStoreOptions::default();
     opts.direct_io(true);
 
-    Ok(FilesystemStore::new_with_options(path.path(), opts)?.sorted())
+    Ok(SyncFilesystemStore::new_with_options(path.path(), opts)?.sorted())
 }
 
 #[test]
 #[cfg_attr(miri, ignore)]
 fn filesystem() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let store = FilesystemStore::new(path.path())?.sorted();
-    // let store = FilesystemStore::new("tests/data/store")?.sorted();
+    let store = SyncFilesystemStore::new(path.path())?.sorted();
+    // let store = SyncFilesystemStore::new("tests/data/store")?.sorted();
     zarrs_storage::store_test::store_write(&store)?;
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
@@ -79,7 +79,7 @@ fn filesystem_sync_errors() -> Result<(), Box<dyn Error>> {
         let path = tempfile::TempDir::new()?;
         let mut options = FilesystemStoreOptions::default();
         options.file_handle_cache_size(cache_size);
-        let store = FilesystemStore::new_with_options(path.path(), options)?;
+        let store = SyncFilesystemStore::new_with_options(path.path(), options)?;
         let key: StoreKey = "null".try_into()?;
         symlink("/dev/null", store.key_to_fspath(&key))?;
 
@@ -106,10 +106,10 @@ fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
     let mut options = FilesystemStoreOptions::default();
     options.file_handle_cache_size(2);
-    let store = Arc::new(FilesystemStore::new_with_options(path.path(), options)?.sorted());
+    let store = Arc::new(SyncFilesystemStore::new_with_options(path.path(), options)?.sorted());
     let store = AtomicWriteStorageAdapter::new(store);
     let key = "a/b".try_into()?;
-    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key)?;
+    let temporary_key = AtomicWriteStorageAdapter::<SyncFilesystemStore>::temporary_key(&key)?;
 
     store.set(&key, Bytes::from_static(b"first").into())?;
     assert_eq!(store.get(&key)?, Some(Bytes::from_static(b"first")));
@@ -151,10 +151,10 @@ fn atomic_write_adapter() -> Result<(), Box<dyn Error>> {
 #[test]
 fn atomic_write_adapter_leaves_temporary_key_on_rename_failure() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let store = Arc::new(FilesystemStore::new(path.path())?.sorted());
+    let store = Arc::new(SyncFilesystemStore::new(path.path())?.sorted());
     let adapter = AtomicWriteStorageAdapter::new(store.clone());
     let key = "a/b".try_into()?;
-    let temporary_key = AtomicWriteStorageAdapter::<FilesystemStore>::temporary_key(&key)?;
+    let temporary_key = AtomicWriteStorageAdapter::<SyncFilesystemStore>::temporary_key(&key)?;
 
     std::fs::create_dir_all(store.key_to_fspath(&key))?;
 
@@ -180,7 +180,7 @@ fn direct_io_store_test() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let store: FilesystemStore = create_direct_io_fs()?;
+    let store: SyncFilesystemStore = create_direct_io_fs()?;
     zarrs_storage::store_test::store_write(&store)?;
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
@@ -188,7 +188,7 @@ fn direct_io_store_test() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn get_partial_out_of_range(store: &FilesystemStore) -> Result<(), Box<dyn Error>> {
+fn get_partial_out_of_range(store: &SyncFilesystemStore) -> Result<(), Box<dyn Error>> {
     use zarrs_storage::byte_range::ByteRange;
 
     let key = StoreKey::new("a")?;
@@ -222,7 +222,7 @@ fn get_partial_out_of_range(store: &FilesystemStore) -> Result<(), Box<dyn Error
 #[cfg_attr(miri, ignore)]
 fn filesystem_get_partial_out_of_range() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    get_partial_out_of_range(&FilesystemStore::new(path.path())?)
+    get_partial_out_of_range(&SyncFilesystemStore::new(path.path())?)
 }
 
 #[cfg(target_os = "linux")]
@@ -246,7 +246,7 @@ fn filesystem_set_partial_in_place() -> Result<(), Box<dyn Error>> {
         let path = tempfile::TempDir::new()?;
         let mut opts = FilesystemStoreOptions::default();
         opts.file_handle_cache_size(cache_size);
-        let store = FilesystemStore::new_with_options(path.path(), opts)?;
+        let store = SyncFilesystemStore::new_with_options(path.path(), opts)?;
 
         let key: StoreKey = "a/b".try_into()?;
         store.set(&key, vec![9u8; 8].into())?;
@@ -274,7 +274,7 @@ fn filesystem_set_partial_does_not_read_the_file() -> Result<(), Box<dyn Error>>
     use std::os::unix::fs::PermissionsExt;
 
     let path = tempfile::TempDir::new()?;
-    let store = FilesystemStore::new(path.path())?;
+    let store = SyncFilesystemStore::new(path.path())?;
     let key: StoreKey = "shard".try_into()?;
     let head: Vec<u8> = (0..1_000_000u32).map(|i| (i % 251) as u8).collect();
     store.set(&key, head.clone().into())?;
@@ -302,7 +302,7 @@ fn direct_io_set_partial_keeps_the_file_length() -> Result<(), Box<dyn Error>> {
 
     // The direct I/O path of `set` truncates to the written length; a partial write at offset
     // 0 must not take it.
-    let store: FilesystemStore = create_direct_io_fs()?;
+    let store: SyncFilesystemStore = create_direct_io_fs()?;
     let key: StoreKey = "a".try_into()?;
     store.set(&key, vec![5u8; 8192].into())?;
     store.set_partial(&key, 0, vec![1, 2].into())?;
@@ -321,7 +321,7 @@ fn filesystem_handle_cache() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
     let mut opts = FilesystemStoreOptions::default();
     opts.file_handle_cache_size(16);
-    let store = FilesystemStore::new_with_options(path.path(), opts)?.sorted();
+    let store = SyncFilesystemStore::new_with_options(path.path(), opts)?.sorted();
     zarrs_storage::store_test::store_write(&store)?;
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
@@ -338,7 +338,7 @@ fn filesystem_handle_cache_invalidation() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
     let mut opts = FilesystemStoreOptions::default();
     opts.file_handle_cache_size(16);
-    let store = FilesystemStore::new_with_options(path.path(), opts)?;
+    let store = SyncFilesystemStore::new_with_options(path.path(), opts)?;
 
     let key: StoreKey = "a/b".try_into()?;
     store.set(&key, vec![0u8; 4].into())?;
@@ -390,7 +390,7 @@ fn filesystem_handle_cache_reuse() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
     let mut opts = FilesystemStoreOptions::default();
     opts.file_handle_cache_size(16);
-    let store = FilesystemStore::new_with_options(path.path(), opts)?;
+    let store = SyncFilesystemStore::new_with_options(path.path(), opts)?;
 
     let key: StoreKey = "a/b".try_into()?;
     store.set(&key, vec![1u8; 4].into())?;
@@ -418,7 +418,7 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let store: FilesystemStore = create_direct_io_fs()?;
+    let store: SyncFilesystemStore = create_direct_io_fs()?;
 
     let ps = page_size::get();
     let base_vec: Bytes = (0..(ps * 10) + 15)

@@ -8,7 +8,7 @@ use zarrs::array::chunk_key_encoding::{DefaultChunkKeyEncoding, V2ChunkKeyEncodi
 use zarrs::node::{data_key, meta_key_v3};
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{SyncReadableStorageTraits, SyncWritableStorageTraits};
-use zarrs_filesystem::FilesystemStore;
+use zarrs_filesystem::SyncFilesystemStore;
 
 #[test]
 fn metadata_round_trip_memory() -> Result<(), Box<dyn Error>> {
@@ -29,7 +29,7 @@ fn metadata_round_trip_memory() -> Result<(), Box<dyn Error>> {
 #[cfg_attr(miri, ignore)]
 fn metadata_round_trip_filesystem() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let store = FilesystemStore::new(path.path())?;
+    let store = SyncFilesystemStore::new(path.path())?;
     let metadata_in = include_bytes!("data/array_metadata.json");
     store.set(
         &meta_key_v3(&"/group/array".try_into()?),
@@ -46,7 +46,7 @@ fn filesystem_chunk_round_trip_impl(
     path: &Path,
     chunk_key_encoding: &ChunkKeyEncoding,
 ) -> Result<(), Box<dyn Error>> {
-    let store = FilesystemStore::new(path)?;
+    let store = SyncFilesystemStore::new(path)?;
     let data_serialised_in: Vec<u8> = vec![0, 1, 2];
     store.set(
         &data_key(

@@ -17,7 +17,7 @@ use zarrs::array::Resources;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::ArraySubset;
-use zarrs::filesystem::FilesystemStore;
+use zarrs::filesystem::SyncFilesystemStore;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{SyncReadableStorage, SyncReadableWritableListableStorage};
 
@@ -59,7 +59,7 @@ fn make_store() -> SyncReadableWritableListableStorage {
     } else {
         let path = data_path();
         std::fs::create_dir_all(&path).unwrap();
-        Arc::new(FilesystemStore::new(&path).unwrap())
+        Arc::new(SyncFilesystemStore::new(&path).unwrap())
     }
 }
 
@@ -98,7 +98,7 @@ fn open_store() -> SyncReadableStorage {
         if !zarr_json.exists() {
             populate_array(make_store());
         }
-        Arc::new(FilesystemStore::new(path).unwrap())
+        Arc::new(SyncFilesystemStore::new(path).unwrap())
     }
 }
 

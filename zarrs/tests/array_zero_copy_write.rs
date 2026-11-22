@@ -118,7 +118,7 @@ fn passthrough_array() -> (Array<PtrRecordingStore>, Arc<PtrRecordingStore>) {
 /// Writing from a borrowed slice must reach the store without an intervening copy.
 ///
 /// `MemoryStore` retains its buffers so it must take ownership, but a store that writes and
-/// discards (such as `FilesystemStore`) sees the caller's memory directly. This asserts the
+/// discards (such as `SyncFilesystemStore`) sees the caller's memory directly. This asserts the
 /// value handed to `set` still points at the caller's buffer.
 #[test]
 fn zero_copy_write_from_borrowed_slice() -> TestResult {

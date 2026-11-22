@@ -4,11 +4,11 @@ use std::error::Error;
 use std::sync::Arc;
 use zarrs::array::Resources;
 
-use zarrs_filesystem::FilesystemStore;
+use zarrs_filesystem::SyncFilesystemStore;
 
 #[test]
 fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
-    let store = Arc::new(FilesystemStore::new(
+    let store = Arc::new(SyncFilesystemStore::new(
         "tests/data/zarr_python_compat/v3_bytes.zarr",
     )?);
     let array = zarrs::array::Array::open(store, "/")?;
