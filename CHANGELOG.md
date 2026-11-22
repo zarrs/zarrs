@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `ChunkCacheTypeDecoded` is an `Option`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
     - `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key, and is no longer `#[doc(hidden)]`
     - `ChunkCache` and `AsyncChunkCache` have a `Value` associated type (and are dyn compatible with `Value` specified), and `ChunkCacheType` is sealed
-    - `SyncArrayCache` and `AsyncArrayCache` are dyn compatible, and `ArrayCached` supports `?Sized` caches via `new_arc`
+    - `SyncArrayCache` and `AsyncArrayCache` are dyn compatible, and `ArrayCached` and `SubchunkCache` support `?Sized` caches via `new_arc`
     - Add `invalidate` methods
     - Add `size` methods, which return the size of the cached chunks in bytes
   - **Breaking**: Remove the thread-local chunk caches (`ChunkCacheLru{Chunk,Size}LimitThreadLocal` and `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{Chunk,Size}LimitThreadLocal`)
@@ -90,7 +90,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
     - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
   - `ArrayCached` accepts any `SyncArrayCache` or `AsyncArrayCache`, which every `ChunkCache` and `AsyncChunkCache` is, and dispatches its retrievals and invalidations through the cache
+  - Add `SubchunkCache`, which caches the decoded subchunks of a subchunk grid level in a decoded chunk cache keyed by subchunk indices, over a chunk cache that serves its misses, and `NoChunkCache` to serve misses from the array
+  - Add `ArrayCached::[async_]invalidate{,_chunk,_chunks}`, which invalidate every layer of the cache after writes that bypass it
+  - Writes invalidate cached subchunks belonging to each affected chunk, including values that lossy re-encoding may change outside a partial write
   - Invalidate caches for chunks that a failed write may have changed
+  - `SubchunkCache` supports asynchronous operations over an asynchronous decoded subchunk cache and an asynchronous chunk cache
   - Retrieve complete cached chunks without extracting a subset
   - Fix chunk subset retrieval from a chunk cache to validate the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
 - Subchunks

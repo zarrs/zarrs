@@ -963,10 +963,11 @@ mod tests {
 
     #[tokio::test]
     async fn dyn_async_array_cache() {
-        use crate::array::chunk_cache::ChunkCacheTypeDecoded;
+        use crate::array::chunk_cache::{ChunkCacheTypeDecoded, NoChunkCache, SubchunkCache};
 
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+            .subchunk_shape(vec![1, 1])
             .build_arc(store, "/")
             .unwrap();
         let data: Vec<u8> = (0..16).collect();
@@ -989,15 +990,21 @@ mod tests {
             data
         );
         assert_eq!(cached.cache().len().await, 4);
-        assert_eq!(cached.cache().invalidate().await, 4);
+        cached.async_invalidate().await;
         assert!(cached.cache().is_empty().await);
 
-        test_cache_async(dyn_decoded).await;
+        test_cache_async(dyn_decoded.clone()).await;
+
+        let dyn_chunks: Arc<dyn AsyncArrayCache> =
+            Arc::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4));
+        let subchunk_cache = SubchunkCache::new_arc(0, dyn_decoded, dyn_chunks);
 
         let caches: Vec<Arc<dyn AsyncArrayCache>> = vec![
             Arc::new(AsyncChunkCacheEncodedLruChunkLimit::new(4)),
             Arc::new(AsyncChunkCacheDecodedLruChunkLimit::new(4)),
             Arc::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)),
+            Arc::new(subchunk_cache),
+            Arc::new(NoChunkCache),
         ];
         for cache in caches {
             let cached: ArrayCached<AsyncMemoryStore, dyn AsyncArrayCache> =
@@ -1023,6 +1030,7 @@ mod tests {
                     .unwrap(),
                 vec![0, 1, 4, 5]
             );
+            cached.async_invalidate_chunk(&[0, 0]).await;
         }
     }
 }

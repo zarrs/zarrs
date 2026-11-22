@@ -817,8 +817,11 @@ mod tests {
 
     #[test]
     fn dyn_chunk_cache_and_sync_array_cache() {
+        use crate::array::chunk_cache::{NoChunkCache, SubchunkCache};
+
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+            .subchunk_shape(vec![1, 1])
             .build_arc(store, "/")
             .unwrap();
         let data: Vec<u8> = (0..16).collect();
@@ -838,16 +841,23 @@ mod tests {
             data
         );
         assert_eq!(cached.cache().len(), 4);
-        assert_eq!(cached.cache().invalidate(), 4);
+        cached.invalidate();
         assert!(cached.cache().is_empty());
 
-        test_cache(dyn_decoded);
+        test_cache(dyn_decoded.clone());
+
+        // SubchunkCache over dyn ChunkCache and dyn SyncArrayCache
+        let dyn_chunks: Arc<dyn SyncArrayCache> =
+            Arc::new(ChunkCachePartialDecoderLruChunkLimit::new(4));
+        let subchunk_cache = SubchunkCache::new_arc(0, dyn_decoded, dyn_chunks);
 
         // Heterogeneous caches behind ArrayCached<MemoryStore, dyn SyncArrayCache>
         let caches: Vec<Arc<dyn SyncArrayCache>> = vec![
             Arc::new(ChunkCacheEncodedLruChunkLimit::new(4)),
             Arc::new(ChunkCacheDecodedLruChunkLimit::new(4)),
             Arc::new(ChunkCachePartialDecoderLruChunkLimit::new(4)),
+            Arc::new(subchunk_cache),
+            Arc::new(NoChunkCache),
         ];
         for cache in caches {
             let cached: ArrayCached<MemoryStore, dyn SyncArrayCache> =
@@ -867,6 +877,7 @@ mod tests {
                     .unwrap(),
                 vec![0, 1, 4, 5]
             );
+            cached.invalidate_chunk(&[0, 0]);
         }
     }
 }

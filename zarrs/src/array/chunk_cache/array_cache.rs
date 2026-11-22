@@ -13,10 +13,10 @@ use super::chunk_cache_type::validate_chunk_indices;
 #[cfg(feature = "async")]
 use super::{AsyncChunkCache, SealedAsync};
 use super::{ChunkCache, SealedSync};
-use crate::array::array_ops::fill_value_bytes;
+use crate::array::array_ops::{fill_value_bytes, subchunk_grid_at_level};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits,
-    CodecChainBound, CodecOptions, DataType, FillValue, Indexer,
+    Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkShape,
+    ChunkShapeTraits, CodecChainBound, CodecOptions, DataType, FillValue, Indexer,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
@@ -29,6 +29,8 @@ use zarrs_storage::{Bytes, MaybeSend, MaybeSync, ReadableStorageTraits};
 
 /// Storage-independent array metadata needed by cache operations.
 pub trait CachedArrayMeta: MaybeSend + MaybeSync {
+    fn shape(&self) -> &[u64];
+
     fn dimensionality(&self) -> usize;
 
     fn chunk_grid_shape(&self) -> &[u64];
@@ -39,6 +41,8 @@ pub trait CachedArrayMeta: MaybeSend + MaybeSync {
 
     fn chunks_subset(&self, chunks: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArrayError>;
 
+    fn subchunk_grid_at_level(&self, level: usize) -> Result<&ChunkGrid, ArrayError>;
+
     fn data_type(&self) -> &DataType;
 
     fn fill_value(&self) -> &FillValue;
@@ -47,6 +51,10 @@ pub trait CachedArrayMeta: MaybeSend + MaybeSync {
 }
 
 impl<TStorage: ?Sized + MaybeSend + MaybeSync> CachedArrayMeta for Array<TStorage> {
+    fn shape(&self) -> &[u64] {
+        self.shape()
+    }
+
     fn dimensionality(&self) -> usize {
         self.dimensionality()
     }
@@ -65,6 +73,10 @@ impl<TStorage: ?Sized + MaybeSend + MaybeSync> CachedArrayMeta for Array<TStorag
 
     fn chunks_subset(&self, chunks: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArrayError> {
         self.chunks_subset(chunks)
+    }
+
+    fn subchunk_grid_at_level(&self, level: usize) -> Result<&ChunkGrid, ArrayError> {
+        subchunk_grid_at_level(self, level)
     }
 
     fn data_type(&self) -> &DataType {
@@ -233,7 +245,8 @@ fn fill_value_chunk_bytes(
 
 /// A cache usable by [`ArrayCached`](crate::array::ArrayCached) for synchronous operations.
 ///
-/// This is implemented for every [`ChunkCache`]. Implement [`ChunkCache`] for a custom cache policy.
+/// This is implemented for every [`ChunkCache`], [`SubchunkCache`](super::SubchunkCache), and
+/// [`NoChunkCache`](super::NoChunkCache). Implement [`ChunkCache`] for a custom cache policy.
 ///
 /// The operations themselves live on a sealed supertrait, and are internal to `zarrs`.
 pub trait SyncArrayCache: array_cache_sealed::SyncArrayCacheOps {}
@@ -242,7 +255,8 @@ impl<T: array_cache_sealed::SyncArrayCacheOps + ?Sized> SyncArrayCache for T {}
 
 /// A cache usable by [`ArrayCached`](crate::array::ArrayCached) for asynchronous operations.
 ///
-/// This is implemented for every [`AsyncChunkCache`]. Implement [`AsyncChunkCache`] for a custom cache policy.
+/// This is implemented for every [`AsyncChunkCache`], [`SubchunkCache`](super::SubchunkCache), and
+/// [`NoChunkCache`](super::NoChunkCache). Implement [`AsyncChunkCache`] for a custom cache policy.
 ///
 /// The operations themselves live on a sealed supertrait, and are internal to `zarrs`.
 #[cfg(feature = "async")]

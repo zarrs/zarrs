@@ -6,11 +6,14 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs::array::Resources;
 
+use zarrs::array::chunk_cache::{
+    AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit, SubchunkCache,
+};
 use zarrs::array::codec::array_to_bytes::sharding::{
     AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
 };
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget,
+    Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
     ArrayMetadataOptions, ArraySubset, AsyncArrayReadOps, AsyncArrayUpdateOps, CodecOptions,
     FillValue, data_type,
 };
@@ -744,6 +747,20 @@ async fn array_implements_complete_async_operation_suite() -> TestResult {
     let array = fixed_fixture();
     exercise_async_read_ops(&array).await?;
     exercise_async_write_update_ops(&array).await
+}
+
+#[tokio::test]
+async fn array_subchunk_cached_implements_complete_async_operation_suite() -> TestResult {
+    let cached = ArrayCached::new(
+        Arc::new(fixed_fixture()),
+        SubchunkCache::new(
+            0,
+            AsyncChunkCacheDecodedLruChunkLimit::new(16),
+            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+        ),
+    );
+    exercise_async_read_ops(&cached).await?;
+    exercise_async_write_update_ops(&cached).await
 }
 
 #[tokio::test]

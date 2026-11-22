@@ -45,6 +45,16 @@
 //!
 //! For many access patterns, chunk caching may reduce performance.
 //! **Benchmark your algorithm/data.**
+//!
+//! # Subchunk caches
+//!
+//! [`SubchunkCache`] layers a cache of individual subchunks over one of the chunk caches above, which serves the
+//! subchunks it does not hold. The subchunk cache is a decoded chunk cache keyed by subchunk indices (e.g. a
+//! [`ChunkCacheDecodedLruSizeLimit`]), so repeated small reads of large shards decode and hold only the subchunks they
+//! touch. Over a [`ChunkCachePartialDecoderLruChunkLimit`], which caches shard indexes, a subchunk miss reads and
+//! decodes just that subchunk. With the `async` feature, [`SubchunkCache`] also supports asynchronous operations when
+//! given an asynchronous decoded subchunk cache and an asynchronous chunk cache (or [`NoChunkCache`]). See
+//! [`SubchunkCache`] for the choice of chunk cache.
 
 #[cfg(feature = "async")]
 use std::future::Future;
@@ -63,12 +73,14 @@ use zarrs_storage::{Bytes, MaybeSend, MaybeSync};
 mod array_cache;
 mod chunk_cache_lru;
 mod chunk_cache_type;
+mod subchunk_cache;
 #[cfg(feature = "async")]
 pub use array_cache::AsyncArrayCache;
 #[cfg(feature = "async")]
 pub(crate) use array_cache::AsyncCachedArray;
 pub use array_cache::SyncArrayCache;
 pub(crate) use array_cache::{CachedArrayMeta, SyncCachedArray};
+pub use subchunk_cache::{NoChunkCache, SubchunkCache};
 // pub(crate) mod chunk_cache_lru_macros;
 pub use chunk_cache_lru::*;
 #[cfg(feature = "async")]
