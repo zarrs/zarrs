@@ -13,8 +13,9 @@ use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
     AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytes,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, StorePrefixes, SyncMaybeBytesIterator, WritableStorageTraits,
+    OffsetBytesIterator, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, StorePrefixes, SyncMaybeBytesIterator, SyncReadableStorageTraits,
+    WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -79,7 +80,7 @@ impl FilesystemStoreOptions {
     /// Set the capacity of the file handle cache (default: 0, disabled).
     ///
     /// If nonzero, up to `file_handle_cache_size` files are kept open in a least-recently-used
-    /// cache and reused across [partial read](ReadableStorageTraits::get_partial_many) calls,
+    /// cache and reused across [partial read](SyncReadableStorageTraits::get_partial_many) calls,
     /// rather than each call opening and closing the file it reads from.
     /// This substantially reduces filesystem metadata operations (`open`/`stat`/`close`) when many
     /// byte ranges are read from the same files, such as partial reads of sharded arrays.
@@ -481,7 +482,7 @@ fn read_range(
     Ok(Bytes::from(buffer))
 }
 
-impl ReadableStorageTraits for FilesystemStore {
+impl SyncReadableStorageTraits for FilesystemStore {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,

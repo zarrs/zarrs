@@ -60,8 +60,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use zarrs_storage::byte_range::ByteRangeIterator;
 use zarrs_storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 use zarrs_storage::{
-    AsyncMaybeBytesIterator, AsyncReadableStorageTraits, Bytes, ReadableStorageTraits,
-    StorageError, StoreKey, SyncMaybeBytesIterator,
+    AsyncMaybeBytesIterator, AsyncReadableStorageTraits, Bytes, StorageError, StoreKey,
+    SyncMaybeBytesIterator, SyncReadableStorageTraits,
 };
 
 struct ErrorStore(AtomicUsize);
@@ -79,7 +79,7 @@ impl ErrorStore {
     }
 }
 
-impl ReadableStorageTraits for ErrorStore {
+impl SyncReadableStorageTraits for ErrorStore {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
@@ -156,7 +156,7 @@ fn adapter_collection_errors_empty_and_missing() {
     let log = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
     let usage = UsageLogStorageAdapter::new(source.clone(), log.clone(), String::new);
     source.0.store(0, Ordering::SeqCst);
-    assert!(ReadableStorageTraits::get_partial_many(&usage, &key, ranges()).is_err());
+    assert!(SyncReadableStorageTraits::get_partial_many(&usage, &key, ranges()).is_err());
     assert_eq!(source.0.load(Ordering::SeqCst), 2);
     assert_eq!(*log.lock().unwrap(), Vec::<u8>::new());
     source.0.store(0, Ordering::SeqCst);

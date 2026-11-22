@@ -73,7 +73,7 @@ fn zarr_python_compat_packbits_v3() -> Result<(), Box<dyn Error>> {
 
 fn check_zarr_python_packbits(path: &str, chunks: &[&str]) -> Result<(), Box<dyn Error>> {
     use zarrs::storage::store::MemoryStore;
-    use zarrs::storage::{ReadableStorageTraits, StoreKey};
+    use zarrs::storage::{StoreKey, SyncReadableStorageTraits};
 
     let path = PathBuf::from(path);
     let store = Arc::new(FilesystemStore::new(path)?);
@@ -219,7 +219,7 @@ async fn zarr_python_packbits_v3_async() -> Result<(), Box<dyn Error>> {
         SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
     };
     use zarrs::storage::store::MemoryStore;
-    use zarrs::storage::{ReadableStorageTraits, StoreKey};
+    use zarrs::storage::{StoreKey, SyncReadableStorageTraits};
     use zarrs_codec::CodecOptions;
 
     struct TokioSpawnBlocking;

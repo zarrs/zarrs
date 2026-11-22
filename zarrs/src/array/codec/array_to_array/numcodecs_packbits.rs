@@ -492,7 +492,7 @@ mod tests {
         use crate::array::{Array, ArrayMetadata};
         use zarrs_metadata::v2::ArrayMetadataV2;
         use zarrs_storage::store::MemoryStore;
-        use zarrs_storage::{ReadableStorageTraits, StoreKey};
+        use zarrs_storage::{StoreKey, SyncReadableStorageTraits};
 
         let metadata: ArrayMetadataV2 = serde_json::from_value(serde_json::json!({
             "zarr_format": 2,

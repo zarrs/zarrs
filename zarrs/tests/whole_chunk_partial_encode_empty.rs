@@ -11,7 +11,7 @@ use zarrs::array::{
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{ReadableStorageTraits, StoreKey};
+use zarrs::storage::{StoreKey, SyncReadableStorageTraits};
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions};
 
 struct Case {

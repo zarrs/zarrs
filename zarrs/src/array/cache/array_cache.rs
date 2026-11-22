@@ -25,7 +25,7 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
-use zarrs_storage::{Bytes, MaybeSend, MaybeSync, ReadableStorageTraits};
+use zarrs_storage::{Bytes, MaybeSend, MaybeSync, SyncReadableStorageTraits};
 
 /// Storage-independent array metadata needed by cache operations.
 pub trait CachedArrayMeta: MaybeSend + MaybeSync {
@@ -119,7 +119,7 @@ pub trait SyncCachedArray: CachedArrayMeta {
     ) -> Result<ArrayBytes<'static>, ArrayError>;
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> SyncCachedArray for Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> SyncCachedArray for Array<TStorage> {
     fn retrieve_encoded_chunk(&self, chunk_indices: &[u64]) -> Result<Option<Bytes>, ArrayError> {
         self.retrieve_encoded_chunk(chunk_indices)
     }

@@ -26,8 +26,8 @@ use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
 use zarrs_storage::{
-    ListableStorage, MaybeSend, MaybeSync, ReadableStorage, ReadableWritableStorage, StorageError,
-    WritableStorage,
+    ListableStorage, MaybeSend, MaybeSync, ReadableWritableStorage, StorageError,
+    SyncReadableStorage, WritableStorage,
 };
 
 /// An [`Arc`] wrapped storage transformer.
@@ -144,8 +144,8 @@ pub trait StorageTransformerTraits:
     /// Returns an error if creation fails.
     fn create_readable_transformer(
         self: Arc<Self>,
-        storage: ReadableStorage,
-    ) -> Result<ReadableStorage, StorageError>;
+        storage: SyncReadableStorage,
+    ) -> Result<SyncReadableStorage, StorageError>;
 
     /// Create a writable transformer.
     ///

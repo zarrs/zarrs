@@ -4,7 +4,8 @@ use zarrs_codec::Resources;
 
 use super::{
     Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ArrayUpdateOps, ChunkGrid,
-    CodecOptions, DataType, IntoArrayBytes, ReadableStorageTraits, ReadableWritableStorageTraits,
+    CodecOptions, DataType, IntoArrayBytes, ReadableWritableStorageTraits,
+    SyncReadableStorageTraits,
 };
 use crate::array::cache::SyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
@@ -176,7 +177,7 @@ where
     }
 
     #[allow(clippy::must_use_candidate)]
-    pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
+    pub fn readable(&self) -> Array<dyn SyncReadableStorageTraits> {
         self.array().readable()
     }
 

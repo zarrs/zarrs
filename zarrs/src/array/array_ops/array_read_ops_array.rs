@@ -9,7 +9,7 @@ use super::super::concurrency::concurrency_chunks_and_codec;
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
     Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkGrid, CodecOptions, FromArrayBytes,
-    Indexer, ReadableStorageTraits, recommended_codec_concurrency,
+    Indexer, SyncReadableStorageTraits, recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
@@ -22,7 +22,7 @@ use zarrs_codec::{
 use zarrs_storage::Bytes;
 
 #[inherent]
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> ArrayReadOps for Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk<T: FromArrayBytes>(
         &self,
@@ -278,7 +278,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> Array<TStorage> {
     /// Retrieve `array_subset`, which spans `chunks`, with elements in C order.
     ///
     /// `chunks` are the chunks intersecting `array_subset` (see [`array_subset_chunks`](super::array_subset_chunks)).

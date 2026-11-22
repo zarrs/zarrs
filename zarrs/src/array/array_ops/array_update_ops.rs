@@ -1,6 +1,6 @@
 use super::{
     Arc, Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ArrayWriteOps, Indexer,
-    IntoArrayBytes, ReadableStorageTraits,
+    IntoArrayBytes, SyncReadableStorageTraits,
 };
 #[cfg(doc)]
 use super::{ArrayOps, ArraySubset};
@@ -72,7 +72,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ) -> Result<bool, ArrayError>;
 
     /// Return a read-only instantiation of the array.
-    fn readable(&self) -> Array<dyn ReadableStorageTraits>;
+    fn readable(&self) -> Array<dyn SyncReadableStorageTraits>;
 
     /// Initialises a partial encoder for the chunk at `chunk_indices`.
     ///

@@ -3,7 +3,7 @@ use std::error::Error;
 use crate::byte_range::ByteRange;
 #[cfg(feature = "async")]
 use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
-use crate::{ListableStorageTraits, ReadableStorageTraits, StorePrefix, WritableStorageTraits};
+use crate::{ListableStorageTraits, StorePrefix, SyncReadableStorageTraits, WritableStorageTraits};
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// Create a store with the following data
@@ -51,7 +51,7 @@ pub fn store_write<T: WritableStorageTraits>(store: &T) -> Result<(), Box<dyn Er
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// Read from the store and check the data matches the expected values after [`store_write`].
-pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
+pub fn store_read<T: SyncReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
     assert!(store.get(&"notfound".try_into()?)?.is_none());
     assert!(store.size_key(&"notfound".try_into()?)?.is_none());
     assert_eq!(

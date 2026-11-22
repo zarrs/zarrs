@@ -10,9 +10,9 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, OffsetBytesIterator, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
-    WritableStorageTraits,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError,
+    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, WritableStorageTraits,
 };
 
 /// The performance metrics storage transformer. Accumulates metrics, such as bytes read and written.
@@ -94,7 +94,7 @@ impl<TStorage: ?Sized> PerformanceMetricsStorageAdapter<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {

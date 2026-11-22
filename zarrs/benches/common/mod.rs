@@ -12,8 +12,8 @@ use zarrs::storage::{
     AsyncWritableStorageTraits,
 };
 use zarrs::storage::{
-    ListableStorageTraits, MaybeBytes, OffsetBytesIterator, ReadableStorageTraits, StorageError,
-    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
+    ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
     WritableStorageTraits,
 };
 use zarrs_storage::CowBytes;
@@ -95,7 +95,9 @@ impl Drop for InFlight<'_> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for LatencyStore<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
+    for LatencyStore<TStorage>
+{
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let _guard = self.wait_sync();
         self.storage.get(key)

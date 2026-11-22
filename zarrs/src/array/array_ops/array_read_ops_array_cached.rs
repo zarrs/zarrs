@@ -8,7 +8,7 @@ use rayon::iter::ParallelIterator;
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
     Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubset, ArraySubsetTraits, COrderBytes,
-    ChunkGrid, CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits,
+    ChunkGrid, CodecOptions, FromArrayBytes, Indexer, SyncReadableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
@@ -35,7 +35,7 @@ fn retrieve_array_subset_bytes<TStorage, C>(
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     match chunks.num_elements_usize() {
@@ -106,7 +106,7 @@ fn retrieve_multi_chunk_variable<TStorage, C>(
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     let indices = chunks.indices();
@@ -152,7 +152,7 @@ fn retrieve_multi_chunk_fixed<TStorage, C>(
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     // Zero-sized data has no bytes to decode, unlike the masks of zero-sized optional data
@@ -191,7 +191,7 @@ where
 
 impl<TStorage, C> ArrayCached<TStorage, C>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     pub(in crate::array) fn retrieve_chunk_into_with_options(
@@ -232,7 +232,7 @@ where
 #[inherent]
 impl<TStorage, C> ArrayReadOps for ArrayCached<TStorage, C>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     #[allow(clippy::missing_errors_doc)]

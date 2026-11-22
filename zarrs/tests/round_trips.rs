@@ -7,7 +7,7 @@ use zarrs::array::ChunkKeyEncoding;
 use zarrs::array::chunk_key_encoding::{DefaultChunkKeyEncoding, V2ChunkKeyEncoding};
 use zarrs::node::{data_key, meta_key_v3};
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{ReadableStorageTraits, WritableStorageTraits};
+use zarrs::storage::{SyncReadableStorageTraits, WritableStorageTraits};
 use zarrs_filesystem::FilesystemStore;
 
 #[test]

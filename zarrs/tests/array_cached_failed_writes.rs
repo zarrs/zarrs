@@ -9,8 +9,8 @@ use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
 use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    CowBytes, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StorePrefix,
-    SyncMaybeBytesIterator, WritableStorageTraits,
+    CowBytes, OffsetBytesIterator, StorageError, StoreKey, StorePrefix, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, WritableStorageTraits,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -36,7 +36,7 @@ impl FailingStore {
     }
 }
 
-impl ReadableStorageTraits for FailingStore {
+impl SyncReadableStorageTraits for FailingStore {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,

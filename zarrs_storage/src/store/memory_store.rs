@@ -14,9 +14,9 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, OffsetBytesIterator, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
-    WritableStorageTraits,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError,
+    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, WritableStorageTraits,
 };
 
 /// An in-memory store.
@@ -47,7 +47,7 @@ impl MemoryStore {
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<Option<impl Iterator<Item = Result<Bytes, StorageError>> + 'a>, StorageError> {
-        let Some(data) = ReadableStorageTraits::get(self, key)? else {
+        let Some(data) = SyncReadableStorageTraits::get(self, key)? else {
             return Ok(None);
         };
         Ok(Some(byte_ranges.map(move |byte_range| {
@@ -59,7 +59,7 @@ impl MemoryStore {
     }
 }
 
-impl ReadableStorageTraits for MemoryStore {
+impl SyncReadableStorageTraits for MemoryStore {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let data_map = self
             .data_map
@@ -226,7 +226,7 @@ impl ListableStorageTraits for MemoryStore {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncReadableStorageTraits for MemoryStore {
     async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        ReadableStorageTraits::get(self, key)
+        SyncReadableStorageTraits::get(self, key)
     }
 
     async fn get_partial_many<'a>(
@@ -246,11 +246,11 @@ impl AsyncReadableStorageTraits for MemoryStore {
         key: &StoreKey,
         byte_range: ByteRange,
     ) -> Result<MaybeBytes, StorageError> {
-        ReadableStorageTraits::get_partial(self, key, byte_range)
+        SyncReadableStorageTraits::get_partial(self, key, byte_range)
     }
 
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
-        ReadableStorageTraits::size_key(self, key)
+        SyncReadableStorageTraits::size_key(self, key)
     }
 
     fn supports_get_partial(&self) -> bool {
@@ -325,7 +325,7 @@ mod tests {
     use super::MemoryStore;
     use crate::byte_range::ByteRange;
     use crate::{
-        ReadableStorageTraits, ReadableWritableListableStorageTraits, StoreKey,
+        ReadableWritableListableStorageTraits, StoreKey, SyncReadableStorageTraits,
         WritableStorageTraits,
     };
 

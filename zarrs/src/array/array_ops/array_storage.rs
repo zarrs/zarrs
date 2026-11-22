@@ -14,8 +14,8 @@ use zarrs_storage::{
     AsyncReadableWritableStorageTraits, AsyncWritableStorage, AsyncWritableStorageTraits,
 };
 use zarrs_storage::{
-    ReadableStorage, ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
-    StorageError, StorageHandle, WritableStorage, WritableStorageTraits,
+    ReadableWritableStorage, ReadableWritableStorageTraits, StorageError, StorageHandle,
+    SyncReadableStorage, SyncReadableStorageTraits, WritableStorage, WritableStorageTraits,
 };
 
 use crate::array::Array;
@@ -27,9 +27,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> Array<TStorage> {
     /// The readable storage of the array, transformed by its storage transformers.
-    pub(crate) fn readable_storage(&self) -> Result<ReadableStorage, StorageError> {
+    pub(crate) fn readable_storage(&self) -> Result<SyncReadableStorage, StorageError> {
         self.storage_transformers()
             .create_readable_transformer(self.storage_handle())
     }

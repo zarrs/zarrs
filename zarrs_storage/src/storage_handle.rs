@@ -7,8 +7,8 @@ use super::{
     AsyncWritableStorageTraits,
 };
 use super::{
-    ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey, StorePrefix,
-    SyncMaybeBytesIterator, WritableStorageTraits,
+    ListableStorageTraits, MaybeBytes, StorageError, StoreKey, StorePrefix, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, WritableStorageTraits,
 };
 use crate::OffsetBytesIterator;
 
@@ -25,7 +25,9 @@ impl<TStorage: ?Sized> StorageHandle<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for StorageHandle<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
+    for StorageHandle<TStorage>
+{
     fn get(&self, key: &super::StoreKey) -> Result<MaybeBytes, super::StorageError> {
         self.0.get(key)
     }

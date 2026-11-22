@@ -6,7 +6,7 @@ use zarrs::array::Resources;
 
 use zarrs::array::codec::ReshapeDim;
 use zarrs::array::{ArrayBuilder, ArraySubset, ChunkShapeTraits, data_type};
-use zarrs::storage::ReadableStorageTraits;
+use zarrs::storage::SyncReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToArrayCodecTraits};

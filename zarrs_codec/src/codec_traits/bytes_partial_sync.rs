@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 use zarrs_storage::{
-    OffsetBytesIterator, ReadableStorageTraits, ReadableWritableStorageTraits, StorageError,
-    StoreKey,
+    OffsetBytesIterator, ReadableWritableStorageTraits, StorageError, StoreKey,
+    SyncReadableStorageTraits,
 };
 
 use crate::{CodecError, CodecOptions, CowBytes, Resources};
@@ -258,7 +258,9 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
     }
 }
 
-impl<TStorage: ReadableStorageTraits + 'static> BytesPartialDecoderTraits for (TStorage, StoreKey) {
+impl<TStorage: SyncReadableStorageTraits + 'static> BytesPartialDecoderTraits
+    for (TStorage, StoreKey)
+{
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(self.0.size_key(&self.1)?.is_some())
     }

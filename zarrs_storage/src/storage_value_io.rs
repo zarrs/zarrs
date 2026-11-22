@@ -2,7 +2,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::sync::Arc;
 
 use super::byte_range::ByteRange;
-use super::{ReadableStorageTraits, StoreKey};
+use super::{StoreKey, SyncReadableStorageTraits};
 
 /// Provides a [`Read`] interface to a storage value.
 #[derive(Clone)]
@@ -13,7 +13,7 @@ pub struct StorageValueIO<TStorage: ?Sized> {
     size: u64,
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> StorageValueIO<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits> StorageValueIO<TStorage> {
     /// Create a new `StorageValueIO` for the `key` in `storage`.
     pub fn new(storage: Arc<TStorage>, key: StoreKey, size: u64) -> Self {
         debug_assert!(size > 0);
@@ -62,7 +62,7 @@ impl<TStorage: ?Sized> Seek for StorageValueIO<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits> Read for StorageValueIO<TStorage> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let len =
             usize::try_from((self.size.saturating_sub(self.pos)).min(buf.len() as u64)).unwrap();
@@ -98,7 +98,7 @@ mod tests {
     /// A store that returns the whole value regardless of the requested byte range.
     struct OverreadingStore;
 
-    impl ReadableStorageTraits for OverreadingStore {
+    impl SyncReadableStorageTraits for OverreadingStore {
         fn get_partial_many<'a>(
             &'a self,
             _key: &StoreKey,

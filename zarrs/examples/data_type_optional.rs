@@ -15,7 +15,7 @@ use zarrs::array::Resources;
 
 use ndarray::ArrayD;
 use zarrs::array::{ArrayBuilder, FillValue, data_type};
-use zarrs::storage::ReadableStorageTraits;
+use zarrs::storage::SyncReadableStorageTraits;
 
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {

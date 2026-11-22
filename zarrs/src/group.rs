@@ -157,7 +157,7 @@ use zarrs_metadata::v3::AdditionalFieldV3;
 pub use zarrs_metadata::v3::GroupMetadataV3;
 use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use zarrs_storage::{
-    ListableStorageTraits, ReadableStorageTraits, StorageError, StorageHandle,
+    ListableStorageTraits, StorageError, StorageHandle, SyncReadableStorageTraits,
     WritableStorageTraits,
 };
 
@@ -425,7 +425,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits> Group<TStorage> {
     /// Open a group in `storage` at `path` with default options.
     /// The metadata is read from the store.
     ///
@@ -493,7 +493,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits> Group<TStorage> {
     /// Return the children of the group
     ///
     /// The `recursive` argument determines whether the returned `Node`s will have their
@@ -853,7 +853,7 @@ pub enum GroupCreateError {
     MissingMetadata,
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {}
+impl<TStorage: ?Sized + SyncReadableStorageTraits> Group<TStorage> {}
 
 impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
     /// Store the group metadata.

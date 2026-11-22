@@ -45,7 +45,9 @@ use zarrs_metadata_ext::group::consolidated_metadata::{
 };
 #[cfg(feature = "async")]
 use zarrs_storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
-use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefixError};
+use zarrs_storage::{
+    ListableStorageTraits, StorageError, StorePrefixError, SyncReadableStorageTraits,
+};
 
 /// A Zarr hierarchy node.
 ///
@@ -245,7 +247,9 @@ pub(crate) fn direct_children_from_flat(
 }
 
 impl Node {
-    pub(crate) fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub(crate) fn get_metadata<
+        TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits,
+    >(
         storage: &Arc<TStorage>,
         path: &NodePath,
         version: MetadataRetrieveVersion,
@@ -368,7 +372,7 @@ impl Node {
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub fn open<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub fn open<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
     ) -> Result<Self, NodeCreateError> {
@@ -379,7 +383,7 @@ impl Node {
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub fn open_opt<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
         version: &MetadataRetrieveVersion,

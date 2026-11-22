@@ -9,9 +9,9 @@ use zarrs::config::MetadataConvertVersion;
 use zarrs::group::{Group, GroupMetadataOptions};
 use zarrs::metadata::v2::{ArrayMetadataV2, ArrayMetadataV2Order, GroupMetadataV2};
 use zarrs::metadata::{ChunkKeySeparator, FillValueMetadata, GroupMetadata};
-use zarrs::storage::{ListableStorageTraits, ReadableStorageTraits, StoreKey};
+use zarrs::storage::{ListableStorageTraits, StoreKey, SyncReadableStorageTraits};
 
-fn key_to_str<T: ReadableStorageTraits>(
+fn key_to_str<T: SyncReadableStorageTraits>(
     store: &Arc<T>,
     key: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {

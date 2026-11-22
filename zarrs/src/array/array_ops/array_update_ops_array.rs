@@ -10,7 +10,7 @@ use rayon::iter::ParallelIterator;
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{
     Array, ArrayError, ArrayUpdateOps, CodecOptions, Indexer, IntoArrayBytes,
-    ReadableStorageTraits, ReadableWritableStorageTraits, WritableStorageTraits,
+    ReadableWritableStorageTraits, SyncReadableStorageTraits, WritableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
@@ -169,7 +169,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     }
 
     #[allow(clippy::must_use_candidate)]
-    pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
+    pub fn readable(&self) -> Array<dyn SyncReadableStorageTraits> {
         self.with_storage(self.storage.clone().readable())
     }
 

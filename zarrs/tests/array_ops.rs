@@ -22,7 +22,7 @@ use zarrs::array::{
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{ReadableStorageTraits, StorageHandle};
+use zarrs::storage::{StorageHandle, SyncReadableStorageTraits};
 
 type TestStore = PerformanceMetricsStorageAdapter<MemoryStore>;
 type TestResult = Result<(), Box<dyn Error>>;
@@ -304,7 +304,7 @@ fn sharding_partial_decoder<A: ArrayReadOps>(
     array: &A,
 ) -> Result<ShardingPartialDecoder<dyn zarrs::array::BytesPartialDecoderTraits>, Box<dyn Error>>
 where
-    A::Storage: ReadableStorageTraits + 'static,
+    A::Storage: SyncReadableStorageTraits + 'static,
 {
     let codecs_bound = array.codecs_bound();
     let sharding_codec = codecs_bound

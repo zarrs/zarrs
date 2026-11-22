@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use crate::{
-    AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    SyncMaybeBytesIterator, WritableStorageTraits,
+    AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, OffsetBytesIterator, StorageError,
+    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, WritableStorageTraits,
 };
 
 /// A storage adapter that writes complete values to a temporary key before atomically renaming
@@ -44,7 +44,7 @@ impl<TStorage: ?Sized> AtomicWriteStorageAdapter<TStorage> {
 impl<
         TStorage: ?Sized
             + AtomicRenameStorageTraits
-            + ReadableStorageTraits
+            + SyncReadableStorageTraits
             + WritableStorageTraits
             + 'static,
     > AtomicWriteStorageAdapter<TStorage>
@@ -65,7 +65,7 @@ impl<
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
     for AtomicWriteStorageAdapter<TStorage>
 {
     fn get_partial_many<'a>(
@@ -108,7 +108,7 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
 impl<
         TStorage: ?Sized
             + AtomicRenameStorageTraits
-            + ReadableStorageTraits
+            + SyncReadableStorageTraits
             + WritableStorageTraits
             + 'static,
     > WritableStorageTraits for AtomicWriteStorageAdapter<TStorage>
@@ -164,7 +164,7 @@ mod tests {
         inner: MemoryStore,
     }
 
-    impl ReadableStorageTraits for RenameStore {
+    impl SyncReadableStorageTraits for RenameStore {
         fn get_partial_many<'a>(
             &'a self,
             key: &StoreKey,

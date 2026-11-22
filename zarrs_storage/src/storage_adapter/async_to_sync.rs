@@ -11,8 +11,8 @@ use futures::StreamExt;
 use crate::byte_range::ByteRangeIterator;
 use crate::{
     AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits, CowBytes,
-    ListableStorageTraits, MaybeSend, MaybeSync, OffsetBytesIterator, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
+    ListableStorageTraits, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError, StoreKey,
+    StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
     WritableStorageTraits,
 };
 
@@ -58,7 +58,7 @@ impl<TStorage: ?Sized, TBlockOn: AsyncToSyncBlockOn> AsyncToSyncStorageAdapter<T
 }
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
-    ReadableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
+    SyncReadableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
     fn get_partial_many<'a>(
         &'a self,

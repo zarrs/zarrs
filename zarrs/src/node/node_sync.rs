@@ -6,14 +6,14 @@ use super::{
 };
 use crate::config::MetadataRetrieveVersion;
 use zarrs_storage::{
-    ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefix, discover_children,
+    ListableStorageTraits, StorageError, StorePrefix, SyncReadableStorageTraits, discover_children,
 };
 
 /// Get the child nodes.
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+pub fn get_child_nodes<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
     storage: &Arc<TStorage>,
     path: &NodePath,
     recursive: bool,
@@ -25,7 +25,7 @@ pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorag
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub fn get_child_nodes_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+pub fn get_child_nodes_opt<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
     storage: &Arc<TStorage>,
     path: &NodePath,
     recursive: bool,
@@ -68,7 +68,9 @@ pub fn get_child_nodes_opt<TStorage: ?Sized + ReadableStorageTraits + ListableSt
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub(crate) fn get_all_nodes_of<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+pub(crate) fn get_all_nodes_of<
+    TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits,
+>(
     storage: &Arc<TStorage>,
     path: &NodePath,
     version: MetadataRetrieveVersion,
@@ -87,7 +89,7 @@ pub(crate) fn get_all_nodes_of<TStorage: ?Sized + ReadableStorageTraits + Listab
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub fn node_exists<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+pub fn node_exists<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
     storage: &Arc<TStorage>,
     path: &NodePath,
 ) -> Result<bool, StorageError> {

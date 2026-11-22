@@ -174,7 +174,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// ## Array Data
 /// Array operations are divided into several categories based on the traits implemented for the backing [storage](crate::storage).
 /// The core array methods are:
-///  - [`[Async]ReadableStorageTraits`](crate::storage::ReadableStorageTraits): read array data and metadata
+///  - [`[Async]SyncReadableStorageTraits`](crate::storage::SyncReadableStorageTraits): read array data and metadata
 ///    - [`retrieve_chunk_if_exists`](Array::retrieve_chunk_if_exists)
 ///    - [`retrieve_chunk`](Array::retrieve_chunk)
 ///    - [`retrieve_chunks`](Array::retrieve_chunks)

@@ -16,8 +16,8 @@ use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    CowBytes, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StorePrefix,
-    SyncMaybeBytesIterator, WritableStorageTraits,
+    CowBytes, OffsetBytesIterator, StorageError, StoreKey, StorePrefix, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, WritableStorageTraits,
 };
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions};
 
@@ -208,7 +208,7 @@ impl<T> FailingWritesStorage<T> {
     }
 }
 
-impl<T: ReadableStorageTraits> ReadableStorageTraits for FailingWritesStorage<T> {
+impl<T: SyncReadableStorageTraits> SyncReadableStorageTraits for FailingWritesStorage<T> {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,

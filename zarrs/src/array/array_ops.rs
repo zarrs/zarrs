@@ -78,7 +78,7 @@ use zarrs_storage::{
     MaybeSend,
 };
 use zarrs_storage::{
-    ReadableStorageTraits, ReadableWritableStorageTraits, StorageError, StoreKey,
+    ReadableWritableStorageTraits, StorageError, StoreKey, SyncReadableStorageTraits,
     WritableStorageTraits,
 };
 
