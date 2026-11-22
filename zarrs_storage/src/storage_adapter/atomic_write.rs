@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use crate::{
-    AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, OffsetBytesIterator, StorageError,
-    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
+    AtomicRenameStorageTraits, CowBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
     SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
@@ -85,7 +85,7 @@ impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
+impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
     for AtomicWriteStorageAdapter<TStorage>
 {
     fn list(&self) -> Result<StoreKeys, StorageError> {

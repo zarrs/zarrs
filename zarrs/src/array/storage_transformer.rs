@@ -26,7 +26,7 @@ use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
 use zarrs_storage::{
-    ListableStorage, MaybeSend, MaybeSync, ReadableWritableStorage, StorageError,
+    MaybeSend, MaybeSync, ReadableWritableStorage, StorageError, SyncListableStorage,
     SyncReadableStorage, SyncWritableStorage,
 };
 
@@ -171,8 +171,8 @@ pub trait StorageTransformerTraits:
     /// Returns an error if creation fails.
     fn create_listable_transformer(
         self: Arc<Self>,
-        storage: ListableStorage,
-    ) -> Result<ListableStorage, StorageError>;
+        storage: SyncListableStorage,
+    ) -> Result<SyncListableStorage, StorageError>;
 
     #[cfg(feature = "async")]
     /// Create an asynchronous readable transformer.

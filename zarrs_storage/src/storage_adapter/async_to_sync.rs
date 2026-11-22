@@ -11,9 +11,9 @@ use futures::StreamExt;
 use crate::byte_range::ByteRangeIterator;
 use crate::{
     AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits, CowBytes,
-    ListableStorageTraits, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError, StoreKey,
-    StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
-    SyncWritableStorageTraits,
+    MaybeSend, MaybeSync, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// Trait for an asynchronous runtime implementing `block_on`.
@@ -90,7 +90,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn
 }
 
 impl<TStorage: ?Sized + AsyncListableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
-    ListableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
+    SyncListableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
     fn list(&self) -> Result<StoreKeys, StorageError> {
         self.block_on(self.storage.list())

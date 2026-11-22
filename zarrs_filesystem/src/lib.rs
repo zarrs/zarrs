@@ -12,9 +12,9 @@ use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytes,
-    OffsetBytesIterator, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, StorePrefixes, SyncMaybeBytesIterator, SyncReadableStorageTraits,
+    AtomicRenameStorageTraits, Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError,
+    StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    SyncListableStorageTraits, SyncMaybeBytesIterator, SyncReadableStorageTraits,
     SyncWritableStorageTraits,
 };
 
@@ -120,8 +120,8 @@ struct CachedFile {
 /// Writes synchronise file contents and metadata with [`std::fs::File::sync_all`] before returning success.
 ///
 /// Prefix operations ([`erase_prefix`](SyncWritableStorageTraits::erase_prefix),
-/// [`list_prefix`](ListableStorageTraits::list_prefix) and
-/// [`list_dir`](ListableStorageTraits::list_dir)) must likewise not overlap operations on keys under
+/// [`list_prefix`](SyncListableStorageTraits::list_prefix) and
+/// [`list_dir`](SyncListableStorageTraits::list_dir)) must likewise not overlap operations on keys under
 /// that prefix.
 #[derive(Debug)]
 pub struct FilesystemStore {
@@ -605,7 +605,7 @@ impl AtomicRenameStorageTraits for FilesystemStore {
     }
 }
 
-impl ListableStorageTraits for FilesystemStore {
+impl SyncListableStorageTraits for FilesystemStore {
     fn list(&self) -> Result<StoreKeys, StorageError> {
         Ok(WalkDir::new(&self.base_path)
             .sort_by_file_name()

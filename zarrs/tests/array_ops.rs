@@ -1870,7 +1870,7 @@ mod async_cached {
 #[test]
 fn chunk_ops_reject_incompatible_chunk_dimensionality() -> TestResult {
     use zarrs::array::ArrayError;
-    use zarrs::storage::ListableStorageTraits;
+    use zarrs::storage::SyncListableStorageTraits;
 
     let store = Arc::new(MemoryStore::default());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)

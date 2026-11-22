@@ -1511,7 +1511,7 @@ mod tests {
     #[test]
     fn codec_chain_undefined_fill_value_missing_input() {
         use zarrs_storage::store::MemoryStore;
-        use zarrs_storage::{ListableStorageTraits, StoreKey};
+        use zarrs_storage::{StoreKey, SyncListableStorageTraits};
 
         let shape = vec![NonZeroU64::new(4).unwrap()];
         let options = CodecOptions::default();

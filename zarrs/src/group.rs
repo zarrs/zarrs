@@ -157,7 +157,7 @@ use zarrs_metadata::v3::AdditionalFieldV3;
 pub use zarrs_metadata::v3::GroupMetadataV3;
 use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use zarrs_storage::{
-    ListableStorageTraits, StorageError, StorageHandle, SyncReadableStorageTraits,
+    StorageError, StorageHandle, SyncListableStorageTraits, SyncReadableStorageTraits,
     SyncWritableStorageTraits,
 };
 
@@ -493,7 +493,7 @@ impl<TStorage: ?Sized + SyncReadableStorageTraits> Group<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits> Group<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits> Group<TStorage> {
     /// Return the children of the group
     ///
     /// The `recursive` argument determines whether the returned `Node`s will have their

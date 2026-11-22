@@ -72,7 +72,7 @@ pub trait SyncReadableStorageTraits: MaybeSend + MaybeSync {
 
 /// Listable storage traits.
 #[auto_impl(Arc)]
-pub trait ListableStorageTraits: MaybeSend + MaybeSync {
+pub trait SyncListableStorageTraits: MaybeSend + MaybeSync {
     /// Retrieve all [`StoreKeys`] in the store.
     ///
     /// # Errors
@@ -236,31 +236,33 @@ where
     }
 }
 
-/// A supertrait of [`SyncReadableStorageTraits`] and [`ListableStorageTraits`].
-pub trait ReadableListableStorageTraits: SyncReadableStorageTraits + ListableStorageTraits {
+/// A supertrait of [`SyncReadableStorageTraits`] and [`SyncListableStorageTraits`].
+pub trait ReadableListableStorageTraits:
+    SyncReadableStorageTraits + SyncListableStorageTraits
+{
     /// Return a readable version of the store.
     fn readable(self: Arc<Self>) -> Arc<dyn SyncReadableStorageTraits>;
 
     /// Return a listable version of the store.
-    fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits>;
+    fn listable(self: Arc<Self>) -> Arc<dyn SyncListableStorageTraits>;
 }
 
 impl<T> ReadableListableStorageTraits for T
 where
-    T: SyncReadableStorageTraits + ListableStorageTraits + 'static,
+    T: SyncReadableStorageTraits + SyncListableStorageTraits + 'static,
 {
     fn readable(self: Arc<Self>) -> Arc<dyn SyncReadableStorageTraits> {
         self
     }
 
-    fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits> {
+    fn listable(self: Arc<Self>) -> Arc<dyn SyncListableStorageTraits> {
         self
     }
 }
 
-/// A supertrait of [`ReadableWritableStorageTraits`] and [`ListableStorageTraits`].
+/// A supertrait of [`ReadableWritableStorageTraits`] and [`SyncListableStorageTraits`].
 pub trait ReadableWritableListableStorageTraits:
-    ReadableWritableStorageTraits + ListableStorageTraits
+    ReadableWritableStorageTraits + SyncListableStorageTraits
 {
     /// Return a readable and writable version of the store.
     fn readable_writable(self: Arc<Self>) -> Arc<dyn ReadableWritableStorageTraits>;
@@ -269,12 +271,12 @@ pub trait ReadableWritableListableStorageTraits:
     fn readable_listable(self: Arc<Self>) -> Arc<dyn ReadableListableStorageTraits>;
 
     /// Return a listable version of the store.
-    fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits>;
+    fn listable(self: Arc<Self>) -> Arc<dyn SyncListableStorageTraits>;
 }
 
 impl<T> ReadableWritableListableStorageTraits for T
 where
-    T: ReadableWritableStorageTraits + ListableStorageTraits + 'static,
+    T: ReadableWritableStorageTraits + SyncListableStorageTraits + 'static,
 {
     fn readable_writable(self: Arc<Self>) -> Arc<dyn ReadableWritableStorageTraits> {
         self
@@ -284,7 +286,7 @@ where
         self
     }
 
-    fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits> {
+    fn listable(self: Arc<Self>) -> Arc<dyn SyncListableStorageTraits> {
         self
     }
 }
@@ -293,7 +295,9 @@ where
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub fn discover_children<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
+pub fn discover_children<
+    TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits,
+>(
     storage: &Arc<TStorage>,
     prefix: &StorePrefix,
 ) -> Result<StorePrefixes, StorageError> {

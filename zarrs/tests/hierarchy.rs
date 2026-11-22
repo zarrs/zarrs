@@ -779,8 +779,8 @@ mod consolidated_open {
 
         use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
         use zarrs_storage::{
-            ListableStorageTraits, MaybeBytes, StorageError, StoreKeys, StoreKeysPrefixes,
-            StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
+            MaybeBytes, StorageError, StoreKeys, StoreKeysPrefixes, StorePrefix,
+            SyncListableStorageTraits, SyncMaybeBytesIterator, SyncReadableStorageTraits,
         };
 
         struct CountingStore {
@@ -828,7 +828,7 @@ mod consolidated_open {
             }
         }
 
-        impl ListableStorageTraits for CountingStore {
+        impl SyncListableStorageTraits for CountingStore {
             fn list(&self) -> Result<StoreKeys, StorageError> {
                 self.inner.list()
             }

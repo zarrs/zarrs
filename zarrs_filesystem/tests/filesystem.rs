@@ -6,7 +6,8 @@ use std::sync::Arc;
 use zarrs_filesystem::{FilesystemStore, FilesystemStoreOptions};
 use zarrs_storage::storage_adapter::atomic_write::AtomicWriteStorageAdapter;
 use zarrs_storage::{
-    Bytes, ListableStorageTraits, StoreKey, SyncReadableStorageTraits, SyncWritableStorageTraits,
+    Bytes, StoreKey, SyncListableStorageTraits, SyncReadableStorageTraits,
+    SyncWritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]

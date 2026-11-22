@@ -14,8 +14,8 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError,
-    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
+    Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
     SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
@@ -166,7 +166,7 @@ impl SyncWritableStorageTraits for MemoryStore {
     }
 }
 
-impl ListableStorageTraits for MemoryStore {
+impl SyncListableStorageTraits for MemoryStore {
     fn list(&self) -> Result<StoreKeys, StorageError> {
         let data_map = self.data_map.read().unwrap();
         Ok(data_map.keys().cloned().collect())
@@ -301,19 +301,19 @@ impl AsyncWritableStorageTraits for MemoryStore {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncListableStorageTraits for MemoryStore {
     async fn list(&self) -> Result<StoreKeys, StorageError> {
-        ListableStorageTraits::list(self)
+        SyncListableStorageTraits::list(self)
     }
 
     async fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
-        ListableStorageTraits::list_prefix(self, prefix)
+        SyncListableStorageTraits::list_prefix(self, prefix)
     }
 
     async fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
-        ListableStorageTraits::list_dir(self, prefix)
+        SyncListableStorageTraits::list_dir(self, prefix)
     }
 
     async fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        ListableStorageTraits::size_prefix(self, prefix)
+        SyncListableStorageTraits::size_prefix(self, prefix)
     }
 }
 

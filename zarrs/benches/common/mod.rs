@@ -12,8 +12,8 @@ use zarrs::storage::{
     AsyncWritableStorageTraits,
 };
 use zarrs::storage::{
-    ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
+    MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator, SyncReadableStorageTraits,
     SyncWritableStorageTraits,
 };
 use zarrs_storage::CowBytes;
@@ -121,7 +121,9 @@ impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for LatencyStore<TStorage> {
+impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
+    for LatencyStore<TStorage>
+{
     fn list(&self) -> Result<StoreKeys, StorageError> {
         self.storage.list()
     }

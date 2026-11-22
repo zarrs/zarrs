@@ -17,7 +17,7 @@ use zarrs::storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
 use zarrs::storage::{
-    ListableStorage, ReadableWritableStorage, StorageError, SyncReadableStorage,
+    ReadableWritableStorage, StorageError, SyncListableStorage, SyncReadableStorage,
     SyncWritableStorage, SyncWritableStorageTraits,
 };
 
@@ -84,8 +84,8 @@ impl StorageTransformerTraits for UnusableStorageTransformer {
 
     fn create_listable_transformer(
         self: Arc<Self>,
-        _storage: ListableStorage,
-    ) -> Result<ListableStorage, StorageError> {
+        _storage: SyncListableStorage,
+    ) -> Result<SyncListableStorage, StorageError> {
         Err(unusable())
     }
 

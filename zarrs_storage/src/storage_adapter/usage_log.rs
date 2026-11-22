@@ -12,8 +12,8 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeSend, MaybeSync, OffsetBytesIterator,
-    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
+    Bytes, CowBytes, MaybeBytes, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError, StoreKey,
+    StoreKeys, StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
     SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
@@ -153,7 +153,7 @@ impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
+impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
     fn list(&self) -> Result<StoreKeys, StorageError> {

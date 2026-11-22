@@ -6,14 +6,15 @@ use super::{
 };
 use crate::config::MetadataRetrieveVersion;
 use zarrs_storage::{
-    ListableStorageTraits, StorageError, StorePrefix, SyncReadableStorageTraits, discover_children,
+    StorageError, StorePrefix, SyncListableStorageTraits, SyncReadableStorageTraits,
+    discover_children,
 };
 
 /// Get the child nodes.
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub fn get_child_nodes<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
+pub fn get_child_nodes<TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits>(
     storage: &Arc<TStorage>,
     path: &NodePath,
     recursive: bool,
@@ -25,7 +26,9 @@ pub fn get_child_nodes<TStorage: ?Sized + SyncReadableStorageTraits + ListableSt
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub fn get_child_nodes_opt<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
+pub fn get_child_nodes_opt<
+    TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits,
+>(
     storage: &Arc<TStorage>,
     path: &NodePath,
     recursive: bool,
@@ -69,7 +72,7 @@ pub fn get_child_nodes_opt<TStorage: ?Sized + SyncReadableStorageTraits + Listab
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
 pub(crate) fn get_all_nodes_of<
-    TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits,
+    TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits,
 >(
     storage: &Arc<TStorage>,
     path: &NodePath,
@@ -89,7 +92,7 @@ pub(crate) fn get_all_nodes_of<
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub fn node_exists<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorageTraits>(
+pub fn node_exists<TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits>(
     storage: &Arc<TStorage>,
     path: &NodePath,
 ) -> Result<bool, StorageError> {
@@ -102,7 +105,7 @@ pub fn node_exists<TStorage: ?Sized + SyncReadableStorageTraits + ListableStorag
 ///
 /// # Errors
 /// Returns a [`StorageError`] if there is an underlying error with the store.
-pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
+pub fn node_exists_listable<TStorage: ?Sized + SyncListableStorageTraits>(
     storage: &Arc<TStorage>,
     path: &NodePath,
 ) -> Result<bool, StorageError> {

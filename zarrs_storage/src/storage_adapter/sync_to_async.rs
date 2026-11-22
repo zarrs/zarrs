@@ -9,8 +9,8 @@ use futures::stream;
 use crate::byte_range::ByteRangeIterator;
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeSend, MaybeSync,
-    OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    AsyncWritableStorageTraits, Bytes, CowBytes, MaybeSend, MaybeSync, OffsetBytesIterator,
+    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits,
     SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
@@ -122,7 +122,7 @@ impl<
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<
-        TStorage: ?Sized + ListableStorageTraits + 'static,
+        TStorage: ?Sized + SyncListableStorageTraits + 'static,
         TSpawnBlocking: SyncToAsyncSpawnBlocking,
     > AsyncListableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {

@@ -9,7 +9,7 @@ use zarrs::config::MetadataConvertVersion;
 use zarrs::group::{Group, GroupMetadataOptions};
 use zarrs::metadata::v2::{ArrayMetadataV2, ArrayMetadataV2Order, GroupMetadataV2};
 use zarrs::metadata::{ChunkKeySeparator, FillValueMetadata, GroupMetadata};
-use zarrs::storage::{ListableStorageTraits, StoreKey, SyncReadableStorageTraits};
+use zarrs::storage::{StoreKey, SyncListableStorageTraits, SyncReadableStorageTraits};
 
 fn key_to_str<T: SyncReadableStorageTraits>(
     store: &Arc<T>,

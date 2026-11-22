@@ -49,9 +49,10 @@ pub use self::storage_async::{
 };
 pub use self::storage_handle::StorageHandle;
 pub use self::storage_sync::{
-    discover_children, store_set_partial_many, AtomicRenameStorageTraits, ListableStorageTraits,
+    discover_children, store_set_partial_many, AtomicRenameStorageTraits,
     ReadableListableStorageTraits, ReadableWritableListableStorageTraits,
-    ReadableWritableStorageTraits, SyncReadableStorageTraits, SyncWritableStorageTraits,
+    ReadableWritableStorageTraits, SyncListableStorageTraits, SyncReadableStorageTraits,
+    SyncWritableStorageTraits,
 };
 
 /// [`Arc`] wrapped readable storage.
@@ -64,7 +65,7 @@ pub type SyncWritableStorage = Arc<dyn SyncWritableStorageTraits>;
 pub type ReadableWritableStorage = Arc<dyn ReadableWritableStorageTraits>;
 
 /// [`Arc`] wrapped listable storage.
-pub type ListableStorage = Arc<dyn ListableStorageTraits>;
+pub type SyncListableStorage = Arc<dyn SyncListableStorageTraits>;
 
 /// [`Arc`] wrapped readable and listable storage.
 pub type ReadableListableStorage = Arc<dyn ReadableListableStorageTraits>;

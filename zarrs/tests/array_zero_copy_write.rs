@@ -15,8 +15,8 @@ use zarrs::array::codec::BytesCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, CowBytes, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
+    MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator, SyncReadableStorageTraits,
     SyncWritableStorageTraits,
 };
 use zarrs_storage::byte_range::ByteRangeIterator;
@@ -89,7 +89,7 @@ impl SyncReadableStorageTraits for PtrRecordingStore {
     }
 }
 
-impl ListableStorageTraits for PtrRecordingStore {
+impl SyncListableStorageTraits for PtrRecordingStore {
     fn list(&self) -> Result<StoreKeys, StorageError> {
         self.inner.list()
     }
