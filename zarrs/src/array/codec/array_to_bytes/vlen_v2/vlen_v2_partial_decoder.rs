@@ -13,18 +13,18 @@ use zarrs_codec::{
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_storage::StorageError;
 
-/// Partial decoder for the `bytes` codec.
-pub(crate) struct VlenV2PartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+/// Partial decoder for the `vlen_v2` codec.
+pub(crate) struct VlenV2PartialDecoder<T: ?Sized> {
+    input_handle: Arc<T>,
     shape: Vec<NonZeroU64>,
     data_type: DataType,
     fill_value: Option<FillValue>,
 }
 
-impl VlenV2PartialDecoder {
-    /// Create a new partial decoder for the `bytes` codec.
+impl<T: ?Sized> VlenV2PartialDecoder<T> {
+    /// Create a new partial decoder for the `vlen_v2` codec.
     pub(crate) fn new(
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<T>,
         shape: Vec<NonZeroU64>,
         data_type: DataType,
         fill_value: Option<FillValue>,
@@ -62,9 +62,11 @@ fn decode_vlen_bytes<'a>(
 }
 
 /// The `vlen_*` codecs encode a chunk as a whole, so they have no subchunks.
-impl ArrayPartialDecoderNoSubchunkingTraits for VlenV2PartialDecoder {}
+impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits for VlenV2PartialDecoder<T> {}
 
-impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderTraits
+    for VlenV2PartialDecoder<T>
+{
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
@@ -100,39 +102,11 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
 }
 
 #[cfg(feature = "async")]
-/// Asynchronous partial decoder for the `bytes` codec.
-pub(crate) struct AsyncVlenV2PartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    shape: Vec<NonZeroU64>,
-    data_type: DataType,
-    fill_value: Option<FillValue>,
-}
-
-#[cfg(feature = "async")]
-impl AsyncVlenV2PartialDecoder {
-    /// Create a new partial decoder for the `bytes` codec.
-    pub(crate) fn new(
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: Vec<NonZeroU64>,
-        data_type: DataType,
-        fill_value: Option<FillValue>,
-    ) -> Self {
-        Self {
-            input_handle,
-            shape,
-            data_type,
-            fill_value,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-impl ArrayPartialDecoderNoSubchunkingTraits for AsyncVlenV2PartialDecoder {}
-
-#[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncArrayPartialDecoderTraits
+    for VlenV2PartialDecoder<T>
+{
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
