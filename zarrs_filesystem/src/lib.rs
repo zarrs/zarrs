@@ -13,8 +13,8 @@ use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
     AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytes,
-    MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey,
-    StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, WritableStorageTraits,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes, SyncMaybeBytesIterator, WritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -366,7 +366,7 @@ impl FilesystemStore {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         use std::collections::BTreeMap;
         use std::os::unix::fs::FileExt;
 
@@ -486,7 +486,7 @@ impl ReadableStorageTraits for FilesystemStore {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         #[cfg(target_os = "linux")]
         if self.options.direct_io {
             return self.get_partial_many_direct_io(key, byte_ranges);

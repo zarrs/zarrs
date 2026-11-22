@@ -14,8 +14,8 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, OffsetBytesIterator, ReadableStorageTraits,
+    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
     WritableStorageTraits,
 };
 
@@ -72,7 +72,7 @@ impl ReadableStorageTraits for MemoryStore {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         Ok(self
             .get_partial_many_iter(key, byte_ranges)?
             .map(|iter| Box::new(iter) as _))

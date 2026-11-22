@@ -11,8 +11,8 @@ use futures::StreamExt;
 use crate::byte_range::ByteRangeIterator;
 use crate::{
     AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits, CowBytes,
-    ListableStorageTraits, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    ListableStorageTraits, MaybeSend, MaybeSync, OffsetBytesIterator, ReadableStorageTraits,
+    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
     WritableStorageTraits,
 };
 
@@ -64,7 +64,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         let results = self.block_on(self.storage.get_partial_many(key, byte_ranges))?;
         if let Some(mut results) = results {
             let results = self.block_on(async {

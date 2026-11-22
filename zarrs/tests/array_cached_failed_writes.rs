@@ -9,8 +9,8 @@ use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
 use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    CowBytes, MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError,
-    StoreKey, StorePrefix, WritableStorageTraits,
+    CowBytes, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StorePrefix,
+    SyncMaybeBytesIterator, WritableStorageTraits,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -41,7 +41,7 @@ impl ReadableStorageTraits for FailingStore {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.store.get_partial_many(key, byte_ranges)
     }
 

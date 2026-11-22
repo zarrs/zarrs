@@ -779,8 +779,8 @@ mod consolidated_open {
 
         use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
         use zarrs_storage::{
-            ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits,
-            StorageError, StoreKeys, StoreKeysPrefixes, StorePrefix,
+            ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKeys,
+            StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
         };
 
         struct CountingStore {
@@ -808,7 +808,7 @@ mod consolidated_open {
                 &'a self,
                 key: &StoreKey,
                 byte_ranges: ByteRangeIterator<'a>,
-            ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+            ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
                 self.gets.lock().unwrap().push(key.as_str().to_string());
                 self.inner.get_partial_many(key, byte_ranges)
             }

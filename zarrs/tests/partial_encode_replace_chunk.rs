@@ -16,8 +16,8 @@ use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    CowBytes, MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError,
-    StoreKey, StorePrefix, WritableStorageTraits,
+    CowBytes, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StorePrefix,
+    SyncMaybeBytesIterator, WritableStorageTraits,
 };
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions};
 
@@ -213,7 +213,7 @@ impl<T: ReadableStorageTraits> ReadableStorageTraits for FailingWritesStorage<T>
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.storage.get_partial_many(key, byte_ranges)
     }
 

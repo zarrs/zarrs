@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use crate::{
-    AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, MaybeBytesIterator,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, OffsetBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    SyncMaybeBytesIterator, WritableStorageTraits,
 };
 
 /// A storage adapter that writes complete values to a temporary key before atomically renaming
@@ -72,7 +72,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: crate::byte_range::ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.storage.get_partial_many(key, byte_ranges)
     }
 
@@ -169,7 +169,7 @@ mod tests {
             &'a self,
             key: &StoreKey,
             byte_ranges: ByteRangeIterator<'a>,
-        ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+        ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
             self.inner.get_partial_many(key, byte_ranges)
         }
 

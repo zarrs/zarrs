@@ -12,9 +12,9 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeSend, MaybeSync, OffsetBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    SyncMaybeBytesIterator, WritableStorageTraits,
 };
 
 /// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
@@ -108,7 +108,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage

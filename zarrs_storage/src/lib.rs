@@ -110,10 +110,10 @@ pub type Bytes = bytes::Bytes;
 pub type MaybeBytes = Option<Bytes>;
 
 /// An iterator of [`Bytes`].
-type BytesIterator<'a> = Box<dyn Iterator<Item = Result<Bytes, StorageError>> + 'a>;
+type SyncBytesIterator<'a> = Box<dyn Iterator<Item = Result<Bytes, StorageError>> + 'a>;
 
 /// An iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
-pub type MaybeBytesIterator<'a> = Option<BytesIterator<'a>>;
+pub type SyncMaybeBytesIterator<'a> = Option<SyncBytesIterator<'a>>;
 
 #[cfg(feature = "async")]
 /// An asynchronous iterator of [`Bytes`].

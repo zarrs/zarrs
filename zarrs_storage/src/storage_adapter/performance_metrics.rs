@@ -10,8 +10,8 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, OffsetBytesIterator, ReadableStorageTraits,
+    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
     WritableStorageTraits,
 };
 
@@ -111,7 +111,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self.storage.get_partial_many(key, byte_ranges)?;
         if let Some(values) = values {

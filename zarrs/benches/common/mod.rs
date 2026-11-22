@@ -12,8 +12,8 @@ use zarrs::storage::{
     AsyncWritableStorageTraits,
 };
 use zarrs::storage::{
-    ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    ListableStorageTraits, MaybeBytes, OffsetBytesIterator, ReadableStorageTraits, StorageError,
+    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
     WritableStorageTraits,
 };
 use zarrs_storage::CowBytes;
@@ -105,7 +105,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Latency
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         let _guard = self.wait_sync();
         self.storage.get_partial_many(key, byte_ranges)
     }

@@ -4,8 +4,8 @@ use auto_impl::auto_impl;
 
 use super::byte_range::{ByteRange, ByteRangeIterator};
 use super::{
-    MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError,
-    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    MaybeBytes, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes, SyncMaybeBytesIterator,
 };
 use crate::CowBytes;
 
@@ -32,7 +32,7 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError>;
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError>;
 
     /// Retrieve partial bytes from a single byte range for a store key.
     ///

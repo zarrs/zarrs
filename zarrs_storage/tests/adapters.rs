@@ -60,8 +60,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use zarrs_storage::byte_range::ByteRangeIterator;
 use zarrs_storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 use zarrs_storage::{
-    AsyncMaybeBytesIterator, AsyncReadableStorageTraits, Bytes, MaybeBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey,
+    AsyncMaybeBytesIterator, AsyncReadableStorageTraits, Bytes, ReadableStorageTraits,
+    StorageError, StoreKey, SyncMaybeBytesIterator,
 };
 
 struct ErrorStore(AtomicUsize);
@@ -84,7 +84,7 @@ impl ReadableStorageTraits for ErrorStore {
         &'a self,
         key: &StoreKey,
         ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         Ok((key.as_str() != "missing").then(|| Box::new(self.values(ranges.count())) as _))
     }
 

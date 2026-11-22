@@ -103,7 +103,7 @@ mod tests {
             &'a self,
             _key: &StoreKey,
             _byte_ranges: crate::byte_range::ByteRangeIterator<'a>,
-        ) -> Result<crate::MaybeBytesIterator<'a>, crate::StorageError> {
+        ) -> Result<crate::SyncMaybeBytesIterator<'a>, crate::StorageError> {
             unimplemented!()
         }
 

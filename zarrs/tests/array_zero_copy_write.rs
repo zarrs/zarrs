@@ -15,8 +15,8 @@ use zarrs::array::codec::BytesCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, CowBytes, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    ListableStorageTraits, MaybeBytes, OffsetBytesIterator, ReadableStorageTraits, StorageError,
+    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
     WritableStorageTraits,
 };
 use zarrs_storage::byte_range::ByteRangeIterator;
@@ -76,7 +76,7 @@ impl ReadableStorageTraits for PtrRecordingStore {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.inner.get_partial_many(key, byte_ranges)
     }
 

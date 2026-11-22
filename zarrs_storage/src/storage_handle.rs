@@ -7,8 +7,8 @@ use super::{
     AsyncWritableStorageTraits,
 };
 use super::{
-    ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits, StorageError,
-    StoreKey, StorePrefix, WritableStorageTraits,
+    ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey, StorePrefix,
+    SyncMaybeBytesIterator, WritableStorageTraits,
 };
 use crate::OffsetBytesIterator;
 
@@ -34,7 +34,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.0.get_partial_many(key, byte_ranges)
     }
 
