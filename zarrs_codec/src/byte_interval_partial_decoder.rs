@@ -33,23 +33,20 @@ fn interval_byte_ranges(
         .collect()
 }
 
-/// A partial decoder for a byte interval of a [`BytesPartialDecoderTraits`] partial decoder.
+/// A partial decoder for a byte interval of a [`BytesPartialDecoderTraits`] or
+/// `AsyncBytesPartialDecoderTraits` partial decoder.
 ///
 /// Modifies byte range requests to a specific byte interval in an inner bytes partial decoder.
 /// Requests outside of the interval return a [`CodecError::InvalidByteRangeError`].
-pub struct ByteIntervalPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+pub struct ByteIntervalPartialDecoder<T: ?Sized> {
+    input_handle: Arc<T>,
     byte_offset: ByteOffset,
     byte_length: ByteLength,
 }
 
-impl ByteIntervalPartialDecoder {
+impl<T: ?Sized> ByteIntervalPartialDecoder<T> {
     /// Create a new byte interval partial decoder.
-    pub fn new(
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        byte_offset: ByteOffset,
-        byte_length: ByteLength,
-    ) -> Self {
+    pub fn new(input_handle: Arc<T>, byte_offset: ByteOffset, byte_length: ByteLength) -> Self {
         Self {
             input_handle,
             byte_offset,
@@ -58,7 +55,9 @@ impl ByteIntervalPartialDecoder {
     }
 }
 
-impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> BytesPartialDecoderTraits
+    for ByteIntervalPartialDecoder<T>
+{
     fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists()
     }
@@ -84,36 +83,11 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
 }
 
 #[cfg(feature = "async")]
-/// A partial decoder for a byte interval of a [`AsyncBytesPartialDecoderTraits`] partial decoder.
-///
-/// Modifies byte range requests to a specific byte interval in an inner bytes partial decoder.
-/// Requests outside of the interval return a [`CodecError::InvalidByteRangeError`].
-pub struct AsyncByteIntervalPartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    byte_offset: ByteOffset,
-    byte_length: ByteLength,
-}
-
-#[cfg(feature = "async")]
-impl AsyncByteIntervalPartialDecoder {
-    /// Create a new byte interval partial decoder.
-    pub fn new(
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        byte_offset: ByteOffset,
-        byte_length: ByteLength,
-    ) -> Self {
-        Self {
-            input_handle,
-            byte_offset,
-            byte_length,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncBytesPartialDecoderTraits
+    for ByteIntervalPartialDecoder<T>
+{
     async fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists().await
     }
@@ -197,7 +171,7 @@ mod tests {
     fn async_decode(byte_range: ByteRange) -> Vec<u8> {
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> =
             Arc::new((0..10u8).collect::<Vec<u8>>());
-        let decoder = AsyncByteIntervalPartialDecoder::new(input, 2, 5);
+        let decoder = ByteIntervalPartialDecoder::new(input, 2, 5);
         futures::executor::block_on(decoder.partial_decode(
             byte_range,
             &CodecOptions::default(),

@@ -23,7 +23,7 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecTraits,
     AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
-    AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
+    AsyncBytesPartialDecoderTraits, ByteIntervalPartialDecoder, CodecError, CodecOptions,
     ExpectedOptionalBytesError, InvalidNumberOfElementsError, copy_fill_value_into,
     decode_into_array_bytes_target,
 };
@@ -341,7 +341,7 @@ async fn get_subchunk_partial_decoder(
     inner_codecs
         .clone()
         .async_partial_decoder(
-            Arc::new(AsyncByteIntervalPartialDecoder::new(
+            Arc::new(ByteIntervalPartialDecoder::new(
                 input_handle.clone(),
                 byte_offset,
                 byte_length,
