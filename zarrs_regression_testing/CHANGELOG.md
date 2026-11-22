@@ -10,6 +10,7 @@ This crate is not published. Releases are `zarrs_regression_testing-vX.Y.Z` tags
 ## [Unreleased]
 
 ### Changed
+- Use `SyncFilesystemStore` for local Zarr data
 - Update to the layout-based data type API, retaining innermost optional payload sizes when generating codec metadata and returning errors for unsupported layouts
 - Pass explicit operation resources when reading and writing compatibility samples
 - Update `zarrs` with optional `jiff` 1.0.0 support
