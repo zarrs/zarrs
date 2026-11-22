@@ -4,8 +4,8 @@ use zarrs_codec::Resources;
 
 use super::{
     Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ArrayUpdateOps, ChunkGrid,
-    CodecOptions, DataType, IntoArrayBytes, ReadableWritableStorageTraits,
-    SyncReadableStorageTraits,
+    CodecOptions, DataType, IntoArrayBytes, SyncReadableStorageTraits,
+    SyncReadableWritableStorageTraits,
 };
 use crate::array::cache::SyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
@@ -24,7 +24,7 @@ pub(super) struct CachedArrayPartialEncoder<TStorage: ?Sized, C: ?Sized, E: ?Siz
 impl<TStorage, C, E> ArrayPartialDecoderSubchunkingTraits
     for CachedArrayPartialEncoder<TStorage, C, E>
 where
-    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
     E: ArrayPartialEncoderTraits + ?Sized + 'static,
 {
@@ -39,7 +39,7 @@ where
 
 impl<TStorage, C, E> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
-    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
     E: ArrayPartialEncoderTraits + ?Sized + 'static,
 {
@@ -82,7 +82,7 @@ where
 
 impl<TStorage, C, E> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
-    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
     E: ArrayPartialEncoderTraits + ?Sized + 'static,
 {
@@ -118,7 +118,7 @@ where
 #[inherent]
 impl<TStorage, C> ArrayUpdateOps for ArrayCached<TStorage, C>
 where
-    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
 {
     #[allow(clippy::missing_errors_doc)]

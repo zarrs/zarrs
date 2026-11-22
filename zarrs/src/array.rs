@@ -190,7 +190,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`store_encoded_chunk`](Array::store_encoded_chunk)
 ///    - [`erase_chunk`](Array::erase_chunk)
 ///    - [`erase_chunks`](Array::erase_chunks)
-///  - [`[Async]ReadableWritableStorageTraits`](crate::storage::ReadableWritableStorageTraits): store operations requiring reading *and* writing
+///  - [`[Async]SyncReadableWritableStorageTraits`](crate::storage::SyncReadableWritableStorageTraits): store operations requiring reading *and* writing
 ///    - [`store_partial_chunk`](Array::store_partial_chunk)
 ///    - [`store_array_subset`](Array::store_array_subset)
 ///    - [`partial_encoder`](Array::partial_encoder)

@@ -27,7 +27,7 @@ use zarrs::array::{
 };
 #[cfg(feature = "async")]
 use zarrs::storage::AsyncReadableWritableStorageTraits;
-use zarrs::storage::ReadableWritableStorageTraits;
+use zarrs::storage::SyncReadableWritableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 
@@ -77,6 +77,7 @@ fn flat_target(
         types(
             "Async{}",
             AsyncArrayCache => SyncArrayCache,
+            AsyncReadableWritableStorageTraits => SyncReadableWritableStorageTraits,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),

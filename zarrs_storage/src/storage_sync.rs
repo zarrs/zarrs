@@ -117,7 +117,7 @@ pub trait SyncListableStorageTraits: MaybeSend + MaybeSync {
 ///
 /// # Panics
 /// Panics if a key ends beyond `usize::MAX`.
-pub fn store_set_partial_many<T: ReadableWritableStorageTraits>(
+pub fn store_set_partial_many<T: SyncReadableWritableStorageTraits>(
     store: &T,
     key: &StoreKey,
     offset_values: OffsetBytesIterator,
@@ -213,7 +213,7 @@ pub trait SyncWritableStorageTraits: MaybeSend + MaybeSync {
 }
 
 /// A supertrait of [`SyncReadableStorageTraits`] and [`SyncWritableStorageTraits`].
-pub trait ReadableWritableStorageTraits:
+pub trait SyncReadableWritableStorageTraits:
     SyncReadableStorageTraits + SyncWritableStorageTraits
 {
     /// Return a readable version of the store.
@@ -223,7 +223,7 @@ pub trait ReadableWritableStorageTraits:
     fn writable(self: Arc<Self>) -> Arc<dyn SyncWritableStorageTraits>;
 }
 
-impl<T> ReadableWritableStorageTraits for T
+impl<T> SyncReadableWritableStorageTraits for T
 where
     T: SyncReadableStorageTraits + SyncWritableStorageTraits + 'static,
 {
@@ -260,12 +260,12 @@ where
     }
 }
 
-/// A supertrait of [`ReadableWritableStorageTraits`] and [`SyncListableStorageTraits`].
+/// A supertrait of [`SyncReadableWritableStorageTraits`] and [`SyncListableStorageTraits`].
 pub trait ReadableWritableListableStorageTraits:
-    ReadableWritableStorageTraits + SyncListableStorageTraits
+    SyncReadableWritableStorageTraits + SyncListableStorageTraits
 {
     /// Return a readable and writable version of the store.
-    fn readable_writable(self: Arc<Self>) -> Arc<dyn ReadableWritableStorageTraits>;
+    fn readable_writable(self: Arc<Self>) -> Arc<dyn SyncReadableWritableStorageTraits>;
 
     /// Return a readable and listable version of the store.
     fn readable_listable(self: Arc<Self>) -> Arc<dyn ReadableListableStorageTraits>;
@@ -276,9 +276,9 @@ pub trait ReadableWritableListableStorageTraits:
 
 impl<T> ReadableWritableListableStorageTraits for T
 where
-    T: ReadableWritableStorageTraits + SyncListableStorageTraits + 'static,
+    T: SyncReadableWritableStorageTraits + SyncListableStorageTraits + 'static,
 {
-    fn readable_writable(self: Arc<Self>) -> Arc<dyn ReadableWritableStorageTraits> {
+    fn readable_writable(self: Arc<Self>) -> Arc<dyn SyncReadableWritableStorageTraits> {
         self
     }
 

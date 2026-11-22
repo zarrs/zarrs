@@ -10,7 +10,7 @@ use rayon::iter::ParallelIterator;
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{
     Array, ArrayError, ArrayUpdateOps, CodecOptions, Indexer, IntoArrayBytes,
-    ReadableWritableStorageTraits, SyncReadableStorageTraits, SyncWritableStorageTraits,
+    SyncReadableStorageTraits, SyncReadableWritableStorageTraits, SyncWritableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
@@ -18,7 +18,7 @@ use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_byt
 use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
 
 #[inherent]
-impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
+impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> ArrayUpdateOps
     for Array<TStorage>
 {
     #[allow(clippy::missing_errors_doc)]
@@ -183,7 +183,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     }
 }
 
-impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> Array<TStorage> {
     pub(in crate::array) fn store_partial_chunk_with_options<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],

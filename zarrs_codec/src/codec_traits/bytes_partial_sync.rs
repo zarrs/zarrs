@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 use zarrs_storage::{
-    OffsetBytesIterator, ReadableWritableStorageTraits, StorageError, StoreKey,
-    SyncReadableStorageTraits,
+    OffsetBytesIterator, StorageError, StoreKey, SyncReadableStorageTraits,
+    SyncReadableWritableStorageTraits,
 };
 
 use crate::{CodecError, CodecOptions, CowBytes, Resources};
@@ -292,7 +292,7 @@ impl<TStorage: SyncReadableStorageTraits + 'static> BytesPartialDecoderTraits
     }
 }
 
-impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTraits
+impl<Tstorage: SyncReadableWritableStorageTraits + 'static> BytesPartialEncoderTraits
     for (Tstorage, StoreKey)
 {
     fn erase(&self) -> Result<(), CodecError> {
