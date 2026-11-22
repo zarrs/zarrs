@@ -5,8 +5,6 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{Adler32CodecConfiguration, Adler32CodecConfigurationV1, CHECKSUM_SIZE};
 use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
 use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
@@ -195,7 +193,7 @@ impl BytesToBytesCodecTraits for Adler32Codec {
                 StripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
             )),
             Adler32CodecConfigurationChecksumLocation::End => Ok(Arc::new(
-                AsyncStripSuffixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
+                StripSuffixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
             )),
         }
     }

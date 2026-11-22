@@ -18,17 +18,14 @@ fn encoded_region(decoded_region: ByteRange, suffix_size: usize) -> ByteRange {
 }
 
 /// Partial decoder for stripping a suffix (e.g. checksum).
-pub(crate) struct StripSuffixPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+pub(crate) struct StripSuffixPartialDecoder<T: ?Sized> {
+    input_handle: Arc<T>,
     suffix_size: usize,
 }
 
-impl StripSuffixPartialDecoder {
+impl<T: ?Sized> StripSuffixPartialDecoder<T> {
     /// Create a new "strip suffix" partial decoder.
-    pub(crate) fn new(
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        suffix_size: usize,
-    ) -> Self {
+    pub(crate) fn new(input_handle: Arc<T>, suffix_size: usize) -> Self {
         Self {
             input_handle,
             suffix_size,
@@ -36,7 +33,9 @@ impl StripSuffixPartialDecoder {
     }
 }
 
-impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> BytesPartialDecoderTraits
+    for StripSuffixPartialDecoder<T>
+{
     fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists()
     }
@@ -78,30 +77,11 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
 }
 
 #[cfg(feature = "async")]
-/// Asynchronous partial decoder for stripping a suffix (e.g. checksum).
-pub(crate) struct AsyncStripSuffixPartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    suffix_size: usize,
-}
-
-#[cfg(feature = "async")]
-impl AsyncStripSuffixPartialDecoder {
-    /// Create a new "strip suffix" partial decoder.
-    pub(crate) fn new(
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        suffix_size: usize,
-    ) -> Self {
-        Self {
-            input_handle,
-            suffix_size,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncBytesPartialDecoderTraits
+    for StripSuffixPartialDecoder<T>
+{
     async fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists().await
     }
@@ -311,7 +291,7 @@ mod tests {
                     active: AtomicUsize::new(0),
                     completed: std::sync::Mutex::new(Vec::new()),
                 });
-                let decoder = AsyncStripSuffixPartialDecoder::new(input.clone(), SUFFIX_SIZE);
+                let decoder = StripSuffixPartialDecoder::new(input.clone(), SUFFIX_SIZE);
                 let options = CodecOptions::default();
                 let resources = Resources::default().with_compute_target(3);
                 let ranges = (0u64..3).map(|i| ByteRange::FromStart(i, Some(1)));
@@ -350,7 +330,7 @@ mod tests {
     #[cfg(feature = "async")]
     async fn async_decode(byte_range: ByteRange) -> Vec<u8> {
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
-        let decoder = AsyncStripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
+        let decoder = StripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
         decoder
             .partial_decode(byte_range, &CodecOptions::default(), &Resources::default())
             .await
@@ -384,7 +364,7 @@ mod tests {
     #[tokio::test]
     async fn zero_concurrency_strip_suffix_partial_decoder() {
         let input: Arc<dyn AsyncBytesPartialDecoderTraits> = Arc::new(ENCODED.to_vec());
-        let partial_decoder = AsyncStripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
+        let partial_decoder = StripSuffixPartialDecoder::new(input, SUFFIX_SIZE);
         let options = CodecOptions::default();
         let resources = Resources::default().with_compute_target(0);
         let ranges = [
