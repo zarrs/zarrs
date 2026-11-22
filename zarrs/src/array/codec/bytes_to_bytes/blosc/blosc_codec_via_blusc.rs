@@ -259,9 +259,9 @@ impl BytesToBytesCodecTraits for BloscCodec {
         _parallel: &CodecOptions,
         _resources: &Resources,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            blosc_partial_decoder::AsyncBloscPartialDecoder::new(input_handle),
-        ))
+        Ok(Arc::new(blosc_partial_decoder::BloscPartialDecoder::new(
+            input_handle,
+        )))
     }
 
     fn as_decode_into(&self) -> Option<&dyn BytesToBytesCodecDecodeInto> {

@@ -55,17 +55,19 @@ fn blosc_partial_decode<'a>(
 }
 
 /// Partial decoder for the `blosc` codec.
-pub(crate) struct BloscPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+pub(crate) struct BloscPartialDecoder<T: ?Sized> {
+    input_handle: Arc<T>,
 }
 
-impl BloscPartialDecoder {
-    pub(crate) fn new(input_handle: Arc<dyn BytesPartialDecoderTraits>) -> Self {
+impl<T: ?Sized> BloscPartialDecoder<T> {
+    pub(crate) fn new(input_handle: Arc<T>) -> Self {
         Self { input_handle }
     }
 }
 
-impl BytesPartialDecoderTraits for BloscPartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> BytesPartialDecoderTraits
+    for BloscPartialDecoder<T>
+{
     fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists()
     }
@@ -94,22 +96,11 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
 }
 
 #[cfg(feature = "async")]
-/// Asynchronous partial decoder for the `blosc` codec.
-pub(crate) struct AsyncBloscPartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-}
-
-#[cfg(feature = "async")]
-impl AsyncBloscPartialDecoder {
-    pub(crate) fn new(input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>) -> Self {
-        Self { input_handle }
-    }
-}
-
-#[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncBytesPartialDecoderTraits
+    for BloscPartialDecoder<T>
+{
     async fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists().await
     }
