@@ -5,7 +5,8 @@ use super::{
     validate_partial_chunk_indexer, validate_target_num_elements,
 };
 use crate::array::cache::{
-    ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync, SyncCachedArray, SyncChunkCacheTraits,
+    ChunkCacheType, SealedSync, SyncCachedArray, SyncChunkCacheTraits,
+    SyncChunkCacheTypePartialDecoder,
 };
 use crate::array::{
     ArrayBytes, ArrayError, ArraySubset, ChunkShapeTraits, CodecOptions, Indexer, Resources,
@@ -13,7 +14,7 @@ use crate::array::{
 };
 use zarrs_codec::{ArrayBytesTarget, SyncArrayPartialDecoderTraits};
 
-impl ChunkCacheType for ChunkCacheTypePartialDecoder {
+impl ChunkCacheType for SyncChunkCacheTypePartialDecoder {
     fn size(&self) -> usize {
         self.as_ref().size_held()
     }
@@ -28,9 +29,9 @@ fn retrieve_partial_decoder<C>(
     chunk_indices: &[u64],
     options: &CodecOptions,
     resources: &Resources,
-) -> Result<ChunkCacheTypePartialDecoder, ArrayError>
+) -> Result<SyncChunkCacheTypePartialDecoder, ArrayError>
 where
-    C: SyncChunkCacheTraits<Value = ChunkCacheTypePartialDecoder> + ?Sized,
+    C: SyncChunkCacheTraits<Value = SyncChunkCacheTypePartialDecoder> + ?Sized,
 {
     cache
         .try_get_or_insert_with(chunk_indices.into(), &mut || {
@@ -39,7 +40,7 @@ where
         .map_err(cache_error)
 }
 
-impl SealedSync for ChunkCacheTypePartialDecoder {
+impl SealedSync for SyncChunkCacheTypePartialDecoder {
     fn partial_decoder<C>(
         cache: &C,
         array: &dyn SyncCachedArray,

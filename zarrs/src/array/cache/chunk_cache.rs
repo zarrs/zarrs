@@ -6,8 +6,8 @@ use super::{
     ChunkCacheTypeAsyncPartialDecoder,
 };
 use super::{
-    ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
-    SyncChunkCacheTraits, SyncChunkCacheType,
+    ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, SyncChunkCacheTraits,
+    SyncChunkCacheType, SyncChunkCacheTypePartialDecoder,
 };
 #[cfg(feature = "async")]
 use crate::array::Indexer;
@@ -209,7 +209,7 @@ pub type ChunkCacheEncoded = ChunkCache<ChunkCacheTypeEncoded>;
 pub type ChunkCacheDecoded = ChunkCache<ChunkCacheTypeDecoded>;
 
 /// An partial decoder chunk cache.
-pub type ChunkCachePartialDecoder = ChunkCache<ChunkCacheTypePartialDecoder>;
+pub type ChunkCachePartialDecoder = ChunkCache<SyncChunkCacheTypePartialDecoder>;
 
 /// An asynchronous encoded chunk cache.
 #[cfg(feature = "async")]
