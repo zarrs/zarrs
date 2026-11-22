@@ -12,8 +12,8 @@ use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    AtomicRenameStorageTraits, Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError,
-    StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeyError,
+    StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes, SyncAtomicRenameStorageTraits,
     SyncListableStorageTraits, SyncMaybeBytesIterator, SyncReadableStorageTraits,
     SyncWritableStorageTraits,
 };
@@ -585,7 +585,7 @@ impl SyncWritableStorageTraits for FilesystemStore {
     }
 }
 
-impl AtomicRenameStorageTraits for FilesystemStore {
+impl SyncAtomicRenameStorageTraits for FilesystemStore {
     fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
         if source == destination {
             return Ok(());

@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use crate::{
-    AtomicRenameStorageTraits, CowBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
+    CowBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, SyncAtomicRenameStorageTraits, SyncListableStorageTraits, SyncMaybeBytesIterator,
     SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
@@ -43,7 +43,7 @@ impl<TStorage: ?Sized> AtomicWriteStorageAdapter<TStorage> {
 
 impl<
         TStorage: ?Sized
-            + AtomicRenameStorageTraits
+            + SyncAtomicRenameStorageTraits
             + SyncReadableStorageTraits
             + SyncWritableStorageTraits
             + 'static,
@@ -107,7 +107,7 @@ impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
 
 impl<
         TStorage: ?Sized
-            + AtomicRenameStorageTraits
+            + SyncAtomicRenameStorageTraits
             + SyncReadableStorageTraits
             + SyncWritableStorageTraits
             + 'static,
@@ -208,7 +208,7 @@ mod tests {
         }
     }
 
-    impl AtomicRenameStorageTraits for RenameStore {
+    impl SyncAtomicRenameStorageTraits for RenameStore {
         fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
             let value: MaybeBytes = self.inner.get(source)?;
             let value = value.ok_or_else(|| StorageError::Other(format!("{source} is missing")))?;

@@ -144,7 +144,7 @@ pub fn store_set_partial_many<T: SyncReadableWritableStorageTraits>(
 /// Implementations must replace `destination` atomically if it already exists. The source and
 /// destination must be on the same storage system.
 #[auto_impl(Arc)]
-pub trait AtomicRenameStorageTraits: MaybeSend + MaybeSync {
+pub trait SyncAtomicRenameStorageTraits: MaybeSend + MaybeSync {
     /// Atomically rename `source` to `destination`.
     ///
     /// # Errors

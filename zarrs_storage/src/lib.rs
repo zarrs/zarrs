@@ -49,7 +49,7 @@ pub use self::storage_async::{
 };
 pub use self::storage_handle::StorageHandle;
 pub use self::storage_sync::{
-    discover_children, store_set_partial_many, AtomicRenameStorageTraits,
+    discover_children, store_set_partial_many, SyncAtomicRenameStorageTraits,
     SyncListableStorageTraits, SyncReadableListableStorageTraits, SyncReadableStorageTraits,
     SyncReadableWritableListableStorageTraits, SyncReadableWritableStorageTraits,
     SyncWritableStorageTraits,
