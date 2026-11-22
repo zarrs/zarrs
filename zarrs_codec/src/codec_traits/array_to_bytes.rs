@@ -6,11 +6,11 @@ use zarrs_data_type::{DataType, FillValue};
 
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits, BytesDecodeInput,
-    BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError,
-    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes, Resources,
-    SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
-    decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, BytesDecodeInput, BytesRepresentation,
+    ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes, Resources,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
@@ -284,7 +284,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         _ = options;
         _ = resources;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(

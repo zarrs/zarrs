@@ -15,7 +15,9 @@ use super::{
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_bytes};
-use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
+use zarrs_codec::{
+    ArrayToBytesCodecTraits, CodecError, CodecTraits, SyncArrayPartialEncoderTraits,
+};
 
 #[inherent]
 impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> ArrayUpdateOps
@@ -178,7 +180,7 @@ impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> ArrayUpdate
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, ArrayError> {
         self.partial_encoder_with_options(chunk_indices, self.codec_options(), resources)
     }
 }
@@ -295,7 +297,7 @@ impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> Array<TStor
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, ArrayError> {
         // Input/output
         let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.readable_writable_storage()?;

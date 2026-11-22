@@ -32,13 +32,13 @@ use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecGeometryTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesDecodeInput, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
-    Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecPluginV2,
-    CodecPluginV3, CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3,
-    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    Resources, SyncArrayPartialDecoderTraits, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayToArrayCodecGeometryTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesDecodeInput, ChunkGridDecoded,
+    ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, Codec, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3,
+    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -349,11 +349,11 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        input_handle: Arc<dyn SyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         let input_handle = self.packed_handle(input_handle, shape)?;
         self.packbits
             .clone()

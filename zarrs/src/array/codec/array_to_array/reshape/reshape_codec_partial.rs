@@ -5,8 +5,8 @@ use super::get_reshaped_indexer;
 use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
 use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
-    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    ArrayBytes, CodecError, CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -23,9 +23,9 @@ pub(crate) struct ReshapeCodecPartial<T: ?Sized> {
     data_type: DataType,
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for ReshapeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for ReshapeCodecPartial<T>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_handle.erase()

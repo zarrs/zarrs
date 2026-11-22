@@ -10,8 +10,8 @@ use super::{
 use crate::array::cache::SyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialEncoderTraits, CodecError,
-    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    ArrayBytesTarget, CodecError, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
 };
 use zarrs_storage::StorageError;
 
@@ -26,7 +26,7 @@ impl<TStorage, C, E> SyncArrayPartialDecoderSubchunkingTraits
 where
     TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
-    E: ArrayPartialEncoderTraits + ?Sized + 'static,
+    E: SyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn local_subchunk_grids(
         &self,
@@ -41,7 +41,7 @@ impl<TStorage, C, E> SyncArrayPartialDecoderTraits for CachedArrayPartialEncoder
 where
     TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
-    E: ArrayPartialEncoderTraits + ?Sized + 'static,
+    E: SyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn data_type(&self) -> &DataType {
         self.encoder.data_type()
@@ -80,11 +80,11 @@ where
     }
 }
 
-impl<TStorage, C, E> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
+impl<TStorage, C, E> SyncArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
-    E: ArrayPartialEncoderTraits + ?Sized + 'static,
+    E: SyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase();
@@ -186,7 +186,7 @@ where
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, ArrayError> {
         let encoder = self.array().partial_encoder(chunk_indices, resources)?;
         Ok(Arc::new(CachedArrayPartialEncoder {
             cached: self.clone(),

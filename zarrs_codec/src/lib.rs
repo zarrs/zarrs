@@ -26,8 +26,8 @@ pub use array_bytes_fixed_disjoint_view::{
 mod codec_traits;
 pub use codec_traits::array::ArrayCodecTraits;
 pub use codec_traits::array_partial_sync::{
-    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialEncoderTraits,
-    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    ArrayPartialDecoderNoSubchunkingTraits, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
 };
 pub use codec_traits::array_to_array::{
     ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecGeometryTraits,

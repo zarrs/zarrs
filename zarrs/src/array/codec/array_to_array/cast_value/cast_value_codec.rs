@@ -3,12 +3,12 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecGeometryIdentityTraits, ArrayToArrayCodecTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
-    UnboundArrayToArrayCodecTraits, decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayToArrayCodecGeometryIdentityTraits,
+    ArrayToArrayCodecTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, UnboundArrayToArrayCodecTraits,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -450,11 +450,11 @@ impl ArrayToArrayCodecTraits for CastValueCodecBound {
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncArrayPartialEncoderTraits>,
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         self.validate_partial_handle_data_type(input_output_handle.data_type())?;
         Ok(Arc::new(self.partial(input_output_handle)?))
     }

@@ -4,7 +4,7 @@ use super::{
 };
 #[cfg(doc)]
 use super::{ArrayOps, ArraySubset};
-use zarrs_codec::{ArrayPartialEncoderTraits, Resources};
+use zarrs_codec::{Resources, SyncArrayPartialEncoderTraits};
 
 /// Synchronous array read/write update operations.
 ///
@@ -80,7 +80,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// - partial encoders can hold internal state that may become out of sync, and
     /// - parallel writing to the same chunk [may result in data loss](#parallel-writing).
     ///
-    /// Partial encoding with [`ArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
+    /// Partial encoding with [`SyncArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if initialisation of the partial encoder fails.
@@ -88,5 +88,5 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError>;
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, ArrayError>;
 }

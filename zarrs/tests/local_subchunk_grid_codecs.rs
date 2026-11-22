@@ -13,7 +13,7 @@ use zarrs::array::cache::{
     ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, SyncChunkCacheTraits,
 };
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayCached, ArrayPartialEncoderTraits, CodecOptions, data_type,
+    Array, ArrayBuilder, ArrayCached, CodecOptions, SyncArrayPartialEncoderTraits, data_type,
 };
 use zarrs::storage::store::MemoryStore;
 
@@ -70,7 +70,7 @@ fn local_subchunk_grid_exposed_by_partial_encoders() -> TestResult {
     let array = build(&case)?;
     let cached = ArrayCached::new(array.clone(), ChunkCachePartialDecoder::new_chunk_limit(1));
 
-    let encoders: [(&str, Arc<dyn ArrayPartialEncoderTraits>); 2] = [
+    let encoders: [(&str, Arc<dyn SyncArrayPartialEncoderTraits>); 2] = [
         (
             "sharding",
             array.partial_encoder(&case.chunk_indices, &Resources::default())?,

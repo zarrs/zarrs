@@ -11,14 +11,14 @@ use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, CowBytes, DataType, FillValue,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayToArrayCodecTraits,
     ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeInput,
     BytesDecodeSource, BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
     ChunkGridEncoded, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
-    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -905,7 +905,7 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
         for (codec, bytes_representation) in std::iter::zip(

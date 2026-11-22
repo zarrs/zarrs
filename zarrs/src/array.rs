@@ -68,15 +68,15 @@ pub use zarrs_codec::{
     ArrayBytesOffsetsIter, ArrayBytesOffsetsOutOfBoundsError, ArrayBytesOffsetsRangesIter,
     ArrayBytesOffsetsSlice, ArrayBytesOptional, ArrayBytesTarget, ArrayBytesTargetOptional,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
-    ArrayToBytesCodecTraits, BytesDecodeInput, BytesDecodeSource, BytesRepresentation,
-    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes, IncompatibleOptionalMaskError,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
+    BytesDecodeInput, BytesDecodeSource, BytesRepresentation, BytesToBytesCodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2,
+    CodecTraitsV3, ComputeResources, CowBytes, IncompatibleOptionalMaskError,
     RecommendedConcurrency, Resources, SyncArrayPartialDecoderSubchunkingTraits,
-    SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
-    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, WithOptionalMaskError,
-    copy_fill_value_into, update_array_bytes,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    WithOptionalMaskError, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -409,7 +409,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`], [`DataTypeTraitsV2`], [`DataTypeTraitsV3`]
 /// - Codecs ([`zarrs_codec`]): [`CodecTraits`], [`CodecTraitsV2`], [`CodecTraitsV3`])
 ///   - Array-to-array codecs: [`UnboundArrayToArrayCodecTraits`] and bound [`ArrayToArrayCodecTraits`]
-///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
+///     - [`SyncArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
 ///     - [`SyncArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
 ///   - Array-to-bytes codecs: [`UnboundArrayToBytesCodecTraits`] and bound [`ArrayToBytesCodecTraits`]
 ///     - [`SyncBytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]

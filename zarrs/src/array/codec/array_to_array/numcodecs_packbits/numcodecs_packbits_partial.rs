@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits,
-    CodecError, CodecOptions, CowBytes, InvalidBytesLengthError, Resources,
-    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
-    SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions,
+    CowBytes, InvalidBytesLengthError, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -117,7 +117,7 @@ impl<T: SyncArrayPartialDecoderTraits + ?Sized> SyncBytesPartialDecoderTraits
     }
 }
 
-impl<T: ArrayPartialEncoderTraits + ?Sized> SyncBytesPartialEncoderTraits
+impl<T: SyncArrayPartialEncoderTraits + ?Sized> SyncBytesPartialEncoderTraits
     for NumcodecsPackBitsPartial<T>
 {
     fn erase(&self) -> Result<(), CodecError> {

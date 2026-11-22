@@ -3,8 +3,8 @@ use std::sync::Arc;
 use super::BitroundDataTypeTraitsArc;
 use crate::array::DataType;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
-    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    ArrayBytes, CodecError, CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -85,9 +85,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for BitroundCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for BitroundCodecPartial<T>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()

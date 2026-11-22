@@ -6,8 +6,8 @@ use super::bytes_codec::decoded_len;
 use super::{BytesDataTypeTraitsArc, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
-    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
-    Resources, SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits,
+    ArrayPartialDecoderNoSubchunkingTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
     SyncBytesPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
@@ -244,7 +244,7 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for BytesCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for BytesCodecPartial<T>
 where
     T: SyncBytesPartialEncoderTraits,
 {

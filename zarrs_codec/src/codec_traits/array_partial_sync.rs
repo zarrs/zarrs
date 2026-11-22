@@ -144,7 +144,7 @@ pub trait SyncArrayPartialDecoderTraits:
 }
 
 /// Partial array encoder traits.
-pub trait ArrayPartialEncoderTraits:
+pub trait SyncArrayPartialEncoderTraits:
     SyncArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Erase the chunk.

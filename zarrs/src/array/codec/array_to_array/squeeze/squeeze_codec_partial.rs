@@ -4,9 +4,9 @@ use super::{get_squeezed_array_subset, get_squeezed_indexer};
 use crate::array::{ChunkGrid, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, CodecError,
-    CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
-    SyncArrayPartialDecoderTraits,
+    ArrayBytes, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    SyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -98,9 +98,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for SqueezeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for SqueezeCodecPartial<T>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()
