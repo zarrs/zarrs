@@ -2,8 +2,6 @@ use std::sync::Arc;
 
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
-#[cfg(feature = "async")]
-use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
 use super::packbits_partial_decoder::PackBitsPartialDecoder;
 use super::{
     PackBitsBitOrder, PackBitsCodecConfiguration, PackBitsCodecConfigurationV1, PackBitsLayout,
@@ -529,7 +527,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         _options: &CodecOptions,
         _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncPackBitsPartialDecoder::new(
+        Ok(Arc::new(PackBitsPartialDecoder::new(
             input_handle,
             shape.to_vec(),
             self,
