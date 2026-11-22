@@ -10,7 +10,7 @@ use rayon::iter::ParallelIterator;
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{
     Array, ArrayError, ArrayUpdateOps, CodecOptions, Indexer, IntoArrayBytes,
-    ReadableWritableStorageTraits, SyncReadableStorageTraits, WritableStorageTraits,
+    ReadableWritableStorageTraits, SyncReadableStorageTraits, SyncWritableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;

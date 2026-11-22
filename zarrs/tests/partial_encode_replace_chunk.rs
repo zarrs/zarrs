@@ -17,7 +17,7 @@ use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStor
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
     CowBytes, OffsetBytesIterator, StorageError, StoreKey, StorePrefix, SyncMaybeBytesIterator,
-    SyncReadableStorageTraits, WritableStorageTraits,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions};
 
@@ -226,7 +226,7 @@ impl<T: SyncReadableStorageTraits> SyncReadableStorageTraits for FailingWritesSt
     }
 }
 
-impl<T: WritableStorageTraits> WritableStorageTraits for FailingWritesStorage<T> {
+impl<T: SyncWritableStorageTraits> SyncWritableStorageTraits for FailingWritesStorage<T> {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.check_write()?;
         self.storage.set(key, value)

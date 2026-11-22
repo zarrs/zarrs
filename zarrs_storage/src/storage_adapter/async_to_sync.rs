@@ -13,7 +13,7 @@ use crate::{
     AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits, CowBytes,
     ListableStorageTraits, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError, StoreKey,
     StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
-    WritableStorageTraits,
+    SyncWritableStorageTraits,
 };
 
 /// Trait for an asynchronous runtime implementing `block_on`.
@@ -110,7 +110,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits, TBlockOn: AsyncToSyncBlockOn
 }
 
 impl<TStorage: ?Sized + AsyncWritableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
-    WritableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
+    SyncWritableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.block_on(self.storage.set(key, value))

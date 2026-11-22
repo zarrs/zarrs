@@ -15,7 +15,7 @@ use zarrs_storage::{
     AtomicRenameStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeBytes,
     OffsetBytesIterator, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
     StorePrefix, StorePrefixes, SyncMaybeBytesIterator, SyncReadableStorageTraits,
-    WritableStorageTraits,
+    SyncWritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -119,7 +119,7 @@ struct CachedFile {
 ///
 /// Writes synchronise file contents and metadata with [`std::fs::File::sync_all`] before returning success.
 ///
-/// Prefix operations ([`erase_prefix`](WritableStorageTraits::erase_prefix),
+/// Prefix operations ([`erase_prefix`](SyncWritableStorageTraits::erase_prefix),
 /// [`list_prefix`](ListableStorageTraits::list_prefix) and
 /// [`list_dir`](ListableStorageTraits::list_dir)) must likewise not overlap operations on keys under
 /// that prefix.
@@ -537,7 +537,7 @@ impl SyncReadableStorageTraits for FilesystemStore {
     }
 }
 
-impl WritableStorageTraits for FilesystemStore {
+impl SyncWritableStorageTraits for FilesystemStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         Self::set_impl(self, key, &value, 0, true)
     }

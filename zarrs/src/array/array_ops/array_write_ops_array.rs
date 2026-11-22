@@ -9,7 +9,7 @@ use rayon::iter::ParallelIterator;
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{
     Array, ArrayError, ArrayMetadata, ArraySubsetTraits, ArrayWriteOps, CodecOptions, Indexer,
-    IntoArrayBytes, MetadataEraseVersion, StorageError, WritableStorageTraits,
+    IntoArrayBytes, MetadataEraseVersion, StorageError, SyncWritableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
@@ -18,7 +18,7 @@ use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
 
 #[inherent]
-impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
+impl<TStorage: ?Sized + SyncWritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_metadata(&self) -> Result<(), StorageError> {
         let storage_transformer = self.writable_storage()?;
@@ -229,7 +229,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
     }
 }
 
-impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncWritableStorageTraits + 'static> Array<TStorage> {
     /// Store `chunk_data`, with elements in `order`.
     pub(in crate::array) fn store_chunk_with_options<'a, T: IntoArrayBytes<'a>>(
         &self,

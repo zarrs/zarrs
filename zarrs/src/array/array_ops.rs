@@ -79,7 +79,7 @@ use zarrs_storage::{
 };
 use zarrs_storage::{
     ReadableWritableStorageTraits, StorageError, StoreKey, SyncReadableStorageTraits,
-    WritableStorageTraits,
+    SyncWritableStorageTraits,
 };
 
 mod array_mut_ops;

@@ -182,7 +182,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`retrieve_array_subset`](Array::retrieve_array_subset)
 ///    - [`retrieve_encoded_chunk`](Array::retrieve_encoded_chunk)
 ///    - [`partial_decoder`](Array::partial_decoder)
-///  - [`[Async]WritableStorageTraits`](crate::storage::WritableStorageTraits): store/erase array data and metadata
+///  - [`[Async]SyncWritableStorageTraits`](crate::storage::SyncWritableStorageTraits): store/erase array data and metadata
 ///    - [`store_metadata`](Array::store_metadata)
 ///    - [`erase_metadata`](Array::erase_metadata)
 ///    - [`store_chunk`](Array::store_chunk)
@@ -520,7 +520,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     }
 
     /// Create an array in `storage` at `path` with `metadata`.
-    /// This does **not** write to the store, use [`store_metadata`](Array<WritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
+    /// This does **not** write to the store, use [`store_metadata`](Array<SyncWritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
     ///
     /// # Errors
     /// Returns [`ArrayCreateError`] if:

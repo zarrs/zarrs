@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, Resources};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::store::MemoryStore;
-use zarrs_storage::{StoreKey, WritableStorageTraits};
+use zarrs_storage::{StoreKey, SyncWritableStorageTraits};
 
 #[test]
 fn partial_decode_collections() {

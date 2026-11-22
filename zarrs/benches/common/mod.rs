@@ -14,7 +14,7 @@ use zarrs::storage::{
 use zarrs::storage::{
     ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
-    WritableStorageTraits,
+    SyncWritableStorageTraits,
 };
 use zarrs_storage::CowBytes;
 
@@ -139,7 +139,9 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for Latency
     }
 }
 
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for LatencyStore<TStorage> {
+impl<TStorage: ?Sized + SyncWritableStorageTraits> SyncWritableStorageTraits
+    for LatencyStore<TStorage>
+{
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         let _guard = self.wait_sync();
         self.storage.set(key, value)

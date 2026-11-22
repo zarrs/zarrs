@@ -1345,7 +1345,7 @@ fn array_cached_with_codec_options_preserves_cache() -> TestResult {
 #[test]
 fn erase_metadata_version_all_erases_both_zarr_versions() -> TestResult {
     use zarrs::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-    use zarrs::storage::WritableStorageTraits;
+    use zarrs::storage::SyncWritableStorageTraits;
 
     let path: zarrs::node::NodePath = "/array".try_into()?;
     let (array, store) = fixture();

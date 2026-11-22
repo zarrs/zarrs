@@ -8,7 +8,7 @@ use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
 use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{SyncReadableStorageTraits, WritableStorageTraits};
+use zarrs::storage::{SyncReadableStorageTraits, SyncWritableStorageTraits};
 use zarrs_codec::CodecOptions;
 
 fn indexes(location: ShardingIndexLocation) -> Vec<Vec<u8>> {

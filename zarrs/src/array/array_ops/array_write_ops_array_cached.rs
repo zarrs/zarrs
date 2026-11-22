@@ -4,13 +4,13 @@ use zarrs_codec::{CowBytes, Resources};
 
 use super::{
     ArrayCached, ArrayError, ArraySubsetTraits, ArrayWriteOps, Indexer, IntoArrayBytes,
-    StorageError, WritableStorageTraits,
+    StorageError, SyncWritableStorageTraits,
 };
 
 #[inherent]
 impl<TStorage, C> ArrayWriteOps for ArrayCached<TStorage, C>
 where
-    TStorage: ?Sized + WritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     #[allow(clippy::missing_errors_doc)]

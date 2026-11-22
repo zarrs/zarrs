@@ -11,7 +11,8 @@ use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
 use zarrs_storage::{
-    ListableStorage, ReadableWritableStorage, StorageError, SyncReadableStorage, WritableStorage,
+    ListableStorage, ReadableWritableStorage, StorageError, SyncReadableStorage,
+    SyncWritableStorage,
 };
 
 /// Configuration for a storage transformer chain.
@@ -90,8 +91,8 @@ impl StorageTransformerChain {
     /// Returns an error if creation fails.
     pub fn create_writable_transformer(
         &self,
-        mut storage: WritableStorage,
-    ) -> Result<WritableStorage, StorageError> {
+        mut storage: SyncWritableStorage,
+    ) -> Result<SyncWritableStorage, StorageError> {
         for transformer in &self.0 {
             storage = transformer.clone().create_writable_transformer(storage)?;
         }

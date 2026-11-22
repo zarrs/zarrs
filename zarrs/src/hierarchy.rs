@@ -359,7 +359,7 @@ mod tests {
     #[cfg(feature = "async")]
     use zarrs_storage::AsyncReadableWritableListableStorageTraits;
     use zarrs_storage::store::MemoryStore;
-    use zarrs_storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::{StoreKey, SyncWritableStorageTraits};
 
     const EXPECTED_TREE: &str = "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n";
 

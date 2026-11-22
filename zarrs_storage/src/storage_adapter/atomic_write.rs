@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::{
     AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, OffsetBytesIterator, StorageError,
     StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
-    SyncReadableStorageTraits, WritableStorageTraits,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// A storage adapter that writes complete values to a temporary key before atomically renaming
@@ -45,7 +45,7 @@ impl<
         TStorage: ?Sized
             + AtomicRenameStorageTraits
             + SyncReadableStorageTraits
-            + WritableStorageTraits
+            + SyncWritableStorageTraits
             + 'static,
     > AtomicWriteStorageAdapter<TStorage>
 {
@@ -109,9 +109,9 @@ impl<
         TStorage: ?Sized
             + AtomicRenameStorageTraits
             + SyncReadableStorageTraits
-            + WritableStorageTraits
+            + SyncWritableStorageTraits
             + 'static,
-    > WritableStorageTraits for AtomicWriteStorageAdapter<TStorage>
+    > SyncWritableStorageTraits for AtomicWriteStorageAdapter<TStorage>
 {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         let temporary_key = Self::temporary_key(key)?;
@@ -182,7 +182,7 @@ mod tests {
         }
     }
 
-    impl WritableStorageTraits for RenameStore {
+    impl SyncWritableStorageTraits for RenameStore {
         fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
             self.inner.set(key, value)
         }

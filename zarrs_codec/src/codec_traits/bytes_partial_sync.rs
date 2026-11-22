@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn storage_encode_replaces() {
         use std::sync::Arc;
-        use zarrs_storage::WritableStorageTraits;
+        use zarrs_storage::SyncWritableStorageTraits;
         use zarrs_storage::store::MemoryStore;
 
         let store = Arc::new(MemoryStore::new());

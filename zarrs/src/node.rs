@@ -603,7 +603,7 @@ mod tests {
     use crate::array::ArrayBuilder;
     use crate::group::{GroupMetadata, GroupMetadataV3};
     use zarrs_storage::store::MemoryStore;
-    use zarrs_storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::{StoreKey, SyncWritableStorageTraits};
 
     #[test]
     fn node_metadata_array() {

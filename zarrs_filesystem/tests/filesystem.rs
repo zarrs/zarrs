@@ -6,7 +6,7 @@ use std::sync::Arc;
 use zarrs_filesystem::{FilesystemStore, FilesystemStoreOptions};
 use zarrs_storage::storage_adapter::atomic_write::AtomicWriteStorageAdapter;
 use zarrs_storage::{
-    Bytes, ListableStorageTraits, StoreKey, SyncReadableStorageTraits, WritableStorageTraits,
+    Bytes, ListableStorageTraits, StoreKey, SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 #[cfg(target_os = "linux")]
@@ -332,7 +332,7 @@ fn filesystem_handle_cache() -> Result<(), Box<dyn Error>> {
 #[cfg_attr(miri, ignore)]
 fn filesystem_handle_cache_invalidation() -> Result<(), Box<dyn Error>> {
     use zarrs_filesystem::FilesystemStoreOptions;
-    use zarrs_storage::{StoreKey, SyncReadableStorageTraits, WritableStorageTraits};
+    use zarrs_storage::{StoreKey, SyncReadableStorageTraits, SyncWritableStorageTraits};
 
     let path = tempfile::TempDir::new()?;
     let mut opts = FilesystemStoreOptions::default();
@@ -384,7 +384,7 @@ fn filesystem_handle_cache_invalidation() -> Result<(), Box<dyn Error>> {
 #[cfg_attr(miri, ignore)]
 fn filesystem_handle_cache_reuse() -> Result<(), Box<dyn Error>> {
     use zarrs_filesystem::FilesystemStoreOptions;
-    use zarrs_storage::{StoreKey, SyncReadableStorageTraits, WritableStorageTraits};
+    use zarrs_storage::{StoreKey, SyncReadableStorageTraits, SyncWritableStorageTraits};
 
     let path = tempfile::TempDir::new()?;
     let mut opts = FilesystemStoreOptions::default();
@@ -410,7 +410,7 @@ fn filesystem_handle_cache_reuse() -> Result<(), Box<dyn Error>> {
 #[test]
 fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
     use zarrs_storage::byte_range::ByteRange;
-    use zarrs_storage::{Bytes, SyncReadableStorageTraits, WritableStorageTraits};
+    use zarrs_storage::{Bytes, SyncReadableStorageTraits, SyncWritableStorageTraits};
     let tmpfile = tempfile::NamedTempFile::new()?;
     if try_open_direct_io(tmpfile.path().to_str().unwrap()).is_err() {
         // Skip this test if direct I/O is not supported

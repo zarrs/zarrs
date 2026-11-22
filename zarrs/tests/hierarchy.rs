@@ -327,7 +327,7 @@ mod consolidated_open {
     use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
     use zarrs::node::Node;
     use zarrs_storage::store::MemoryStore;
-    use zarrs_storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::{StoreKey, SyncWritableStorageTraits};
 
     /// Build a v3 root group with a `consolidated_metadata` block that lists a
     /// phantom child array `phantom`. The child is *not* written to storage.

@@ -118,7 +118,7 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
 mod tests {
     use super::*;
     use zarrs_storage::store::MemoryStore;
-    use zarrs_storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::{StoreKey, SyncWritableStorageTraits};
 
     #[test]
     fn warning_get_child_nodes() {

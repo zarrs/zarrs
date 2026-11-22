@@ -3,7 +3,9 @@ use std::error::Error;
 use crate::byte_range::ByteRange;
 #[cfg(feature = "async")]
 use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
-use crate::{ListableStorageTraits, StorePrefix, SyncReadableStorageTraits, WritableStorageTraits};
+use crate::{
+    ListableStorageTraits, StorePrefix, SyncReadableStorageTraits, SyncWritableStorageTraits,
+};
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// Create a store with the following data
@@ -20,7 +22,7 @@ use crate::{ListableStorageTraits, StorePrefix, SyncReadableStorageTraits, Writa
 ///   - j/
 ///     - k [0, 1]
 /// ```
-pub fn store_write<T: WritableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
+pub fn store_write<T: SyncWritableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
     store.erase_prefix(&StorePrefix::root())?;
 
     store.set(&"a/b".try_into()?, vec![255, 255, 255].into())?;

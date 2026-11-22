@@ -16,7 +16,7 @@ use crate::{
 use crate::{
     Bytes, CowBytes, ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError,
     StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
-    SyncReadableStorageTraits, WritableStorageTraits,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// An in-memory store.
@@ -103,7 +103,7 @@ impl SyncReadableStorageTraits for MemoryStore {
     }
 }
 
-impl WritableStorageTraits for MemoryStore {
+impl SyncWritableStorageTraits for MemoryStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         // A full set replaces any existing value, so store the handle directly to avoid a copy.
         // The value is converted, and a replaced value dropped, outside of the lock.
@@ -280,15 +280,15 @@ impl AsyncWritableStorageTraits for MemoryStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        WritableStorageTraits::set_partial_many(self, key, offset_values)
+        SyncWritableStorageTraits::set_partial_many(self, key, offset_values)
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
-        WritableStorageTraits::erase(self, key)
+        SyncWritableStorageTraits::erase(self, key)
     }
 
     async fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        WritableStorageTraits::erase_prefix(self, prefix)
+        SyncWritableStorageTraits::erase_prefix(self, prefix)
     }
 
     fn supports_set_partial(&self) -> bool {
@@ -326,7 +326,7 @@ mod tests {
     use crate::byte_range::ByteRange;
     use crate::{
         ReadableWritableListableStorageTraits, StoreKey, SyncReadableStorageTraits,
-        WritableStorageTraits,
+        SyncWritableStorageTraits,
     };
 
     #[test]

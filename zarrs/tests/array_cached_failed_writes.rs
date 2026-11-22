@@ -10,7 +10,7 @@ use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
     CowBytes, OffsetBytesIterator, StorageError, StoreKey, StorePrefix, SyncMaybeBytesIterator,
-    SyncReadableStorageTraits, WritableStorageTraits,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -54,7 +54,7 @@ impl SyncReadableStorageTraits for FailingStore {
     }
 }
 
-impl WritableStorageTraits for FailingStore {
+impl SyncWritableStorageTraits for FailingStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.check(key)?;
         self.store.set(key, value)

@@ -93,7 +93,7 @@ impl<TStorage: ?Sized + SyncReadableStorageTraits> Read for StorageValueIO<TStor
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::WritableStorageTraits;
+    use crate::SyncWritableStorageTraits;
 
     /// A store that returns the whole value regardless of the requested byte range.
     struct OverreadingStore;

@@ -11,7 +11,7 @@ use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeSend, MaybeSync,
     OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    SyncReadableStorageTraits, WritableStorageTraits,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// Trait for spawning synchronous work onto an asynchronous runtime.
@@ -155,7 +155,7 @@ impl<
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<
-        TStorage: ?Sized + WritableStorageTraits + 'static,
+        TStorage: ?Sized + SyncWritableStorageTraits + 'static,
         TSpawnBlocking: SyncToAsyncSpawnBlocking,
     > AsyncWritableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {

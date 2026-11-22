@@ -154,7 +154,7 @@ pub trait AtomicRenameStorageTraits: MaybeSend + MaybeSync {
 
 /// Writable storage traits.
 #[auto_impl(Arc)]
-pub trait WritableStorageTraits: MaybeSend + MaybeSync {
+pub trait SyncWritableStorageTraits: MaybeSend + MaybeSync {
     /// Store bytes at a [`StoreKey`].
     ///
     /// # Errors
@@ -212,24 +212,26 @@ pub trait WritableStorageTraits: MaybeSend + MaybeSync {
     fn supports_set_partial(&self) -> bool;
 }
 
-/// A supertrait of [`SyncReadableStorageTraits`] and [`WritableStorageTraits`].
-pub trait ReadableWritableStorageTraits: SyncReadableStorageTraits + WritableStorageTraits {
+/// A supertrait of [`SyncReadableStorageTraits`] and [`SyncWritableStorageTraits`].
+pub trait ReadableWritableStorageTraits:
+    SyncReadableStorageTraits + SyncWritableStorageTraits
+{
     /// Return a readable version of the store.
     fn readable(self: Arc<Self>) -> Arc<dyn SyncReadableStorageTraits>;
 
     /// Return a writable version of the store.
-    fn writable(self: Arc<Self>) -> Arc<dyn WritableStorageTraits>;
+    fn writable(self: Arc<Self>) -> Arc<dyn SyncWritableStorageTraits>;
 }
 
 impl<T> ReadableWritableStorageTraits for T
 where
-    T: SyncReadableStorageTraits + WritableStorageTraits + 'static,
+    T: SyncReadableStorageTraits + SyncWritableStorageTraits + 'static,
 {
     fn readable(self: Arc<Self>) -> Arc<dyn SyncReadableStorageTraits> {
         self
     }
 
-    fn writable(self: Arc<Self>) -> Arc<dyn WritableStorageTraits> {
+    fn writable(self: Arc<Self>) -> Arc<dyn SyncWritableStorageTraits> {
         self
     }
 }

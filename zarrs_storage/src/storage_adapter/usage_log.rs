@@ -14,7 +14,7 @@ use crate::{
 use crate::{
     Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeSend, MaybeSync, OffsetBytesIterator,
     StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator,
-    SyncReadableStorageTraits, WritableStorageTraits,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
@@ -219,7 +219,7 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
+impl<TStorage: ?Sized + SyncWritableStorageTraits> SyncWritableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {

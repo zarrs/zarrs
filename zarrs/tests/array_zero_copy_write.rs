@@ -17,7 +17,7 @@ use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
     ListableStorageTraits, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, SyncMaybeBytesIterator, SyncReadableStorageTraits,
-    WritableStorageTraits,
+    SyncWritableStorageTraits,
 };
 use zarrs_storage::byte_range::ByteRangeIterator;
 
@@ -37,7 +37,7 @@ impl PtrRecordingStore {
     }
 }
 
-impl WritableStorageTraits for PtrRecordingStore {
+impl SyncWritableStorageTraits for PtrRecordingStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.ptrs
             .lock()
