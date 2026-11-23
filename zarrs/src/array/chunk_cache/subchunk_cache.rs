@@ -3,6 +3,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use ambisync::ambisync;
+
 #[cfg(feature = "async")]
 use super::array_cache::array_cache_sealed::AsyncArrayCacheOps;
 use super::array_cache::array_cache_sealed::SyncArrayCacheOps;
@@ -127,72 +129,24 @@ impl<S: ?Sized, C> SubchunkCache<S, C> {
     }
 }
 
-impl<S: ChunkCache + ?Sized, C> SubchunkCache<S, C> {
+#[ambisync(
+    sync(fns("async_{}"), types(AsyncChunkCache => ChunkCache)),
+    async(feature = "async")
+)]
+impl<S: AsyncChunkCache + ?Sized, C> SubchunkCache<S, C> {
     /// Invalidate every cached subchunk.
     ///
     /// Call this after invalidating the chunk cache, so that a subchunk miss cannot refill the subchunk cache from a
     /// chunk the chunk cache still holds. The generations advance before the subchunks are invalidated, so that a
     /// partial decoder opened in an older generation cannot refill them afterwards.
-    fn invalidate_all_subchunks(&self) {
-        self.generations.advance_all();
-        self.subchunks.invalidate();
-    }
-
-    /// Invalidate the cached subchunks of the chunk at `chunk_indices` of `array`.
-    ///
-    /// See [`SubchunkCache::invalidate_all_subchunks`].
-    fn invalidate_chunk_subchunks(&self, array: &dyn CachedArrayMeta, chunk_indices: &[u64]) {
-        self.generations.advance(chunk_indices);
-        self.invalidate_subchunks_in(array, array.chunk_subset(chunk_indices).ok().as_ref());
-    }
-
-    /// Invalidate the cached subchunks of the `chunks` of `array`.
-    ///
-    /// A region of chunks invalidates the subchunks of their region of the subchunk grid at once.
-    ///
-    /// See [`SubchunkCache::invalidate_all_subchunks`].
-    fn invalidate_chunks_subchunks(&self, array: &dyn CachedArrayMeta, chunks: &dyn Indexer) {
-        self.generations.advance_chunks(chunks);
-        if let Some(chunks) = chunks.as_array_subset() {
-            self.invalidate_subchunks_in(array, array.chunks_subset(chunks).ok().as_ref());
-        } else {
-            for chunk_indices in chunks.iter_indices() {
-                self.invalidate_subchunks_in(
-                    array,
-                    array.chunk_subset(&chunk_indices).ok().as_ref(),
-                );
-            }
-        }
-    }
-
-    /// Invalidate the cached subchunks overlapping the `array_subset` of `array`, or every cached subchunk if they
-    /// cannot be determined.
-    fn invalidate_subchunks_in(
-        &self,
-        array: &dyn CachedArrayMeta,
-        array_subset: Option<&ArraySubset>,
-    ) {
-        if let Some(subchunks) = self.overlapping_subchunks(array, array_subset) {
-            self.subchunks.invalidate_chunks(&subchunks);
-        } else {
-            self.subchunks.invalidate();
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-impl<S: AsyncChunkCache + ?Sized, C> SubchunkCache<S, C> {
-    /// Asynchronously invalidate every cached subchunk.
-    ///
-    /// See [`SubchunkCache::invalidate_all_subchunks`].
     async fn async_invalidate_all_subchunks(&self) {
         self.generations.advance_all();
         self.subchunks.invalidate().await;
     }
 
-    /// Asynchronously invalidate the cached subchunks of the chunk at `chunk_indices` of `array`.
+    /// Invalidate the cached subchunks of the chunk at `chunk_indices` of `array`.
     ///
-    /// See [`SubchunkCache::invalidate_all_subchunks`].
+    /// See [`SubchunkCache::async_invalidate_all_subchunks`].
     async fn async_invalidate_chunk_subchunks(
         &self,
         array: &dyn CachedArrayMeta,
@@ -203,9 +157,11 @@ impl<S: AsyncChunkCache + ?Sized, C> SubchunkCache<S, C> {
             .await;
     }
 
-    /// Asynchronously invalidate the cached subchunks of the `chunks` of `array`.
+    /// Invalidate the cached subchunks of the `chunks` of `array`.
     ///
-    /// See [`SubchunkCache::invalidate_chunks_subchunks`].
+    /// A region of chunks invalidates the subchunks of their region of the subchunk grid at once.
+    ///
+    /// See [`SubchunkCache::async_invalidate_all_subchunks`].
     async fn async_invalidate_chunks_subchunks(
         &self,
         array: &dyn CachedArrayMeta,
@@ -226,8 +182,8 @@ impl<S: AsyncChunkCache + ?Sized, C> SubchunkCache<S, C> {
         }
     }
 
-    /// Asynchronously invalidate the cached subchunks overlapping the `array_subset` of `array`, or every cached
-    /// subchunk if they cannot be determined.
+    /// Invalidate the cached subchunks overlapping the `array_subset` of `array`, or every cached subchunk if they
+    /// cannot be determined.
     async fn async_invalidate_subchunks_in(
         &self,
         array: &dyn CachedArrayMeta,
@@ -323,53 +279,21 @@ impl Generation {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoCache;
 
-impl SyncArrayCacheOps for NoCache {
-    fn cached_partial_decoder(
-        &self,
-        array: &dyn SyncCachedArray,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
-        array.partial_decoder_with_options(chunk_indices, options, resources)
-    }
-
-    fn cached_chunk_bytes_if_exists(
-        &self,
-        array: &dyn SyncCachedArray,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError> {
-        Ok(array
-            .retrieve_chunk_if_exists_with_options(chunk_indices, options, resources)?
-            .map(Arc::new))
-    }
-
-    fn cached_partial_chunk_bytes(
-        &self,
-        array: &dyn SyncCachedArray,
-        chunk_indices: &[u64],
-        indexer: &dyn Indexer,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-        Ok(Arc::new(array.retrieve_partial_chunk_with_options(
-            chunk_indices,
-            indexer,
-            options,
-            resources,
-        )?))
-    }
-
-    fn invalidate_cached_all(&self, _array: &dyn CachedArrayMeta) {}
-
-    fn invalidate_cached_chunk(&self, _array: &dyn CachedArrayMeta, _chunk_indices: &[u64]) {}
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncCachedArray => SyncCachedArray,
+            AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits,
+        )
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32"))
+    )
+)]
 impl AsyncArrayCacheOps for NoCache {
     async fn async_cached_partial_decoder(
         &self,

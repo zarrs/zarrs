@@ -4,6 +4,8 @@
 use std::future::Future;
 use std::sync::{Arc, OnceLock};
 
+use ambisync::ambisync;
+
 #[cfg(feature = "async")]
 use futures::{StreamExt, TryStreamExt};
 #[cfg(not(target_arch = "wasm32"))]
@@ -34,9 +36,7 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
-#[cfg(feature = "async")]
-use zarrs_storage::MaybeSend;
-use zarrs_storage::{MaybeSync, StorageError};
+use zarrs_storage::{MaybeSend, MaybeSync, StorageError};
 
 /// A (synchronous or asynchronous) partial decoder `D` of a chunk, opened at most once and only if needed.
 ///
@@ -59,24 +59,23 @@ impl<D: ?Sized, F> LazyDecoder<D, F> {
     }
 }
 
-impl<F> LazyDecoder<dyn ArrayPartialDecoderTraits, F>
-where
-    F: Fn() -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>,
-{
-    fn get(&self) -> Result<&Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
-        if let Some(decoder) = self.decoder.get() {
-            return Ok(decoder);
-        }
-        let decoder = (self.open)()?;
-        Ok(self.decoder.get_or_init(|| decoder))
-    }
-}
-
-#[cfg(feature = "async")]
-impl<F, Fut> LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            "Async{}",
+            AsyncArrayCache => SyncArrayCache,
+            AsyncCachedArray => SyncCachedArray,
+            AsyncArrayCacheOps => SyncArrayCacheOps,
+            Fut => Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>,
+        )
+    ),
+    async(feature = "async")
+)]
+impl<F, #[async_only] Fut> LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>
 where
     F: Fn() -> Fut,
-    Fut: Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>>,
+    Fut: AsyncOpenedPartialDecoder,
 {
     async fn get(&self) -> Result<&Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
         if let Some(decoder) = self.decoder.get() {
@@ -85,6 +84,22 @@ where
         let decoder = (self.open)().await?;
         Ok(self.decoder.get_or_init(|| decoder))
     }
+}
+
+/// A future of the result of opening the asynchronous partial decoder of a [`LazyDecoder`].
+///
+/// The future type is a generic parameter of its own (`#[async_only]`), rather than an associated type of a trait bounding
+/// the opener, as the compiler cannot then prove that the futures of asynchronous trait methods are `Send`.
+#[cfg(feature = "async")]
+trait AsyncOpenedPartialDecoder:
+    Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>> + MaybeSend
+{
+}
+
+#[cfg(feature = "async")]
+impl<T> AsyncOpenedPartialDecoder for T where
+    T: Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>> + MaybeSend
+{
 }
 
 /// The decoded subchunks of a chunk, located in the global subchunk grid of an array.
@@ -352,33 +367,56 @@ impl<'a> ChunkSubchunks<'a> {
             .as_array_subset()
             .map(ArraySubsetTraits::to_array_subset))
     }
+}
 
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            "Async{}",
+            AsyncArrayCache => SyncArrayCache,
+            AsyncCachedArray => SyncCachedArray,
+            AsyncArrayCacheOps => SyncArrayCacheOps,
+            Fut => Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>,
+        )
+    ),
+    async(feature = "async")
+)]
+impl ChunkSubchunks<'_> {
     /// Return the cached value of the subchunk at `subchunk_indices`, decoding it with `decoder` if it is not cached.
     ///
     /// Returns [`None`] if the subchunk is not within the chunk.
-    fn subchunk<S, F>(
+    async fn async_subchunk<S, F, #[async_only] Fut>(
         &self,
         subchunks: &S,
         subchunk_indices: ArrayIndices,
-        decoder: &LazyDecoder<dyn ArrayPartialDecoderTraits, F>,
+        decoder: &LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Option<RegionSubchunk>, ArrayError>
     where
-        S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>,
+        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        F: Fn() -> Fut + MaybeSync,
+        Fut: AsyncOpenedPartialDecoder,
     {
         let Some(subchunk_subset) = self.subchunk_subset(&subchunk_indices)? else {
             return Ok(None);
         };
+        let decode = async || -> Result<ChunkCacheTypeDecoded, ArrayError> {
+            let bytes = decoder
+                .get()
+                .await?
+                .partial_decode(&self.local_subset(&subchunk_subset)?, options, resources)
+                .await?
+                .into_owned();
+            Ok(self.value(bytes))
+        };
         let value = subchunks
-            .try_get_or_insert_with(subchunk_indices, &mut || {
-                let bytes = decoder
-                    .get()?
-                    .partial_decode(&self.local_subset(&subchunk_subset)?, options, resources)?
-                    .into_owned();
-                Ok(self.value(bytes))
-            })
+            .try_get_or_insert_with(
+                subchunk_indices,
+                ambisync::alt!(sync => &mut &decode, async => std::pin::pin!(decode())),
+            )
+            .await
             .map_err(cache_error)?;
         Ok(Some((subchunk_subset, value)))
     }
@@ -386,19 +424,20 @@ impl<'a> ChunkSubchunks<'a> {
     /// Assemble the chunk-local `region` from decoded subchunks, decoding missing subchunks with `decoder`.
     ///
     /// Returns [`None`] if the region cannot be addressed by subchunks.
-    fn assemble<S, F>(
+    async fn async_assemble<S, F, #[async_only] Fut>(
         &self,
         subchunks: &S,
         region: &ArraySubset,
-        decoder: &LazyDecoder<dyn ArrayPartialDecoderTraits, F>,
+        decoder: &LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Option<AssembledRegion>, ArrayError>
     where
-        S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> + MaybeSync,
+        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        F: Fn() -> Fut + MaybeSync,
+        Fut: AsyncOpenedPartialDecoder,
     {
-        self.assemble_with(
+        self.async_assemble_with(
             subchunks,
             region,
             decoder,
@@ -406,32 +445,35 @@ impl<'a> ChunkSubchunks<'a> {
             resources,
             |plan, region_subchunks| self.compose(plan, region_subchunks),
         )
+        .await
     }
 
     /// Retrieve the decoded subchunks overlapping the chunk-local `region`, decoding missing subchunks with `decoder`,
     /// and `compose` the region from them.
     ///
     /// Returns [`None`] if the region cannot be addressed by subchunks.
-    fn assemble_with<S, F, R>(
+    async fn async_assemble_with<S, F, #[async_only] Fut, R>(
         &self,
         subchunks: &S,
         region: &ArraySubset,
-        decoder: &LazyDecoder<dyn ArrayPartialDecoderTraits, F>,
+        decoder: &LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>,
         options: &CodecOptions,
         resources: &Resources,
-        compose: impl FnOnce(&RegionPlan, &[RegionSubchunk]) -> Result<R, ArrayError>,
+        compose: impl FnOnce(&RegionPlan, &[RegionSubchunk]) -> Result<R, ArrayError> + MaybeSend,
     ) -> Result<Option<R>, ArrayError>
     where
-        S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> + MaybeSync,
+        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        F: Fn() -> Fut + MaybeSync,
+        Fut: AsyncOpenedPartialDecoder,
     {
         let Some(plan) = self.plan(region)? else {
             return Ok(None);
         };
         if plan.subchunks.num_elements_usize() == 1 {
             let subchunk_indices = plan.subchunks.start().into();
-            let Some(subchunk) =
-                self.subchunk(subchunks, subchunk_indices, decoder, options, resources)?
+            let Some(subchunk) = self
+                .async_subchunk(subchunks, subchunk_indices, decoder, options, resources)
+                .await?
             else {
                 return Ok(None);
             };
@@ -442,8 +484,9 @@ impl<'a> ChunkSubchunks<'a> {
         // Retrieve subchunks in turn until a miss opens the chunk, so that it is opened once and not by a concurrent
         // retrieval, which could reenter its opening on the same thread
         while let Some(subchunk_indices) = indices.next() {
-            let Some(subchunk) =
-                self.subchunk(subchunks, subchunk_indices, decoder, options, resources)?
+            let Some(subchunk) = self
+                .async_subchunk(subchunks, subchunk_indices, decoder, options, resources)
+                .await?
             else {
                 return Ok(None);
             };
@@ -451,14 +494,17 @@ impl<'a> ChunkSubchunks<'a> {
             if decoder.is_open() {
                 // The chunk is missing subchunks, so retrieve the rest concurrently
                 let remaining = indices.collect();
-                if !self.subchunks_concurrently(
-                    subchunks,
-                    remaining,
-                    decoder,
-                    &mut region_subchunks,
-                    options,
-                    resources,
-                )? {
+                if !self
+                    .async_subchunks_concurrently(
+                        subchunks,
+                        remaining,
+                        decoder,
+                        &mut region_subchunks,
+                        options,
+                        resources,
+                    )
+                    .await?
+                {
                     return Ok(None);
                 }
                 break;
@@ -472,35 +518,51 @@ impl<'a> ChunkSubchunks<'a> {
     ///
     /// Returns false if a subchunk is not within the chunk.
     // Not inlined, to keep the retrieval of cached subchunks in `assemble` lean
-    #[inline(never)]
-    fn subchunks_concurrently<S, F>(
+    #[sync_attr(inline(never))]
+    async fn async_subchunks_concurrently<S, F, #[async_only] Fut>(
         &self,
         subchunks: &S,
         subchunk_indices: Vec<ArrayIndices>,
-        decoder: &LazyDecoder<dyn ArrayPartialDecoderTraits, F>,
+        decoder: &LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>,
         region_subchunks: &mut Vec<RegionSubchunk>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<bool, ArrayError>
     where
-        S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> + MaybeSync,
+        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        F: Fn() -> Fut + MaybeSync,
+        Fut: AsyncOpenedPartialDecoder,
     {
         if subchunk_indices.is_empty() {
             return Ok(true);
         }
         let (concurrent_limit, resources) = remaining_resources(subchunk_indices.len(), resources);
-        let retrieved = subchunk_indices
-            .concurrent_limit(concurrent_limit)
-            .map(|subchunk_indices| {
-                self.subchunk(subchunks, subchunk_indices, decoder, options, &resources)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        for subchunk in retrieved {
-            let Some(subchunk) = subchunk else {
-                return Ok(false);
-            };
-            region_subchunks.push(subchunk);
+        ambisync::sync_only! {
+            let retrieved = subchunk_indices
+                .concurrent_limit(concurrent_limit)
+                .map(|subchunk_indices| {
+                    self.subchunk(subchunks, subchunk_indices, decoder, options, &resources)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            for subchunk in retrieved {
+                let Some(subchunk) = subchunk else {
+                    return Ok(false);
+                };
+                region_subchunks.push(subchunk);
+            }
+        }
+        ambisync::async_only! {
+            let mut retrieved = futures::stream::iter(subchunk_indices)
+                .map(|subchunk_indices| {
+                    self.async_subchunk(subchunks, subchunk_indices, decoder, options, &resources)
+                })
+                .buffered(concurrent_limit);
+            while let Some(subchunk) = retrieved.try_next().await? {
+                let Some(subchunk) = subchunk else {
+                    return Ok(false);
+                };
+                region_subchunks.push(subchunk);
+            }
         }
         Ok(true)
     }
@@ -508,210 +570,7 @@ impl<'a> ChunkSubchunks<'a> {
     /// Retrieve the elements of the chunk selected by `indexer` from decoded subchunks.
     ///
     /// Returns [`None`] if they cannot be addressed by subchunks.
-    fn retrieve_indexer<S, F>(
-        &self,
-        subchunks: &S,
-        indexer: &dyn Indexer,
-        decoder: &LazyDecoder<dyn ArrayPartialDecoderTraits, F>,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
-    where
-        S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> + MaybeSync,
-    {
-        let Some(region) = self.indexer_region(indexer)? else {
-            return Ok(None);
-        };
-        // An empty selection needs no subchunks, and the chunk cache need not open the chunk
-        if region.is_empty() {
-            return self.fill(0).map(Some);
-        }
-        self.assemble(subchunks, &region, decoder, options, resources)?
-            .map(|assembled| self.region_bytes(assembled, region.num_elements()))
-            .transpose()
-    }
-
-    /// Decode the elements of the chunk selected by `indexer` from decoded subchunks into `output_target`, which has the
-    /// shape of the selection.
-    ///
-    /// Returns false if they cannot be addressed by subchunks.
-    fn retrieve_indexer_into<S, F>(
-        &self,
-        subchunks: &S,
-        indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesTarget<'_>,
-        decoder: &LazyDecoder<dyn ArrayPartialDecoderTraits, F>,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<bool, ArrayError>
-    where
-        S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> + MaybeSync,
-    {
-        let Some(region) = self.indexer_region(indexer)? else {
-            return Ok(false);
-        };
-        // An empty selection has nothing to decode, and the chunk cache need not open the chunk
-        if region.is_empty() {
-            return Ok(true);
-        }
-        Ok(self
-            .assemble_with(
-                subchunks,
-                &region,
-                decoder,
-                options,
-                resources,
-                |plan, region_subchunks| {
-                    self.compose_into(&plan.array_region, region_subchunks, output_target)
-                },
-            )?
-            .is_some())
-    }
-
-    /// Asynchronously return the cached value of the subchunk at `subchunk_indices`, decoding it with `decoder` if it
-    /// is not cached.
-    ///
-    /// Returns [`None`] if the subchunk is not within the chunk.
-    #[cfg(feature = "async")]
-    async fn async_subchunk<S, F, Fut>(
-        &self,
-        subchunks: &S,
-        subchunk_indices: ArrayIndices,
-        decoder: &LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Option<RegionSubchunk>, ArrayError>
-    where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Fut + MaybeSync,
-        Fut: Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>>
-            + MaybeSend,
-    {
-        let Some(subchunk_subset) = self.subchunk_subset(&subchunk_indices)? else {
-            return Ok(None);
-        };
-        let value = subchunks
-            .try_get_or_insert_with(
-                subchunk_indices,
-                std::pin::pin!(async {
-                    let bytes = decoder
-                        .get()
-                        .await?
-                        .partial_decode(&self.local_subset(&subchunk_subset)?, options, resources)
-                        .await?
-                        .into_owned();
-                    Ok(self.value(bytes))
-                }),
-            )
-            .await
-            .map_err(cache_error)?;
-        Ok(Some((subchunk_subset, value)))
-    }
-
-    /// Asynchronously assemble the chunk-local `region` from decoded subchunks, decoding missing subchunks with
-    /// `decoder`.
-    ///
-    /// Returns [`None`] if the region cannot be addressed by subchunks.
-    #[cfg(feature = "async")]
-    async fn async_assemble<S, F, Fut>(
-        &self,
-        subchunks: &S,
-        region: &ArraySubset,
-        decoder: &LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Option<AssembledRegion>, ArrayError>
-    where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Fut + MaybeSync,
-        Fut: Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>>
-            + MaybeSend,
-    {
-        self.async_assemble_with(
-            subchunks,
-            region,
-            decoder,
-            options,
-            resources,
-            |plan, region_subchunks| self.compose(plan, region_subchunks),
-        )
-        .await
-    }
-
-    /// Asynchronously retrieve the decoded subchunks overlapping the chunk-local `region`, decoding missing subchunks
-    /// with `decoder`, and `compose` the region from them.
-    ///
-    /// Returns [`None`] if the region cannot be addressed by subchunks.
-    #[cfg(feature = "async")]
-    async fn async_assemble_with<S, F, Fut, R>(
-        &self,
-        subchunks: &S,
-        region: &ArraySubset,
-        decoder: &LazyDecoder<dyn AsyncArrayPartialDecoderTraits, F>,
-        options: &CodecOptions,
-        resources: &Resources,
-        compose: impl FnOnce(&RegionPlan, &[RegionSubchunk]) -> Result<R, ArrayError> + MaybeSend,
-    ) -> Result<Option<R>, ArrayError>
-    where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
-        F: Fn() -> Fut + MaybeSync,
-        Fut: Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>>
-            + MaybeSend,
-    {
-        let Some(plan) = self.plan(region)? else {
-            return Ok(None);
-        };
-        if plan.subchunks.num_elements_usize() == 1 {
-            let subchunk_indices = plan.subchunks.start().into();
-            let Some(subchunk) = self
-                .async_subchunk(subchunks, subchunk_indices, decoder, options, resources)
-                .await?
-            else {
-                return Ok(None);
-            };
-            return compose(&plan, std::slice::from_ref(&subchunk)).map(Some);
-        }
-        let mut indices = plan.subchunks.indices().into_iter();
-        let mut region_subchunks = Vec::with_capacity(plan.subchunks.num_elements_usize());
-        // Retrieve subchunks in turn until a miss opens the chunk, so that it is opened once
-        for subchunk_indices in &mut indices {
-            let Some(subchunk) = self
-                .async_subchunk(subchunks, subchunk_indices, decoder, options, resources)
-                .await?
-            else {
-                return Ok(None);
-            };
-            region_subchunks.push(subchunk);
-            if decoder.is_open() {
-                break;
-            }
-        }
-        // Retrieve the remaining subchunks concurrently, as the chunk is missing subchunks
-        let remaining = indices.collect::<Vec<_>>();
-        if !remaining.is_empty() {
-            let (concurrent_limit, resources) = remaining_resources(remaining.len(), resources);
-            let mut remaining = futures::stream::iter(remaining)
-                .map(|subchunk_indices| {
-                    self.async_subchunk(subchunks, subchunk_indices, decoder, options, &resources)
-                })
-                .buffered(concurrent_limit);
-            while let Some(subchunk) = remaining.try_next().await? {
-                let Some(subchunk) = subchunk else {
-                    return Ok(None);
-                };
-                region_subchunks.push(subchunk);
-            }
-        }
-        compose(&plan, &region_subchunks).map(Some)
-    }
-
-    /// Asynchronously retrieve the elements of the chunk selected by `indexer` from decoded subchunks.
-    ///
-    /// Returns [`None`] if they cannot be addressed by subchunks.
-    #[cfg(feature = "async")]
-    async fn async_retrieve_indexer<S, F, Fut>(
+    async fn async_retrieve_indexer<S, F, #[async_only] Fut>(
         &self,
         subchunks: &S,
         indexer: &dyn Indexer,
@@ -722,8 +581,7 @@ impl<'a> ChunkSubchunks<'a> {
     where
         S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
         F: Fn() -> Fut + MaybeSync,
-        Fut: Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>>
-            + MaybeSend,
+        Fut: AsyncOpenedPartialDecoder,
     {
         let Some(region) = self.indexer_region(indexer)? else {
             return Ok(None);
@@ -738,12 +596,11 @@ impl<'a> ChunkSubchunks<'a> {
             .transpose()
     }
 
-    /// Asynchronously decode the elements of the chunk selected by `indexer` from decoded subchunks into
-    /// `output_target`, which has the shape of the selection.
+    /// Decode the elements of the chunk selected by `indexer` from decoded subchunks into `output_target`, which has the
+    /// shape of the selection.
     ///
     /// Returns false if they cannot be addressed by subchunks.
-    #[cfg(feature = "async")]
-    async fn async_retrieve_indexer_into<S, F, Fut>(
+    async fn async_retrieve_indexer_into<S, F, #[async_only] Fut>(
         &self,
         subchunks: &S,
         indexer: &dyn Indexer,
@@ -755,8 +612,7 @@ impl<'a> ChunkSubchunks<'a> {
     where
         S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
         F: Fn() -> Fut + MaybeSync,
-        Fut: Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>>
-            + MaybeSend,
+        Fut: AsyncOpenedPartialDecoder,
     {
         let Some(region) = self.indexer_region(indexer)? else {
             return Ok(false);
@@ -781,173 +637,22 @@ impl<'a> ChunkSubchunks<'a> {
     }
 }
 
-impl<S, C> SyncArrayCacheOps for SubchunkCache<S, C>
-where
-    S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
-    C: SyncArrayCache,
-{
-    fn cached_partial_decoder(
-        &self,
-        array: &dyn SyncCachedArray,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
-        let chunk = ChunkSubchunks::new(array, self.level, chunk_indices)?;
-        // Before the chunk is opened, so that an invalidation while it opens retires the decoder
-        let generation = self.generations.snapshot(chunk_indices);
-        let inner = self
-            .chunks
-            .cached_partial_decoder(array, chunk_indices, options, resources)?;
-        Ok(Arc::new(SubchunkCachePartialDecoder::new(
-            self.subchunks.clone(),
-            &chunk,
-            inner,
-            generation,
-        )))
-    }
-
-    fn cached_chunk_bytes_if_exists(
-        &self,
-        array: &dyn SyncCachedArray,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError> {
-        let chunk = ChunkSubchunks::new(array, self.level, chunk_indices)?;
-        let decoder = LazyDecoder::new(|| {
-            self.chunks
-                .cached_partial_decoder(array, chunk_indices, options, resources)
-        });
-        let whole_chunk = chunk.whole_chunk();
-        match chunk.assemble(&*self.subchunks, &whole_chunk, &decoder, options, resources)? {
-            Some(AssembledRegion::Bytes(bytes)) => Ok(Some(bytes)),
-            // A chunk of only fill subchunks may not be stored
-            Some(AssembledRegion::Fill) => decoder
-                .get()?
-                .exists()?
-                .then(|| chunk.fill(whole_chunk.num_elements()))
-                .transpose(),
-            None => {
-                self.chunks
-                    .cached_chunk_bytes_if_exists(array, chunk_indices, options, resources)
-            }
-        }
-    }
-
-    fn cached_chunk_bytes(
-        &self,
-        array: &dyn SyncCachedArray,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-        let chunk = ChunkSubchunks::new(array, self.level, chunk_indices)?;
-        let decoder = LazyDecoder::new(|| {
-            self.chunks
-                .cached_partial_decoder(array, chunk_indices, options, resources)
-        });
-        let whole_chunk = chunk.whole_chunk();
-        match chunk.assemble(&*self.subchunks, &whole_chunk, &decoder, options, resources)? {
-            // A chunk of only fill subchunks is the fill value whether or not it is stored
-            Some(assembled) => chunk.region_bytes(assembled, whole_chunk.num_elements()),
-            None => self
-                .chunks
-                .cached_chunk_bytes(array, chunk_indices, options, resources),
-        }
-    }
-
-    fn cached_partial_chunk_bytes(
-        &self,
-        array: &dyn SyncCachedArray,
-        chunk_indices: &[u64],
-        indexer: &dyn Indexer,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-        let chunk = ChunkSubchunks::new(array, self.level, chunk_indices)?;
-        let decoder = LazyDecoder::new(|| {
-            self.chunks
-                .cached_partial_decoder(array, chunk_indices, options, resources)
-        });
-        if let Some(bytes) =
-            chunk.retrieve_indexer(&*self.subchunks, indexer, &decoder, options, resources)?
-        {
-            Ok(bytes)
-        } else {
-            self.chunks.cached_partial_chunk_bytes(
-                array,
-                chunk_indices,
-                indexer,
-                options,
-                resources,
-            )
-        }
-    }
-
-    fn cached_partial_chunk_into(
-        &self,
-        array: &dyn SyncCachedArray,
-        chunk_indices: &[u64],
-        indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesTarget<'_>,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<(), ArrayError> {
-        // Subchunks are placed by their position in the selection, which needs a fixed length target of its shape
-        if !optional_innermost(array.data_type()).is_fixed()
-            || output_target.shape() != indexer.output_shape()
-        {
-            let bytes =
-                self.cached_partial_chunk_bytes(array, chunk_indices, indexer, options, resources)?;
-            return decode_into_array_bytes_target(&bytes, output_target)
-                .map_err(ArrayError::CodecError);
-        }
-        let chunk = ChunkSubchunks::new(array, self.level, chunk_indices)?;
-        let decoder = LazyDecoder::new(|| {
-            self.chunks
-                .cached_partial_decoder(array, chunk_indices, options, resources)
-        });
-        if chunk.retrieve_indexer_into(
-            &*self.subchunks,
-            indexer,
-            output_target,
-            &decoder,
-            options,
-            resources,
-        )? {
-            Ok(())
-        } else {
-            self.chunks.cached_partial_chunk_into(
-                array,
-                chunk_indices,
-                indexer,
-                output_target,
-                options,
-                resources,
-            )
-        }
-    }
-
-    fn invalidate_cached_all(&self, array: &dyn CachedArrayMeta) {
-        self.chunks.invalidate_cached_all(array);
-        self.invalidate_all_subchunks();
-    }
-
-    fn invalidate_cached_chunk(&self, array: &dyn CachedArrayMeta, chunk_indices: &[u64]) {
-        self.chunks.invalidate_cached_chunk(array, chunk_indices);
-        self.invalidate_chunk_subchunks(array, chunk_indices);
-    }
-
-    fn invalidate_cached_chunks(&self, array: &dyn CachedArrayMeta, chunks: &dyn Indexer) {
-        self.chunks.invalidate_cached_chunks(array, chunks);
-        self.invalidate_chunks_subchunks(array, chunks);
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            "Async{}",
+            AsyncArrayCache => SyncArrayCache,
+            AsyncCachedArray => SyncCachedArray,
+            AsyncArrayCacheOps => SyncArrayCacheOps,
+        )
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32"))
+    )
+)]
 impl<S, C> AsyncArrayCacheOps for SubchunkCache<S, C>
 where
     S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
@@ -1210,89 +915,22 @@ impl<S: ?Sized, D: ?Sized> SubchunkCachePartialDecoder<S, D> {
     }
 }
 
-impl<S> ArrayPartialDecoderSubchunkingTraits
-    for SubchunkCachePartialDecoder<S, dyn ArrayPartialDecoderTraits>
-where
-    S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
-{
-    fn local_subchunk_grids(
-        &self,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<Vec<Option<ChunkGrid>>, CodecError> {
-        self.inner.local_subchunk_grids(options, resources)
-    }
-}
-
-impl<S> ArrayPartialDecoderTraits for SubchunkCachePartialDecoder<S, dyn ArrayPartialDecoderTraits>
-where
-    S: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
-{
-    fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-
-    fn exists(&self) -> Result<bool, StorageError> {
-        self.inner.exists()
-    }
-
-    fn size_held(&self) -> usize {
-        self.inner.size_held()
-    }
-
-    fn partial_decode(
-        &self,
-        indexer: &dyn Indexer,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        if !self.generation.is_current() {
-            return self.inner.partial_decode(indexer, options, resources);
-        }
-        let decoder = LazyDecoder::new(|| Ok(Arc::clone(&self.inner)));
-        match self
-            .chunk()
-            .retrieve_indexer(&*self.subchunks, indexer, &decoder, options, resources)
-            .map_err(codec_error)?
-        {
-            Some(bytes) => Ok(Arc::unwrap_or_clone(bytes)),
-            None => self.inner.partial_decode(indexer, options, resources),
-        }
-    }
-
-    fn partial_decode_into(
-        &self,
-        indexer: &dyn Indexer,
-        output_target: &mut ArrayBytesTarget<'_>,
-        options: &CodecOptions,
-        resources: &Resources,
-    ) -> Result<(), CodecError> {
-        if !self.generation.is_current() {
-            return self
-                .inner
-                .partial_decode_into(indexer, output_target, options, resources);
-        }
-        let decoder = LazyDecoder::new(|| Ok(Arc::clone(&self.inner)));
-        match self
-            .chunk()
-            .retrieve_indexer(&*self.subchunks, indexer, &decoder, options, resources)
-            .map_err(codec_error)?
-        {
-            Some(bytes) => decode_into_array_bytes_target(&bytes, output_target),
-            None => self
-                .inner
-                .partial_decode_into(indexer, output_target, options, resources),
-        }
-    }
-
-    fn supports_partial_decode(&self) -> bool {
-        true
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            "Async{}",
+            AsyncArrayCache => SyncArrayCache,
+            AsyncCachedArray => SyncCachedArray,
+            AsyncArrayCacheOps => SyncArrayCacheOps,
+        )
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32"))
+    )
+)]
 impl<S> AsyncArrayPartialDecoderSubchunkingTraits
     for SubchunkCachePartialDecoder<S, dyn AsyncArrayPartialDecoderTraits>
 where
@@ -1307,9 +945,22 @@ where
     }
 }
 
-#[cfg(feature = "async")]
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[ambisync(
+    sync(
+        fns("async_{}"),
+        types(
+            "Async{}",
+            AsyncArrayCache => SyncArrayCache,
+            AsyncCachedArray => SyncCachedArray,
+            AsyncArrayCacheOps => SyncArrayCacheOps,
+        )
+    ),
+    async(
+        feature = "async",
+        flavor = async_trait,
+        send = cfg(not(target_arch = "wasm32"))
+    )
+)]
 impl<S> AsyncArrayPartialDecoderTraits
     for SubchunkCachePartialDecoder<S, dyn AsyncArrayPartialDecoderTraits>
 where
