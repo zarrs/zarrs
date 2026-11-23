@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 #[cfg(feature = "async")]
-use super::chunk_cache::AsyncArrayCache;
-use super::chunk_cache::SyncArrayCache;
+use super::cache::AsyncArrayCache;
+use super::cache::SyncArrayCache;
 use super::{Array, Indexer};
 use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 use zarrs_storage::{MaybeSend, MaybeSync};
@@ -13,8 +13,8 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// the cache, while write/update operations delegate to the inner array and
 /// invalidate cached chunks that may have changed.
 ///
-/// The cache is a [`SyncArrayCache`](super::chunk_cache::SyncArrayCache) for synchronous operations, such as any
-/// [`ChunkCache`](super::chunk_cache::ChunkCache). The cache determines how it serves each retrieval and what each
+/// The cache is a [`SyncArrayCache`](super::cache::SyncArrayCache) for synchronous operations, such as any
+/// [`ChunkCache`](super::cache::ChunkCache). The cache determines how it serves each retrieval and what each
 /// write invalidates; a chunk cache invalidates whole chunks.
 ///
 /// The cache belongs to this array. Clones and rebinds of an `ArrayCached` (e.g.
@@ -25,7 +25,7 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// ```compile_fail
 /// # use std::sync::Arc;
 /// # use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
-/// # use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
+/// # use zarrs::array::cache::ChunkCacheDecodedLruChunkLimit;
 /// # use zarrs_storage::store::MemoryStore;
 /// let store = Arc::new(MemoryStore::new());
 /// let builder = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8);
@@ -77,7 +77,7 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// After writing through the inner [`Array`] or another handle, invalidate what changed with
 /// [`invalidate`](ArrayCached::invalidate), [`invalidate_chunk`](ArrayCached::invalidate_chunk), or
 /// [`invalidate_chunks`](ArrayCached::invalidate_chunks), rather than through the cache itself, so that every layer
-/// of a composed cache (e.g. a [`SubchunkCache`](super::chunk_cache::SubchunkCache)) is invalidated.
+/// of a composed cache (e.g. a [`SubchunkCache`](super::cache::SubchunkCache)) is invalidated.
 ///
 /// Invalidation makes a cache coherent with writes that *precede* the retrievals of
 /// the chunks they invalidate. It does not make concurrent reads and writes of the same
@@ -98,7 +98,7 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// ```compile_fail
 /// # use std::sync::Arc;
 /// # use zarrs::array::{ArrayBuilder, ArrayCached, data_type};
-/// # use zarrs::array::chunk_cache::ChunkCacheEncodedLruChunkLimit;
+/// # use zarrs::array::cache::ChunkCacheEncodedLruChunkLimit;
 /// # use zarrs_storage::store::AsyncMemoryStore;
 /// # async fn f() {
 /// let store = Arc::new(AsyncMemoryStore::new());
@@ -114,7 +114,7 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// Caches of synchronous partial decoders only support synchronous operations, and
 /// caches of asynchronous partial decoders only support asynchronous operations
 /// (see `SyncChunkCacheType` and `AsyncChunkCacheType` in
-/// [`chunk_cache`](super::chunk_cache)).
+/// [`cache`](super::cache)).
 #[derive(Debug)]
 pub struct ArrayCached<TStorage: ?Sized, C: ?Sized> {
     array: Arc<Array<TStorage>>,

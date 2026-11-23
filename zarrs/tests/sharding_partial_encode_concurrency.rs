@@ -123,7 +123,7 @@ fn nested_sharding_preserves_encoded_bytes_and_unconstrained_compute() {
 
 #[test]
 fn encoded_cache_uses_the_resources_of_each_read() {
-    use zarrs::array::chunk_cache::ChunkCacheEncodedLruChunkLimit;
+    use zarrs::array::cache::ChunkCacheEncodedLruChunkLimit;
     use zarrs::array::{ArrayCached, Resources};
 
     let codec = Arc::new(RecordingCodec::default());

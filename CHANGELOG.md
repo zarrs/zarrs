@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayError::{InvalidArraySubset,InvalidChunkSubset}` box their `ArraySubset`, so array results stay small now that subsets are stored inline
 - **Breaking**: Remove the deprecated `_elements` / `_ndarray` method variants of `Array`, array extension traits, and `ChunkCache`; use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 - Chunk caching
+  - **Breaking**: Rename the `chunk_cache` module to `cache`, as it holds subchunk and array caches as well as chunk caches
   - **Breaking**: Add `ArrayCached<TStorage, C>`, which pairs an `Array` with a chunk cache, and refactor `ChunkCache` into a pure key/chunk value container
     - `ArrayCached` owns its cache, and `SubchunkCache` its subchunk cache, so a cache is never shared between arrays or subchunk levels
     - Remove the `ChunkCache` `retrieve_*` methods, which are provided by `ArrayCached`, and chunk cache constructors no longer take an array (e.g. `ChunkCacheDecodedLruChunkLimit::new(capacity)`)

@@ -7,7 +7,7 @@ use super::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, ChunkGrid, CodecOptions,
     DataType, IntoArrayBytes, MaybeSend,
 };
-use crate::array::chunk_cache::AsyncArrayCache;
+use crate::array::cache::AsyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesTarget, AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits,
@@ -222,7 +222,7 @@ where
 mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use super::*;
-    use crate::array::chunk_cache::{
+    use crate::array::cache::{
         AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
         AsyncChunkCachePartialDecoderLruChunkLimit,
     };

@@ -1,4 +1,4 @@
-use crate::array::chunk_cache::SyncArrayCache;
+use crate::array::cache::SyncArrayCache;
 use inherent::inherent;
 use zarrs_codec::{CowBytes, Resources};
 

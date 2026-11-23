@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs::array::Resources;
 
-use zarrs::array::chunk_cache::{
+use zarrs::array::cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
     ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, ChunkCacheTypeDecoded,
     SubchunkCache,
@@ -1194,7 +1194,7 @@ fn cached_partial_chunk_reads_match_uncached() -> TestResult {
 fn assert_cache_hits_and_invalidation<C>(cache: C, caches_full_chunk_reads: bool) -> TestResult
 where
     C: ChunkCache + 'static,
-    C::Value: zarrs::array::chunk_cache::SyncChunkCacheType,
+    C::Value: zarrs::array::cache::SyncChunkCacheType,
 {
     let (array, store) = fixture();
     array.store_chunk(&[0, 0], &[1u8; 9], &Resources::default())?;
@@ -1283,7 +1283,7 @@ fn array_cached_cache_size_sums_cached_chunks() -> TestResult {
 fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
 where
     C: ChunkCache + 'static,
-    C::Value: zarrs::array::chunk_cache::SyncChunkCacheType,
+    C::Value: zarrs::array::cache::SyncChunkCacheType,
 {
     let (array, store) = fixture();
     populate(array.as_ref())?;
@@ -1526,7 +1526,7 @@ mod async_cached {
     use std::sync::Arc;
     use zarrs::array::Resources;
 
-    use zarrs::array::chunk_cache::{
+    use zarrs::array::cache::{
         AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
         AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
         ChunkCacheTypeDecoded,

@@ -594,7 +594,7 @@ fn many_chunks_subset() -> ArraySubset {
 #[test]
 fn retrieve_array_subset_many_chunks_zstd_cached() {
     use zarrs::array::ArrayCached;
-    use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
+    use zarrs::array::cache::ChunkCacheDecodedLruChunkLimit;
     let cached = ArrayCached::new(
         array(&[64, 64], true, None),
         ChunkCacheDecodedLruChunkLimit::new(16),
@@ -651,7 +651,7 @@ fn async_retrieve_array_subset_many_chunks_zstd() {
 #[test]
 fn async_retrieve_array_subset_many_chunks_zstd_cached() {
     use zarrs::array::ArrayCached;
-    use zarrs::array::chunk_cache::AsyncChunkCacheDecodedLruChunkLimit;
+    use zarrs::array::cache::AsyncChunkCacheDecodedLruChunkLimit;
     let cached = ArrayCached::new(
         async_array_many_chunks(),
         AsyncChunkCacheDecodedLruChunkLimit::new(16),

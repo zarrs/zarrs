@@ -7,7 +7,7 @@ use std::error::Error;
 use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs::array::chunk_cache::ChunkCachePartialDecoderLruChunkLimit;
+use zarrs::array::cache::ChunkCachePartialDecoderLruChunkLimit;
 use zarrs::array::codec::BitroundCodec;
 use zarrs::array::{
     ArrayBuilder, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached, ArraySubset,
@@ -64,7 +64,7 @@ fn missing_cached_chunks_preserve_lossy_fill_value() -> Result<(), Box<dyn Error
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_missing_cached_chunks_preserve_lossy_fill_value() -> Result<(), Box<dyn Error>> {
-    use zarrs::array::chunk_cache::AsyncChunkCachePartialDecoderLruChunkLimit;
+    use zarrs::array::cache::AsyncChunkCachePartialDecoderLruChunkLimit;
     use zarrs::storage::store::AsyncMemoryStore;
 
     let array = builder().build_arc(Arc::new(AsyncMemoryStore::new()), "/array")?;

@@ -11,12 +11,12 @@ use std::sync::{Arc, Mutex};
 #[cfg(feature = "async")]
 use zarrs::array::AsyncArrayReadOps;
 #[cfg(feature = "async")]
-use zarrs::array::chunk_cache::{
+use zarrs::array::cache::{
     AsyncArrayCache, AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit,
     AsyncChunkCacheDecodedLruSizeLimit, AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCacheInit,
     AsyncChunkCachePartialDecoderLruChunkLimit,
 };
-use zarrs::array::chunk_cache::{
+use zarrs::array::cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
     ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache,
     SyncArrayCache,

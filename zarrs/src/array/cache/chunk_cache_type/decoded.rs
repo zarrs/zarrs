@@ -8,8 +8,8 @@ use super::{
 };
 use crate::array::array_ops::fill_value_bytes;
 #[cfg(feature = "async")]
-use crate::array::chunk_cache::{AsyncCachedArray, AsyncChunkCache, SealedAsync};
-use crate::array::chunk_cache::{
+use crate::array::cache::{AsyncCachedArray, AsyncChunkCache, SealedAsync};
+use crate::array::cache::{
     CachedArrayMeta, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, SealedSync, SyncCachedArray,
 };
 use crate::array::{

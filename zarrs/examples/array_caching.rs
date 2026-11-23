@@ -23,7 +23,7 @@ use std::error::Error;
 use std::fmt::Write;
 use std::sync::Arc;
 
-use zarrs::array::chunk_cache::{
+use zarrs::array::cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
     ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache,
     SyncArrayCache,

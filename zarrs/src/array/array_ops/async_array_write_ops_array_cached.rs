@@ -5,7 +5,7 @@ use super::{
     ArrayCached, ArrayError, ArraySubsetTraits, AsyncArrayWriteOps, AsyncWritableStorageTraits,
     Indexer, IntoArrayBytes, MaybeSend, StorageError,
 };
-use crate::array::chunk_cache::AsyncArrayCache;
+use crate::array::cache::AsyncArrayCache;
 
 #[inherent]
 impl<TStorage, C> AsyncArrayWriteOps for ArrayCached<TStorage, C>

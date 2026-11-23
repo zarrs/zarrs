@@ -4,16 +4,17 @@ use super::{
     cache_error, copy_array_fill_value_into, validate_chunk_indices,
     validate_partial_chunk_indexer, validate_target_num_elements,
 };
-use crate::array::chunk_cache::{
-    ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync, SyncCachedArray,
+use crate::array::cache::{
+    AsyncCachedArray, AsyncChunkCache, ChunkCacheType, ChunkCacheTypeAsyncPartialDecoder,
+    SealedAsync,
 };
 use crate::array::{
     ArrayBytes, ArrayError, ArraySubset, ChunkShapeTraits, CodecOptions, Indexer, Resources,
     chunk_shape_to_array_shape,
 };
-use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesTarget, AsyncArrayPartialDecoderTraits};
 
-impl ChunkCacheType for ChunkCacheTypePartialDecoder {
+impl ChunkCacheType for ChunkCacheTypeAsyncPartialDecoder {
     fn size(&self) -> usize {
         self.as_ref().size_held()
     }
@@ -22,54 +23,62 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
 /// Retrieve the partial decoder of a chunk from the cache, or create it on a miss.
 ///
 /// The chunk indices must be validated with [`validate_chunk_indices`] first, so that an out-of-bounds chunk is never inserted.
-fn retrieve_partial_decoder<C>(
+async fn async_retrieve_partial_decoder<C>(
     cache: &C,
-    array: &dyn SyncCachedArray,
+    array: &dyn AsyncCachedArray,
     chunk_indices: &[u64],
     options: &CodecOptions,
     resources: &Resources,
-) -> Result<ChunkCacheTypePartialDecoder, ArrayError>
+) -> Result<ChunkCacheTypeAsyncPartialDecoder, ArrayError>
 where
-    C: ChunkCache<Value = ChunkCacheTypePartialDecoder> + ?Sized,
+    C: AsyncChunkCache<Value = ChunkCacheTypeAsyncPartialDecoder> + ?Sized,
 {
     cache
-        .try_get_or_insert_with(chunk_indices.into(), &mut || {
-            array.partial_decoder_with_options(chunk_indices, options, resources)
-        })
+        .try_get_or_insert_with(
+            chunk_indices.into(),
+            std::pin::pin!(async move {
+                array
+                    .async_partial_decoder_with_options(chunk_indices, options, resources)
+                    .await
+            }),
+        )
+        .await
         .map_err(cache_error)
 }
 
-impl SealedSync for ChunkCacheTypePartialDecoder {
-    fn partial_decoder<C>(
+impl SealedAsync for ChunkCacheTypeAsyncPartialDecoder {
+    async fn async_partial_decoder<C>(
         cache: &C,
-        array: &dyn SyncCachedArray,
+        array: &dyn AsyncCachedArray,
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
-        retrieve_partial_decoder(cache, array, chunk_indices, options, resources)
+        async_retrieve_partial_decoder(cache, array, chunk_indices, options, resources).await
     }
 
-    fn retrieve_chunk_bytes_if_exists<C>(
+    async fn async_retrieve_chunk_bytes_if_exists<C>(
         cache: &C,
-        array: &dyn SyncCachedArray,
+        array: &dyn AsyncCachedArray,
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         let shape = chunk_shape_to_array_shape(&validate_chunk_indices(array, chunk_indices)?);
-        let decoder = retrieve_partial_decoder(cache, array, chunk_indices, options, resources)?;
-        if decoder.exists()? {
+        let decoder =
+            async_retrieve_partial_decoder(cache, array, chunk_indices, options, resources).await?;
+        if decoder.exists().await? {
             Ok(Some(
                 decoder
-                    .partial_decode(&ArraySubset::new_with_shape(shape), options, resources)?
+                    .partial_decode(&ArraySubset::new_with_shape(shape), options, resources)
+                    .await?
                     .into_owned()
                     .into(),
             ))
@@ -78,40 +87,43 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         }
     }
 
-    fn retrieve_partial_chunk_bytes<C>(
+    async fn async_retrieve_partial_chunk_bytes<C>(
         cache: &C,
-        array: &dyn SyncCachedArray,
+        array: &dyn AsyncCachedArray,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         Ok(
-            Self::partial_decoder(cache, array, chunk_indices, options, resources)?
-                .partial_decode(indexer, options, resources)?
+            Self::async_partial_decoder(cache, array, chunk_indices, options, resources)
+                .await?
+                .partial_decode(indexer, options, resources)
+                .await?
                 .into_owned()
                 .into(),
         )
     }
 
-    fn retrieve_chunk_into<C>(
+    async fn async_retrieve_chunk_into<C>(
         cache: &C,
-        array: &dyn SyncCachedArray,
+        array: &dyn AsyncCachedArray,
         chunk_indices: &[u64],
         output_target: &mut ArrayBytesTarget<'_>,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         validate_target_num_elements(output_target, chunk_shape.num_elements_u64())?;
-        let decoder = retrieve_partial_decoder(cache, array, chunk_indices, options, resources)?;
-        if !decoder.exists()? {
+        let decoder =
+            async_retrieve_partial_decoder(cache, array, chunk_indices, options, resources).await?;
+        if !decoder.exists().await? {
             return copy_array_fill_value_into(array, output_target);
         }
         let shape = chunk_shape_to_array_shape(&chunk_shape);
@@ -122,12 +134,13 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
                 options,
                 resources,
             )
+            .await
             .map_err(ArrayError::from)
     }
 
-    fn retrieve_partial_chunk_into<C>(
+    async fn async_retrieve_partial_chunk_into<C>(
         cache: &C,
-        array: &dyn SyncCachedArray,
+        array: &dyn AsyncCachedArray,
         chunk_indices: &[u64],
         indexer: &dyn Indexer,
         output_target: &mut ArrayBytesTarget<'_>,
@@ -135,11 +148,13 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         resources: &Resources,
     ) -> Result<(), ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCache<Value = Self> + ?Sized,
     {
         validate_partial_chunk_indexer(array, chunk_indices, indexer, output_target)?;
-        retrieve_partial_decoder(cache, array, chunk_indices, options, resources)?
+        async_retrieve_partial_decoder(cache, array, chunk_indices, options, resources)
+            .await?
             .partial_decode_into(indexer, output_target, options, resources)
+            .await
             .map_err(ArrayError::from)
     }
 }

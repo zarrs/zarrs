@@ -6,7 +6,7 @@ use super::{
     Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ArrayUpdateOps, ChunkGrid,
     CodecOptions, DataType, IntoArrayBytes, ReadableStorageTraits, ReadableWritableStorageTraits,
 };
-use crate::array::chunk_cache::SyncArrayCache;
+use crate::array::cache::SyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
     ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
@@ -195,7 +195,7 @@ where
 mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use super::*;
-    use crate::array::chunk_cache::{
+    use crate::array::cache::{
         ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
         ChunkCachePartialDecoderLruChunkLimit,
     };

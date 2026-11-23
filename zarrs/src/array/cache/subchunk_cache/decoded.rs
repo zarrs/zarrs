@@ -21,8 +21,8 @@ use crate::array::array_bytes_internal::{
     FixedDecodeBuffers, merge_cached_chunks, optional_innermost, optional_innermost_with_depth,
 };
 #[cfg(feature = "async")]
-use crate::array::chunk_cache::{AsyncArrayCache, AsyncCachedArray, AsyncChunkCache};
-use crate::array::chunk_cache::{
+use crate::array::cache::{AsyncArrayCache, AsyncCachedArray, AsyncChunkCache};
+use crate::array::cache::{
     CachedArrayMeta, ChunkCache, ChunkCacheTypeDecoded, SyncArrayCache, SyncCachedArray,
 };
 use crate::array::concurrency::split_resources;

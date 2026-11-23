@@ -15,7 +15,7 @@ use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{
     FixedDecodeBuffers, merge_cached_chunks, optional_innermost_with_depth,
 };
-use crate::array::chunk_cache::{
+use crate::array::cache::{
     SyncArrayCache, retrieve_chunk_overlap_bytes, retrieve_chunk_overlap_into,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
@@ -503,7 +503,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::array::chunk_cache::{
+    use crate::array::cache::{
         ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
         ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
         ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruSizeLimit,
@@ -817,7 +817,7 @@ mod tests {
 
     #[test]
     fn dyn_chunk_cache_and_sync_array_cache() {
-        use crate::array::chunk_cache::{NoCache, SubchunkCache};
+        use crate::array::cache::{NoCache, SubchunkCache};
 
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)

@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs::array::chunk_cache::ChunkCacheEncodedLruChunkLimit;
+use zarrs::array::cache::ChunkCacheEncodedLruChunkLimit;
 use zarrs::array::codec::ShardingCodecBuilder;
 use zarrs::array::{
     ArrayBuilder, ArrayCached, ArraySubset, ComputeResources, DataType, FillValue, data_type,
@@ -336,7 +336,7 @@ fn array_retrieve_into_target_shape() -> Result<(), Box<dyn std::error::Error>> 
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_array_retrieve_into_target_shape() -> Result<(), Box<dyn std::error::Error>> {
-    use zarrs::array::chunk_cache::AsyncChunkCacheEncodedLruChunkLimit;
+    use zarrs::array::cache::AsyncChunkCacheEncodedLruChunkLimit;
     use zarrs_storage::store::AsyncMemoryStore;
 
     for data_type in data_types() {

@@ -13,7 +13,7 @@ use super::{
 use crate::array::array_bytes_internal::{
     FixedDecodeBuffers, merge_cached_chunks, optional_innermost_with_depth,
 };
-use crate::array::chunk_cache::{
+use crate::array::cache::{
     AsyncArrayCache, async_retrieve_chunk_overlap_bytes, async_retrieve_chunk_overlap_into,
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
@@ -573,7 +573,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::chunk_cache::{
+    use crate::array::cache::{
         AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
         AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCacheEncodedLruSizeLimit,
         AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCachePartialDecoderLruSizeLimit,
@@ -963,7 +963,7 @@ mod tests {
 
     #[tokio::test]
     async fn dyn_async_array_cache() {
-        use crate::array::chunk_cache::{ChunkCacheTypeDecoded, NoCache, SubchunkCache};
+        use crate::array::cache::{ChunkCacheTypeDecoded, NoCache, SubchunkCache};
 
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)

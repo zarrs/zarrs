@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs::array::Resources;
 
-use zarrs::array::chunk_cache::{
+use zarrs::array::cache::{
     AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit, SubchunkCache,
 };
 use zarrs::array::codec::array_to_bytes::sharding::{

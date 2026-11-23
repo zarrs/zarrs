@@ -10,7 +10,7 @@ use std::error::Error;
 use std::sync::Arc;
 
 use subchunk_grid_cases::{Case, cases, plain_sharding};
-use zarrs::array::chunk_cache::{
+use zarrs::array::cache::{
     AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
     AsyncChunkCachePartialDecoderLruChunkLimit,
 };

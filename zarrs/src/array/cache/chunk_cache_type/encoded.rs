@@ -8,8 +8,8 @@ use super::{
     validate_partial_chunk_indexer, validate_target_num_elements,
 };
 #[cfg(feature = "async")]
-use crate::array::chunk_cache::{AsyncCachedArray, AsyncChunkCache, SealedAsync};
-use crate::array::chunk_cache::{
+use crate::array::cache::{AsyncCachedArray, AsyncChunkCache, SealedAsync};
+use crate::array::cache::{
     CachedArrayMeta, ChunkCache, ChunkCacheType, ChunkCacheTypeEncoded, SealedSync, SyncCachedArray,
 };
 use crate::array::{

@@ -5,7 +5,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use zarrs::array::chunk_cache::{
+use zarrs::array::cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
     ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheType,
 };
@@ -836,7 +836,7 @@ fn element_order_cached_reads() {
 #[cfg(feature = "async")]
 mod async_reads {
     use super::*;
-    use zarrs::array::chunk_cache::{
+    use zarrs::array::cache::{
         AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
         AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheType,
     };

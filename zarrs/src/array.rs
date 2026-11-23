@@ -34,7 +34,7 @@ mod into_array_bytes;
 mod tensor;
 
 pub mod builder;
-pub mod chunk_cache;
+pub mod cache;
 pub mod chunk_grid;
 pub mod chunk_key_encoding;
 pub mod codec;
@@ -197,7 +197,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// `async_` prefix variants can be used with async stores (requires `async` feature).
 ///
-/// [`ChunkCache`](chunk_cache::ChunkCache) implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
+/// [`ArrayCached`] offers the same operations, except with [Chunk Caching](#chunk-caching) support.
 ///
 /// ### Store/Retrieve Element Representations
 /// Array `retrieve_*` methods are generic over the return type.
@@ -357,7 +357,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Another alternative is to use [Chunk Caching](#chunk-caching).
 ///
 /// ### Chunk Caching
-/// Refer to the [`chunk_cache`] module.
+/// Refer to the [`cache`] module.
 ///
 /// ## Reading Sharded Arrays
 /// The `sharding_indexed` codec ([`ShardingCodec`](codec::array_to_bytes::sharding)) enables multiple subchunks ("inner chunks") to be stored in a single chunk ("shard").

@@ -372,7 +372,7 @@ fn partial_decoder(c: &mut Criterion) {
 /// A 200 x 200 region straddling 2 x 2 128 x 128 `u16` chunks, read through each type of chunk cache.
 fn chunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
-    use zarrs::array::chunk_cache::{
+    use zarrs::array::cache::{
         ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
         ChunkCachePartialDecoderLruChunkLimit,
     };
@@ -440,7 +440,7 @@ fn chunk_cache(c: &mut Criterion) {
 /// over a partial decoder chunk cache.
 fn subchunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
-    use zarrs::array::chunk_cache::{
+    use zarrs::array::cache::{
         ChunkCacheDecodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, SubchunkCache,
     };
 
@@ -504,7 +504,7 @@ fn subchunk_cache(c: &mut Criterion) {
 #[cfg(feature = "async")]
 fn async_chunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
-    use zarrs::array::chunk_cache::{
+    use zarrs::array::cache::{
         AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
         AsyncChunkCachePartialDecoderLruChunkLimit,
     };
@@ -598,7 +598,7 @@ fn async_chunk_cache(_c: &mut Criterion) {}
 #[cfg(feature = "async")]
 fn async_subchunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
-    use zarrs::array::chunk_cache::{
+    use zarrs::array::cache::{
         AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
         SubchunkCache,
     };
