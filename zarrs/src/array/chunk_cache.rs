@@ -53,7 +53,7 @@
 //! [`ChunkCacheDecodedLruSizeLimit`]), so repeated small reads of large shards decode and hold only the subchunks they
 //! touch. Over a [`ChunkCachePartialDecoderLruChunkLimit`], which caches shard indexes, a subchunk miss reads and
 //! decodes just that subchunk. With the `async` feature, [`SubchunkCache`] also supports asynchronous operations when
-//! given an asynchronous decoded subchunk cache and an asynchronous chunk cache (or [`NoChunkCache`]). See
+//! given an asynchronous decoded subchunk cache and an asynchronous chunk cache (or [`NoCache`]). See
 //! [`SubchunkCache`] for the choice of chunk cache.
 
 #[cfg(feature = "async")]
@@ -80,7 +80,7 @@ pub use array_cache::AsyncArrayCache;
 pub(crate) use array_cache::AsyncCachedArray;
 pub use array_cache::SyncArrayCache;
 pub(crate) use array_cache::{CachedArrayMeta, SyncCachedArray};
-pub use subchunk_cache::{NoChunkCache, SubchunkCache};
+pub use subchunk_cache::{NoCache, SubchunkCache};
 // pub(crate) mod chunk_cache_lru_macros;
 pub use chunk_cache_lru::*;
 #[cfg(feature = "async")]

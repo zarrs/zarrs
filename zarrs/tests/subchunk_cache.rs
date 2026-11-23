@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use zarrs::array::chunk_cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-    ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, NoChunkCache,
-    SubchunkCache, SyncArrayCache,
+    ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache,
+    SyncArrayCache,
 };
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
@@ -303,7 +303,7 @@ fn subchunk_cache_reads_match_the_array() -> TestResult {
             &array,
             SubchunkCache::new(0, subchunks(), ChunkCacheEncodedLruChunkLimit::new(4)),
         )?;
-        check_reads(&array, SubchunkCache::new(0, subchunks(), NoChunkCache))?;
+        check_reads(&array, SubchunkCache::new(0, subchunks(), NoCache))?;
         check_reads(
             &array,
             SubchunkCache::new(0, subchunks(), ChunkCacheDecodedLruChunkLimit::new(4)),
@@ -396,7 +396,7 @@ fn subchunk_cache_opens_a_chunk_once_per_read() -> TestResult {
     let array = sharded_array(store.clone(), false, TestDataType::UInt16)?;
     let cached = ArrayCached::new(
         array.clone(),
-        SubchunkCache::new(0, ChunkCacheDecodedLruChunkLimit::new(64), NoChunkCache),
+        SubchunkCache::new(0, ChunkCacheDecodedLruChunkLimit::new(64), NoCache),
     );
     let reads = |subset: &ArraySubset| -> Result<usize, Box<dyn Error>> {
         store.reset();
@@ -430,7 +430,7 @@ fn subchunk_cache_reads_a_cached_fill_chunk_without_storage() -> TestResult {
     array.store_chunk(&[0, 0], vec![1u16; 256], &Resources::default())?;
     let cached = ArrayCached::new(
         array,
-        SubchunkCache::new(0, ChunkCacheDecodedLruChunkLimit::new(64), NoChunkCache),
+        SubchunkCache::new(0, ChunkCacheDecodedLruChunkLimit::new(64), NoCache),
     );
     cached.retrieve_chunk::<Vec<u16>>(&[1, 1], &Resources::default())?;
     assert_eq!(cached.cache().subchunks().len(), 16);
@@ -601,7 +601,7 @@ fn subchunk_cache_requires_a_global_subchunk_grid() -> TestResult {
         .build_arc(Arc::new(MemoryStore::default()), "/array")?;
     let cached = ArrayCached::new(
         array,
-        SubchunkCache::new(0, ChunkCacheDecodedLruChunkLimit::new(4), NoChunkCache),
+        SubchunkCache::new(0, ChunkCacheDecodedLruChunkLimit::new(4), NoCache),
     );
     assert!(matches!(
         cached.retrieve_chunk::<Vec<u8>>(&[0], &Resources::default()),
@@ -662,7 +662,7 @@ fn retained_partial_decoders_read_cached_subchunks_after_writes_to_other_chunks(
         .build_arc(Arc::new(MemoryStore::default()), "/array")?;
     let cached = ArrayCached::new(
         array,
-        SubchunkCache::new(0, ChunkCacheDecodedLruChunkLimit::new(8), NoChunkCache),
+        SubchunkCache::new(0, ChunkCacheDecodedLruChunkLimit::new(8), NoCache),
     );
     let resources = Resources::default();
     cached.store_chunks(&[0..2], &[1u8; 16], &resources)?;
@@ -1047,7 +1047,7 @@ mod r#async {
                 SubchunkCache::new(0, subchunks(), AsyncChunkCacheEncodedLruChunkLimit::new(4)),
             )
             .await?;
-            async_check_reads(&array, SubchunkCache::new(0, subchunks(), NoChunkCache)).await?;
+            async_check_reads(&array, SubchunkCache::new(0, subchunks(), NoCache)).await?;
             if nested {
                 async_check_reads(
                     &array,

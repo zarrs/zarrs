@@ -32,14 +32,14 @@ mod decoded;
 ///   - a [`ChunkCacheEncodedLruChunkLimit`](super::ChunkCacheEncodedLruChunkLimit) caches encoded chunks, so misses
 ///     decode subchunks without reading storage after the first read of a chunk. Each read with misses decodes the
 ///     shard index again, and the cached subchunks duplicate data held in the encoded chunks.
-///   - [`NoChunkCache`] holds nothing and reads through the array, so each read re-reads a shard index for its misses.
+///   - [`NoCache`] holds nothing and reads through the array, so each read re-reads a shard index for its misses.
 ///   - a decoded chunk cache holds whole decoded chunks, so a decoded subchunk cache over it is redundant.
 ///
 /// `SubchunkCache` is itself a cache, so it can be the chunk cache of another `SubchunkCache`.
 ///
 /// For asynchronous operations, use an asynchronous decoded chunk cache as the subchunk cache (e.g.
 /// `AsyncChunkCacheDecodedLruChunkLimit`) over an asynchronous chunk cache (e.g.
-/// `AsyncChunkCachePartialDecoderLruChunkLimit`, or [`NoChunkCache`]).
+/// `AsyncChunkCachePartialDecoderLruChunkLimit`, or [`NoCache`]).
 ///
 /// The array must have a globally resolvable subchunk grid at `level` (see
 /// [`ArrayOps::subchunk_grid_at_level`](crate::array::ArrayOps::subchunk_grid_at_level)), or cached retrievals return
@@ -316,14 +316,14 @@ impl Generation {
     }
 }
 
-/// A chunk cache that holds nothing, so a [`SubchunkCache`] serves its subchunk misses from the array.
+/// A cache that holds nothing, so a [`SubchunkCache`] serves its subchunk misses from the array.
 ///
 /// This holds no memory, but each retrieval with a subchunk miss opens the chunk again, e.g. re-reading a shard index.
 /// It is harmless, though pointless, as the cache of an [`ArrayCached`](crate::array::ArrayCached) on its own.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct NoChunkCache;
+pub struct NoCache;
 
-impl SyncArrayCacheOps for NoChunkCache {
+impl SyncArrayCacheOps for NoCache {
     fn cached_partial_decoder(
         &self,
         array: &dyn SyncCachedArray,
@@ -370,7 +370,7 @@ impl SyncArrayCacheOps for NoChunkCache {
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncArrayCacheOps for NoChunkCache {
+impl AsyncArrayCacheOps for NoCache {
     async fn async_cached_partial_decoder(
         &self,
         array: &dyn AsyncCachedArray,

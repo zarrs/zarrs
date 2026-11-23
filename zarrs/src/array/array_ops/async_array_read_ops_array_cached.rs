@@ -963,7 +963,7 @@ mod tests {
 
     #[tokio::test]
     async fn dyn_async_array_cache() {
-        use crate::array::chunk_cache::{ChunkCacheTypeDecoded, NoChunkCache, SubchunkCache};
+        use crate::array::chunk_cache::{ChunkCacheTypeDecoded, NoCache, SubchunkCache};
 
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
@@ -1004,7 +1004,7 @@ mod tests {
             Arc::new(AsyncChunkCacheDecodedLruChunkLimit::new(4)),
             Arc::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)),
             Arc::new(subchunk_cache),
-            Arc::new(NoChunkCache),
+            Arc::new(NoCache),
         ];
         for cache in caches {
             let cached: ArrayCached<AsyncMemoryStore, dyn AsyncArrayCache> =

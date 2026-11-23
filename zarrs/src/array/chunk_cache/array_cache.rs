@@ -246,7 +246,7 @@ fn fill_value_chunk_bytes(
 /// A cache usable by [`ArrayCached`](crate::array::ArrayCached) for synchronous operations.
 ///
 /// This is implemented for every [`ChunkCache`], [`SubchunkCache`](super::SubchunkCache), and
-/// [`NoChunkCache`](super::NoChunkCache). Implement [`ChunkCache`] for a custom cache policy.
+/// [`NoCache`](super::NoCache). Implement [`ChunkCache`] for a custom cache policy.
 ///
 /// The operations themselves live on a sealed supertrait, and are internal to `zarrs`.
 pub trait SyncArrayCache: array_cache_sealed::SyncArrayCacheOps {}
@@ -256,7 +256,7 @@ impl<T: array_cache_sealed::SyncArrayCacheOps + ?Sized> SyncArrayCache for T {}
 /// A cache usable by [`ArrayCached`](crate::array::ArrayCached) for asynchronous operations.
 ///
 /// This is implemented for every [`AsyncChunkCache`], [`SubchunkCache`](super::SubchunkCache), and
-/// [`NoChunkCache`](super::NoChunkCache). Implement [`AsyncChunkCache`] for a custom cache policy.
+/// [`NoCache`](super::NoCache). Implement [`AsyncChunkCache`] for a custom cache policy.
 ///
 /// The operations themselves live on a sealed supertrait, and are internal to `zarrs`.
 #[cfg(feature = "async")]

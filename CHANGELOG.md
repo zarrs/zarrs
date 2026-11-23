@@ -90,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
     - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
   - `ArrayCached` accepts any `SyncArrayCache` or `AsyncArrayCache`, which every `ChunkCache` and `AsyncChunkCache` is, and dispatches its retrievals and invalidations through the cache
-  - Add `SubchunkCache`, which caches the decoded subchunks of a subchunk grid level in a decoded chunk cache keyed by subchunk indices, over a chunk cache that serves its misses, and `NoChunkCache` to serve misses from the array
+  - Add `SubchunkCache`, which caches the decoded subchunks of a subchunk grid level in a decoded chunk cache keyed by subchunk indices, over a chunk cache that serves its misses, and `NoCache` to serve misses from the array
   - Add `ArrayCached::[async_]invalidate{,_chunk,_chunks}`, which invalidate every layer of the cache after writes that bypass it
   - Writes invalidate cached subchunks belonging to each affected chunk, including values that lossy re-encoding may change outside a partial write
   - Invalidate caches for chunks that a failed write may have changed

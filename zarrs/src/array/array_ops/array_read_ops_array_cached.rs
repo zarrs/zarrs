@@ -817,7 +817,7 @@ mod tests {
 
     #[test]
     fn dyn_chunk_cache_and_sync_array_cache() {
-        use crate::array::chunk_cache::{NoChunkCache, SubchunkCache};
+        use crate::array::chunk_cache::{NoCache, SubchunkCache};
 
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
@@ -857,7 +857,7 @@ mod tests {
             Arc::new(ChunkCacheDecodedLruChunkLimit::new(4)),
             Arc::new(ChunkCachePartialDecoderLruChunkLimit::new(4)),
             Arc::new(subchunk_cache),
-            Arc::new(NoChunkCache),
+            Arc::new(NoCache),
         ];
         for cache in caches {
             let cached: ArrayCached<MemoryStore, dyn SyncArrayCache> =

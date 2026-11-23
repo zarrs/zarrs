@@ -25,8 +25,8 @@ use std::sync::Arc;
 
 use zarrs::array::chunk_cache::{
     ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-    ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, NoChunkCache,
-    SubchunkCache, SyncArrayCache,
+    ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache,
+    SyncArrayCache,
 };
 use zarrs::array::codec::GzipCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayCached, ArraySubset, Resources, data_type};
@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     println!(
-        "\nChunks are held in a ChunkCache{{Encoded,Decoded,PartialDecoder}}LruChunkLimit, or none with NoChunkCache.\n\
+        "\nChunks are held in a ChunkCache{{Encoded,Decoded,PartialDecoder}}LruChunkLimit, or none with NoCache.\n\
          Subchunks are held in a ChunkCacheDecodedLruSizeLimit by a SubchunkCache over the chunk cache."
     );
     Ok(())
@@ -102,7 +102,7 @@ struct Cache {
 ///
 /// Without a chunk cache, every read opens the shard: it reads the shard index, then the subchunks. Under a
 /// [`SubchunkCache`], a subchunk miss:
-/// - over [`NoChunkCache`], opens the shard again, but nothing is held per shard,
+/// - over [`NoCache`], opens the shard again, but nothing is held per shard,
 /// - over an encoded chunk cache, decodes the subchunk from the cached shard,
 /// - over a decoded chunk cache, copies the subchunk from the cached decoded shard, so the subchunk cache only
 ///   duplicates what the chunk cache holds. This is permitted, but redundant,
@@ -110,9 +110,9 @@ struct Cache {
 fn chunk_caches() -> [Cache; 4] {
     [
         Cache {
-            chunks: "NoChunkCache",
+            chunks: "NoCache",
             subchunks: "-",
-            cache: Arc::new(NoChunkCache),
+            cache: Arc::new(NoCache),
             held: Box::new(Vec::new),
         },
         chunk_cache(
