@@ -82,6 +82,7 @@ zarrs_storage.workspace = true
 zfp-rs = { version = "1.0.1", optional = true }
 dlpark = { version = "0.11.1", features = ["half"], optional = true }
 async-generic = { version = "1.1.2", optional = true }
+ambisync = "0.1.1"
 zarrs_metadata_ext.workspace = true
 jiff = { version = "1.0.0", optional = true }
 chrono = { version = "0.4.39", optional = true }
@@ -133,6 +134,11 @@ libz-sys = "1.1.20" # https://github.com/rust-lang/libz-sys/commit/eb42f72bb4e23
 [[example]]
 name = "array_write_read"
 required-features = ["filesystem", "ndarray"]
+doc-scrape-examples = true
+
+[[example]]
+name = "array_caching"
+required-features = ["gzip"]
 doc-scrape-examples = true
 
 [[example]]

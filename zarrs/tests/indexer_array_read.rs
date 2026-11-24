@@ -48,7 +48,7 @@ fn decoded_cache_validates_absent_chunk_indexer() -> Result<(), Box<dyn std::err
     let store = Arc::new(MemoryStore::default());
     let array = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::uint16(), 0u16)
         .build(store, "/array")?;
-    let cached = ArrayCached::new(Arc::new(array), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(4));
     let scattered: Vec<Vec<u64>> = vec![vec![0, 1], vec![1, 1]];
     assert_eq!(
         cached.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered, &Resources::default())?,

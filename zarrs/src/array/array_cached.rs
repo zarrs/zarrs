@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
-use super::Array;
+#[cfg(feature = "async")]
+use super::chunk_cache::AsyncArrayCache;
+use super::chunk_cache::SyncArrayCache;
+use super::{Array, Indexer};
 use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 /// A cached array wrapper.
 ///
@@ -12,6 +16,27 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 /// The cache is a [`SyncArrayCache`](super::chunk_cache::SyncArrayCache) for synchronous operations, such as any
 /// [`ChunkCache`](super::chunk_cache::ChunkCache). The cache determines how it serves each retrieval and what each
 /// write invalidates; a chunk cache invalidates whole chunks.
+///
+/// The cache belongs to this array. Clones and rebinds of an `ArrayCached` (e.g.
+/// [`with_codec_specific_options`](ArrayCached::with_codec_specific_options)) share it, but no other array can, as a
+/// cache is keyed by chunk indices alone. An `ArrayCached` takes its cache by value (or boxed), and an `Arc` of a cache
+/// is not a cache:
+///
+/// ```compile_fail
+/// # use std::sync::Arc;
+/// # use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
+/// # use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
+/// # use zarrs_storage::store::MemoryStore;
+/// let store = Arc::new(MemoryStore::new());
+/// let builder = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8);
+/// let array_a = builder.build_arc(store.clone(), "/a").unwrap();
+/// let array_b = builder.build_arc(store, "/b").unwrap();
+/// let cache = Arc::new(ChunkCacheDecodedLruChunkLimit::new(2));
+/// let cached_a = ArrayCached::new(array_a, cache.clone());
+/// let cached_b = ArrayCached::new(array_b, cache);
+/// // error: `retrieve_chunk` requires `Arc<ChunkCacheDecodedLruChunkLimit>: SyncArrayCache`, which is not satisfied
+/// cached_b.retrieve_chunk::<Vec<u8>>(&[0], &Resources::default()).unwrap();
+/// ```
 ///
 /// ## Cache Behavior
 ///
@@ -48,6 +73,11 @@ use zarrs_codec::{CodecCreateError, CodecSpecificOptions};
 /// - `compact_chunk` — invalidates the chunk unless it succeeds without compacting it.
 /// - `partial_encoder` — invalidates the affected chunk after each mutation
 ///   attempt.
+///
+/// After writing through the inner [`Array`] or another handle, invalidate what changed with
+/// [`invalidate`](ArrayCached::invalidate), [`invalidate_chunk`](ArrayCached::invalidate_chunk), or
+/// [`invalidate_chunks`](ArrayCached::invalidate_chunks), rather than through the cache itself, so that every layer
+/// of a composed cache (e.g. a [`SubchunkCache`](super::chunk_cache::SubchunkCache)) is invalidated.
 ///
 /// Invalidation makes a cache coherent with writes that *precede* the retrievals of
 /// the chunks they invalidate. It does not make concurrent reads and writes of the same
@@ -102,17 +132,25 @@ impl<TStorage: ?Sized, C: ?Sized> Clone for ArrayCached<TStorage, C> {
 
 impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     /// Create a new cached array wrapper.
+    ///
+    /// `array` may be an [`Array`] or an `Arc<Array>`.
     #[must_use]
-    pub fn new(array: Arc<Array<TStorage>>, cache: C) -> Self {
-        Self::new_arc(array, Arc::new(cache))
+    pub fn new(array: impl Into<Arc<Array<TStorage>>>, cache: C) -> Self {
+        Self {
+            array: array.into(),
+            cache: Arc::new(cache),
+        }
     }
 }
 
 impl<TStorage: ?Sized, C: ?Sized> ArrayCached<TStorage, C> {
-    /// Create a new cached array wrapper from a shared cache.
+    /// Create a new cached array wrapper from a boxed cache, such as a `Box<dyn SyncArrayCache>`.
     #[must_use]
-    pub fn new_arc(array: Arc<Array<TStorage>>, cache: Arc<C>) -> Self {
-        Self { array, cache }
+    pub fn new_boxed(array: impl Into<Arc<Array<TStorage>>>, cache: Box<C>) -> Self {
+        Self {
+            array: array.into(),
+            cache: Arc::from(cache),
+        }
     }
 
     /// Return the inner array.
@@ -150,9 +188,68 @@ impl<TStorage: ?Sized, C: ?Sized> ArrayCached<TStorage, C> {
         array
     }
 
-    /// Split into the inner array and shared cache.
+    /// Split into the inner array and the cache.
     #[must_use]
     pub fn into_inner(self) -> (Arc<Array<TStorage>>, Arc<C>) {
         (self.array, self.cache)
+    }
+}
+
+impl<TStorage: ?Sized + MaybeSend + MaybeSync, C: SyncArrayCache + ?Sized>
+    ArrayCached<TStorage, C>
+{
+    /// Invalidate everything cached for the array.
+    ///
+    /// Writes through `ArrayCached` invalidate what they change, so this is only needed after writes that bypass it.
+    pub fn invalidate(&self) {
+        self.cache.invalidate_cached_all(self.array.as_ref());
+    }
+
+    /// Invalidate everything cached for the chunk at `chunk_indices`.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub fn invalidate_chunk(&self, chunk_indices: &[u64]) {
+        self.cache
+            .invalidate_cached_chunk(self.array.as_ref(), chunk_indices);
+    }
+
+    /// Invalidate everything cached for the chunks of `chunks`.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub fn invalidate_chunks(&self, chunks: &dyn Indexer) {
+        self.cache
+            .invalidate_cached_chunks(self.array.as_ref(), chunks);
+    }
+}
+
+#[cfg(feature = "async")]
+impl<TStorage: ?Sized + MaybeSend + MaybeSync, C: AsyncArrayCache + ?Sized>
+    ArrayCached<TStorage, C>
+{
+    /// Asynchronously invalidate everything cached for the array.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub async fn async_invalidate(&self) {
+        self.cache
+            .async_invalidate_cached_all(self.array.as_ref())
+            .await;
+    }
+
+    /// Asynchronously invalidate everything cached for the chunk at `chunk_indices`.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub async fn async_invalidate_chunk(&self, chunk_indices: &[u64]) {
+        self.cache
+            .async_invalidate_cached_chunk(self.array.as_ref(), chunk_indices)
+            .await;
+    }
+
+    /// Asynchronously invalidate everything cached for the chunks of `chunks`.
+    ///
+    /// See [`ArrayCached::invalidate`].
+    pub async fn async_invalidate_chunks(&self, chunks: &dyn Indexer) {
+        self.cache
+            .async_invalidate_cached_chunks(self.array.as_ref(), chunks)
+            .await;
     }
 }

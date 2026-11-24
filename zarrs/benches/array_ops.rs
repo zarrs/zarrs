@@ -8,6 +8,9 @@
 //! - `sharded_read`: whole reads of 1, 4 and 16 shards of 32 x 32 subchunks.
 //! - `partial_decoder`: creating a partial decoder of a chunk, and decoding regions with it.
 //! - `chunk_cache`: reading a region through each type of chunk cache, empty and filled.
+//! - `subchunk_cache`: reading regions of a sharded array through a decoded subchunk cache, empty and filled.
+//! - `async_chunk_cache`: reading a region through each type of async chunk cache, empty and filled (`async` feature).
+//! - `async_subchunk_cache`: reading regions of a sharded array through an async decoded subchunk cache, empty and filled (`async` feature).
 //! - `element_order`: reading and writing a multi-chunk array in C and F element order, with and without a `transpose` codec.
 #![allow(missing_docs, clippy::cast_possible_truncation)]
 
@@ -433,6 +436,239 @@ fn chunk_cache(c: &mut Criterion) {
     group.finish();
 }
 
+/// Regions of a 512 x 512 `u16` array of 256 x 256 shards of 32 x 32 subchunks, read through a decoded subchunk cache
+/// over a partial decoder chunk cache.
+fn subchunk_cache(c: &mut Criterion) {
+    use zarrs::array::ArrayCached;
+    use zarrs::array::chunk_cache::{
+        ChunkCacheDecodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, SubchunkCache,
+    };
+
+    let mut group = c.benchmark_group("subchunk_cache");
+    let shape = [512u64, 512];
+    let data = compressible_u16(shape.iter().product::<u64>() as usize);
+    let array = Arc::new(
+        ArrayBuilder::new(shape.to_vec(), vec![256, 256], data_type::uint16(), 0u16)
+            .subchunk_shape(vec![32, 32])
+            .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
+            .build(Arc::new(MemoryStore::new()), "/")
+            .unwrap(),
+    );
+    array
+        .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
+        .unwrap();
+    let cache = || {
+        SubchunkCache::new(
+            0,
+            ChunkCacheDecodedLruChunkLimit::new(1024),
+            ChunkCachePartialDecoderLruChunkLimit::new(16),
+        )
+    };
+    for (region, subset) in [
+        (
+            "one_subchunk",
+            ArraySubset::new_with_ranges(&[160..192, 160..192]),
+        ),
+        ("small", ArraySubset::new_with_ranges(&[100..140, 100..140])),
+        ("chunk", ArraySubset::new_with_ranges(&[0..256, 0..256])),
+        (
+            "straddle",
+            ArraySubset::new_with_ranges(&[100..300, 100..300]),
+        ),
+    ] {
+        group.throughput(Throughput::Bytes(subset.num_elements() * 2));
+        group.bench_function(BenchmarkId::new("empty", region), |b| {
+            b.iter(|| {
+                let cached = ArrayCached::new(array.clone(), cache());
+                let _: ArrayBytes = cached
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
+            });
+        });
+        let cached = ArrayCached::new(array.clone(), cache());
+        let _: ArrayBytes = cached
+            .retrieve_array_subset(&subset, &Resources::default())
+            .unwrap();
+        group.bench_function(BenchmarkId::new("filled", region), |b| {
+            b.iter(|| {
+                let _: ArrayBytes = cached
+                    .retrieve_array_subset(&subset, &Resources::default())
+                    .unwrap();
+            });
+        });
+    }
+    group.finish();
+}
+
+/// A 200 x 200 region straddling 2 x 2 128 x 128 `u16` chunks, read through each type of async chunk cache.
+#[cfg(feature = "async")]
+fn async_chunk_cache(c: &mut Criterion) {
+    use zarrs::array::ArrayCached;
+    use zarrs::array::chunk_cache::{
+        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+        AsyncChunkCachePartialDecoderLruChunkLimit,
+    };
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    fn bench_cache<C: AsyncChunkCache>(
+        group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
+        rt: &tokio::runtime::Runtime,
+        array: &Arc<zarrs::array::Array<AsyncMemoryStore>>,
+        label: &str,
+        cache: impl Fn() -> C,
+    ) {
+        let subset = ArraySubset::new_with_ranges(&[100..300, 100..300]);
+        group.bench_function(BenchmarkId::new("empty", label), |b| {
+            b.to_async(rt).iter(|| async {
+                let cached = ArrayCached::new(array.clone(), cache());
+                let _: ArrayBytes = cached
+                    .async_retrieve_array_subset(&subset, &Resources::default())
+                    .await
+                    .unwrap();
+            });
+        });
+        let cached = ArrayCached::new(array.clone(), cache());
+        let _: ArrayBytes = rt
+            .block_on(cached.async_retrieve_array_subset(&subset, &Resources::default()))
+            .unwrap();
+        group.bench_function(BenchmarkId::new("filled", label), |b| {
+            b.to_async(rt).iter(|| async {
+                let _: ArrayBytes = cached
+                    .async_retrieve_array_subset(&subset, &Resources::default())
+                    .await
+                    .unwrap();
+            });
+        });
+    }
+
+    let mut group = c.benchmark_group("async_chunk_cache");
+    let shape = [512u64, 512];
+    let data = compressible_u16(shape.iter().product::<u64>() as usize);
+    group.throughput(Throughput::Bytes(200 * 200 * 2));
+    for (codecs, sharded) in [("zstd", false), ("sharded_zstd", true)] {
+        let mut builder =
+            ArrayBuilder::new(shape.to_vec(), vec![128, 128], data_type::uint16(), 0u16);
+        builder.bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))]);
+        if sharded {
+            builder.subchunk_shape(vec![32, 32]);
+        }
+        let array = Arc::new(
+            builder
+                .build(Arc::new(AsyncMemoryStore::new()), "/")
+                .unwrap(),
+        );
+        rt.block_on(array.async_store_array_subset(
+            &array.subset_all(),
+            data.as_slice(),
+            &Resources::default(),
+        ))
+        .unwrap();
+        bench_cache(
+            &mut group,
+            &rt,
+            &array,
+            &format!("encoded/{codecs}"),
+            || AsyncChunkCacheEncodedLruChunkLimit::new(16),
+        );
+        bench_cache(
+            &mut group,
+            &rt,
+            &array,
+            &format!("decoded/{codecs}"),
+            || AsyncChunkCacheDecodedLruChunkLimit::new(16),
+        );
+        bench_cache(
+            &mut group,
+            &rt,
+            &array,
+            &format!("partial_decoder/{codecs}"),
+            || AsyncChunkCachePartialDecoderLruChunkLimit::new(16),
+        );
+    }
+    group.finish();
+}
+
+#[cfg(not(feature = "async"))]
+fn async_chunk_cache(_c: &mut Criterion) {}
+
+/// Regions of a 512 x 512 `u16` array of 256 x 256 shards of 32 x 32 subchunks, read through an async decoded
+/// subchunk cache over an async partial decoder chunk cache.
+#[cfg(feature = "async")]
+fn async_subchunk_cache(c: &mut Criterion) {
+    use zarrs::array::ArrayCached;
+    use zarrs::array::chunk_cache::{
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
+        SubchunkCache,
+    };
+    use zarrs::storage::store::AsyncMemoryStore;
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut group = c.benchmark_group("async_subchunk_cache");
+    let shape = [512u64, 512];
+    let data = compressible_u16(shape.iter().product::<u64>() as usize);
+    let array = Arc::new(
+        ArrayBuilder::new(shape.to_vec(), vec![256, 256], data_type::uint16(), 0u16)
+            .subchunk_shape(vec![32, 32])
+            .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
+            .build(Arc::new(AsyncMemoryStore::new()), "/")
+            .unwrap(),
+    );
+    rt.block_on(array.async_store_array_subset(
+        &array.subset_all(),
+        data.as_slice(),
+        &Resources::default(),
+    ))
+    .unwrap();
+    let cache = || {
+        SubchunkCache::new(
+            0,
+            AsyncChunkCacheDecodedLruChunkLimit::new(1024),
+            AsyncChunkCachePartialDecoderLruChunkLimit::new(16),
+        )
+    };
+    for (region, subset) in [
+        (
+            "one_subchunk",
+            ArraySubset::new_with_ranges(&[160..192, 160..192]),
+        ),
+        ("small", ArraySubset::new_with_ranges(&[100..140, 100..140])),
+        ("chunk", ArraySubset::new_with_ranges(&[0..256, 0..256])),
+        (
+            "straddle",
+            ArraySubset::new_with_ranges(&[100..300, 100..300]),
+        ),
+    ] {
+        group.throughput(Throughput::Bytes(subset.num_elements() * 2));
+        group.bench_function(BenchmarkId::new("empty", region), |b| {
+            b.to_async(&rt).iter(|| async {
+                let cached = ArrayCached::new(array.clone(), cache());
+                let _: ArrayBytes = cached
+                    .async_retrieve_array_subset(&subset, &Resources::default())
+                    .await
+                    .unwrap();
+            });
+        });
+        let cached = ArrayCached::new(array.clone(), cache());
+        let _: ArrayBytes = rt
+            .block_on(cached.async_retrieve_array_subset(&subset, &Resources::default()))
+            .unwrap();
+        group.bench_function(BenchmarkId::new("filled", region), |b| {
+            b.to_async(&rt).iter(|| async {
+                let _: ArrayBytes = cached
+                    .async_retrieve_array_subset(&subset, &Resources::default())
+                    .await
+                    .unwrap();
+            });
+        });
+    }
+    group.finish();
+}
+
+#[cfg(not(feature = "async"))]
+fn async_subchunk_cache(_c: &mut Criterion) {}
+
 /// Reading and writing a 1024 x 1024 `u16` array of 256 x 256 chunks in C and F element order.
 fn element_order(c: &mut Criterion) {
     use zarrs::array::ElementOrder;
@@ -516,6 +752,9 @@ criterion_group!(
     sharded_read,
     partial_decoder,
     chunk_cache,
+    subchunk_cache,
+    async_chunk_cache,
+    async_subchunk_cache,
     element_order
 );
 criterion_main!(benches);
