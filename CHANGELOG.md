@@ -106,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Retrieve complete cached chunks without extracting a subset
   - Fix chunk subset retrieval from a chunk cache to validate the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
   - Fix a possible deadlock of chunk caches when `rayon` tasks retrieve the same uncached chunk, e.g. parallel reads of overlapping regions of a sharded array
+  - Fix invalidating a whole chunk cache to discard retrievals in progress, as invalidating a chunk does, so a chunk read before a write is not cached after it
 - Subchunks
   - **Breaking**: Remove `[Async]ArrayShardedReadableExt[Cache]`, whose methods are now part of `[Async]ArrayReadOps`
     - `[async_]retrieve_encoded_subchunk` and `[async_]subchunk_byte_range` are removed; use `[Async]ShardingPartialDecoder::{retrieve_subchunk_encoded,subchunk_byte_range}` for low-level encoded subchunk access

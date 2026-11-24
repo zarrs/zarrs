@@ -356,8 +356,13 @@ impl<CT: ChunkCacheType> Cache<CT> {
     }
 
     pub(super) fn clear(&self) -> usize {
-        // `drain()` releases each shard write lock before yielding items so values drop outside the lock.
-        self.cache.drain().count()
+        // `clear()` invalidates placeholders, so a retrieval in progress is not cached, as with `remove`. `drain()` does
+        // not, as it removes resident chunks only.
+        // TODO: `clear()` drops values under the shard write locks, so a value whose `Drop` accesses this cache
+        // deadlocks. Fix upstream in `quick_cache` rather than working around it here.
+        let count = self.cache.len();
+        self.cache.clear();
+        count
     }
 
     pub(super) fn try_get_or_insert_with<F>(
