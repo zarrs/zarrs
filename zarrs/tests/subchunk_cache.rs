@@ -16,8 +16,8 @@ use zarrs::array::cache::{
     AsyncChunkCacheTraits,
 };
 use zarrs::array::cache::{
-    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, NoCache, SubchunkCache,
-    SyncArrayCache, SyncChunkCacheTraits,
+    NoCache, SubchunkCache, SyncArrayCache, SyncChunkCacheDecoded, SyncChunkCacheEncoded,
+    SyncChunkCachePartialDecoder, SyncChunkCacheTraits,
 };
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
@@ -79,6 +79,9 @@ fn flat_target(
             AsyncArrayCache => SyncArrayCache,
             AsyncReadableWritableStorageTraits => SyncReadableWritableStorageTraits,
             AsyncArrayReadOps => SyncArrayReadOps,
+            AsyncChunkCacheDecoded => SyncChunkCacheDecoded,
+            AsyncChunkCacheEncoded => SyncChunkCacheEncoded,
+            AsyncChunkCachePartialDecoder => SyncChunkCachePartialDecoder,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),

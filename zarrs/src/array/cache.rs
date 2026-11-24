@@ -14,13 +14,13 @@
 //!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
 //!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`](super::Array::codecs)) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
 //!
-//! `zarrs` implements the chunk cache [`ChunkCache`], with an alias per chunk cache type:
-//!  - [`ChunkCacheDecoded`]: a decoded chunk cache.
-//!  - [`ChunkCacheEncoded`]: an encoded chunk cache.
-//!  - [`ChunkCachePartialDecoder`]: a partial decoder chunk cache.
+//! `zarrs` implements the chunk cache [`SyncChunkCache`], with an alias per chunk cache type:
+//!  - [`SyncChunkCacheDecoded`]: a decoded chunk cache.
+//!  - [`SyncChunkCacheEncoded`]: an encoded chunk cache.
+//!  - [`SyncChunkCachePartialDecoder`]: a partial decoder chunk cache.
 //!
-//! Each holds a fixed number of chunks ([`ChunkCache::new_chunk_limit`]) or a fixed size in bytes
-//! ([`ChunkCache::new_size_limit`]).
+//! Each holds a fixed number of chunks ([`SyncChunkCache::new_chunk_limit`]) or a fixed size in bytes
+//! ([`SyncChunkCache::new_size_limit`]).
 //!
 //! `zarrs` consumers can create custom cache policies by implementing the [`SyncChunkCacheTraits`] trait.
 //! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
@@ -50,8 +50,8 @@
 //!
 //! [`SubchunkCache`] layers a cache of individual subchunks over one of the chunk caches above, which serves the
 //! subchunks it does not hold. The subchunk cache is a decoded chunk cache keyed by subchunk indices (e.g. a
-//! [`ChunkCacheDecoded`]), so repeated small reads of large shards decode and hold only the subchunks they
-//! touch. Over a [`ChunkCachePartialDecoder`], which caches shard indexes, a subchunk miss reads and
+//! [`SyncChunkCacheDecoded`]), so repeated small reads of large shards decode and hold only the subchunks they
+//! touch. Over a [`SyncChunkCachePartialDecoder`], which caches shard indexes, a subchunk miss reads and
 //! decodes just that subchunk. With the `async` feature, [`SubchunkCache`] also supports asynchronous operations when
 //! given an asynchronous decoded subchunk cache and an asynchronous chunk cache (or [`NoCache`]). See
 //! [`SubchunkCache`] for the choice of chunk cache.
@@ -299,7 +299,7 @@ pub trait SyncChunkCacheTraits: MaybeSend + MaybeSync {
     ///
     /// The [`SyncChunkCacheType`] bound is what confines this trait to chunk types that support
     /// synchronous retrieval, so an unusable combination such as a
-    /// [`ChunkCache`]`<AsyncChunkCacheTypePartialDecoder>` is rejected where it is
+    /// [`SyncChunkCache`]`<AsyncChunkCacheTypePartialDecoder>` is rejected where it is
     /// written rather than at an unrelated retrieval call site.
     type Value: SyncChunkCacheType;
 

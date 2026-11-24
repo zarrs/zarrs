@@ -97,16 +97,16 @@ macro_rules! impl_chunk_cache_constructors {
 ///
 /// Invalidating the whole cache drops its chunks while holding its internal locks, so a cached partial decoder must not
 /// access the cache when dropped.
-pub struct ChunkCache<CT: SyncChunkCacheType> {
+pub struct SyncChunkCache<CT: SyncChunkCacheType> {
     cache: backend::Cache<CT>,
     config: backend::Config,
 }
 
-impl<CT: SyncChunkCacheType> ChunkCache<CT> {
+impl<CT: SyncChunkCacheType> SyncChunkCache<CT> {
     impl_chunk_cache_constructors!();
 }
 
-impl<CT: SyncChunkCacheType> SyncChunkCacheTraits for ChunkCache<CT> {
+impl<CT: SyncChunkCacheType> SyncChunkCacheTraits for SyncChunkCache<CT> {
     type Value = CT;
 
     fn try_get_or_insert_with(
@@ -136,7 +136,7 @@ impl<CT: SyncChunkCacheType> SyncChunkCacheTraits for ChunkCache<CT> {
 
 /// An asynchronous chunk cache with a capacity in chunks or bytes.
 ///
-/// See [`ChunkCache`] for its eviction policy.
+/// See [`SyncChunkCache`] for its eviction policy.
 #[cfg(feature = "async")]
 pub struct AsyncChunkCache<CT: AsyncChunkCacheType> {
     cache: backend::Cache<CT>,
@@ -203,13 +203,13 @@ impl<CT: AsyncChunkCacheType> AsyncChunkCacheTraits for AsyncChunkCache<CT> {
 }
 
 /// An encoded chunk cache.
-pub type ChunkCacheEncoded = ChunkCache<ChunkCacheTypeEncoded>;
+pub type SyncChunkCacheEncoded = SyncChunkCache<ChunkCacheTypeEncoded>;
 
 /// An decoded chunk cache.
-pub type ChunkCacheDecoded = ChunkCache<ChunkCacheTypeDecoded>;
+pub type SyncChunkCacheDecoded = SyncChunkCache<ChunkCacheTypeDecoded>;
 
 /// An partial decoder chunk cache.
-pub type ChunkCachePartialDecoder = ChunkCache<SyncChunkCacheTypePartialDecoder>;
+pub type SyncChunkCachePartialDecoder = SyncChunkCache<SyncChunkCacheTypePartialDecoder>;
 
 /// An asynchronous encoded chunk cache.
 #[cfg(feature = "async")]
@@ -234,10 +234,10 @@ mod tests {
 
     use super::*;
     use crate::array::DataType;
-    use crate::array::cache::{ChunkCacheEncoded, ChunkCachePartialDecoder};
+    use crate::array::cache::{SyncChunkCacheEncoded, SyncChunkCachePartialDecoder};
 
     /// Retrieve `count` chunks of `size` bytes through `cache`.
-    fn retrieve(cache: &ChunkCacheEncoded, count: u64, size: usize) {
+    fn retrieve(cache: &SyncChunkCacheEncoded, count: u64, size: usize) {
         for i in 0..count {
             SyncChunkCacheTraits::try_get_or_insert_with(
                 cache,
@@ -250,11 +250,11 @@ mod tests {
 
     #[test]
     fn chunk_cache_chunk_limit() {
-        let cache = ChunkCacheEncoded::new_chunk_limit(4);
+        let cache = SyncChunkCacheEncoded::new_chunk_limit(4);
         retrieve(&cache, 10, 10);
         assert!((1..=4).contains(&cache.len()));
 
-        let cache = ChunkCacheEncoded::new_chunk_limit(1);
+        let cache = SyncChunkCacheEncoded::new_chunk_limit(1);
         retrieve(&cache, 3, 10);
         assert_eq!(cache.len(), 1);
     }
@@ -262,19 +262,19 @@ mod tests {
     #[test]
     fn chunk_cache_one_slot_replaces_first_chunk() {
         for (cache, chunk_size) in [
-            (ChunkCacheEncoded::new_chunk_limit(1), 10),
-            (ChunkCacheEncoded::new_size_limit(100, Some(90)), 90),
+            (SyncChunkCacheEncoded::new_chunk_limit(1), 10),
+            (SyncChunkCacheEncoded::new_size_limit(100, Some(90)), 90),
             // A ghost allocation of 0 still keeps one ghost slot
             (
-                ChunkCacheEncoded::new_chunk_limit(1).with_ghost_allocation(0.0),
+                SyncChunkCacheEncoded::new_chunk_limit(1).with_ghost_allocation(0.0),
                 10,
             ),
             (
-                ChunkCacheEncoded::new_size_limit(100, Some(90)).with_ghost_allocation(0.0),
+                SyncChunkCacheEncoded::new_size_limit(100, Some(90)).with_ghost_allocation(0.0),
                 90,
             ),
             (
-                ChunkCacheEncoded::new_size_limit(100, None).with_ghost_allocation(0.0),
+                SyncChunkCacheEncoded::new_size_limit(100, None).with_ghost_allocation(0.0),
                 90,
             ),
         ] {
@@ -289,13 +289,13 @@ mod tests {
 
     #[test]
     fn chunk_cache_size_limit() {
-        let cache = ChunkCacheEncoded::new_size_limit(100, None);
+        let cache = SyncChunkCacheEncoded::new_size_limit(100, None);
         retrieve(&cache, 20, 10);
         assert!(cache.len() > 0);
         assert!(cache.size() <= 100);
 
         // A chunk larger than the size limit is not cached
-        let cache = ChunkCacheEncoded::new_size_limit(100, None);
+        let cache = SyncChunkCacheEncoded::new_size_limit(100, None);
         retrieve(&cache, 1, 200);
         assert_eq!(cache.len(), 0);
     }
@@ -304,13 +304,13 @@ mod tests {
     fn chunk_cache_allocations() {
         // Out of range and NaN allocations do not panic
         for allocation in [f64::NAN, f64::NEG_INFINITY, -1.0, 0.0, 0.5, 1.0, 2.0] {
-            let cache = ChunkCacheEncoded::new_chunk_limit(4)
+            let cache = SyncChunkCacheEncoded::new_chunk_limit(4)
                 .with_hot_allocation(allocation)
                 .with_ghost_allocation(allocation);
             retrieve(&cache, 10, 10);
             assert!((1..=4).contains(&cache.len()));
 
-            let cache = ChunkCacheEncoded::new_size_limit(100, None)
+            let cache = SyncChunkCacheEncoded::new_size_limit(100, None)
                 .with_hot_allocation(allocation)
                 .with_ghost_allocation(allocation);
             retrieve(&cache, 20, 10);
@@ -324,7 +324,7 @@ mod tests {
         }
 
         // A size-limited cache does not cache chunks larger than its hot allocation
-        let cache = ChunkCacheEncoded::new_size_limit(100, None).with_hot_allocation(0.5);
+        let cache = SyncChunkCacheEncoded::new_size_limit(100, None).with_hot_allocation(0.5);
         retrieve(&cache, 1, 60);
         assert_eq!(cache.len(), 0);
         retrieve(&cache, 1, 40);
@@ -333,7 +333,7 @@ mod tests {
 
     /// Retrieve chunk `index` through `cache`, initialising it with `f` if it is uncached.
     fn retrieve_with(
-        cache: &ChunkCacheEncoded,
+        cache: &SyncChunkCacheEncoded,
         index: u64,
         f: &mut dyn FnMut() -> Result<ChunkCacheTypeEncoded, ArrayError>,
     ) -> ChunkCacheTypeEncoded {
@@ -347,7 +347,7 @@ mod tests {
 
     /// Retrieve the chunks `indices` of `size` bytes through `cache`, returning the number retrieved uncached.
     fn retrieve_counting(
-        cache: &ChunkCacheEncoded,
+        cache: &SyncChunkCacheEncoded,
         indices: std::ops::Range<u64>,
         size: usize,
     ) -> usize {
@@ -371,7 +371,7 @@ mod tests {
         // A cache of 4096 chunks of 4 KiB, whose record of evicted chunks must hold more than the 1500 chunks of
         // region B for them to be admitted as frequently retrieved
         const SIZE: usize = 4096;
-        let cache = ChunkCacheEncoded::new_size_limit(4096 * SIZE as u64, None);
+        let cache = SyncChunkCacheEncoded::new_size_limit(4096 * SIZE as u64, None);
         let a = 0..4096;
         let b = 10_000..11_500;
         retrieve_counting(&cache, a.clone(), SIZE);
@@ -402,7 +402,7 @@ mod tests {
                 .num_threads(1)
                 .build()
                 .unwrap();
-            let cache = ChunkCacheEncoded::new_chunk_limit(4);
+            let cache = SyncChunkCacheEncoded::new_chunk_limit(4);
             pool.install(|| {
                 (0..64).into_par_iter().for_each(|_| {
                     SyncChunkCacheTraits::try_get_or_insert_with(
@@ -427,7 +427,7 @@ mod tests {
                 .num_threads(2)
                 .build()
                 .unwrap();
-            let cache = ChunkCacheEncoded::new_chunk_limit(4);
+            let cache = SyncChunkCacheEncoded::new_chunk_limit(4);
             let calls = AtomicUsize::new(0);
             let (started, wait_started) = std::sync::mpsc::channel();
             let retrieve = |chunk: u64, f: &mut dyn FnMut() -> Result<_, ArrayError>| {
@@ -472,7 +472,7 @@ mod tests {
                 .num_threads(2)
                 .build()
                 .unwrap();
-            let cache = ChunkCacheEncoded::new_chunk_limit(4);
+            let cache = SyncChunkCacheEncoded::new_chunk_limit(4);
             let (started, wait_started) = std::sync::mpsc::channel();
             let (retrieved, wait_retrieved) = std::sync::mpsc::channel();
             let retrieve = |f: &mut dyn FnMut() -> Result<_, ArrayError>| {
@@ -506,30 +506,30 @@ mod tests {
     #[test]
     fn chunk_cache_chunk_size_hint() {
         // Chunks of about the hinted size are cached
-        let cache = ChunkCacheEncoded::new_size_limit(1 << 20, Some(1024));
+        let cache = SyncChunkCacheEncoded::new_size_limit(1 << 20, Some(1024));
         retrieve(&cache, 2048, 1024);
         assert!(cache.len() > 512);
         assert!(cache.size() <= 1 << 20);
 
         // Without a hint the cache is one shard, so a chunk up to its hot allocation is cached. With a hint it is split
         // into shards of at most half the capacity, so a chunk larger than a shard is not cached.
-        let cache = ChunkCacheEncoded::new_size_limit(1 << 20, None);
+        let cache = SyncChunkCacheEncoded::new_size_limit(1 << 20, None);
         retrieve(&cache, 1, 600 << 10);
         assert_eq!(cache.len(), 1);
-        let cache = ChunkCacheEncoded::new_size_limit(1 << 20, Some(1024));
+        let cache = SyncChunkCacheEncoded::new_size_limit(1 << 20, Some(1024));
         retrieve(&cache, 1, 600 << 10);
         assert_eq!(cache.len(), 0);
 
         // Hinted caches stay within their documented byte ceiling even when capacity is odd
-        let cache = ChunkCacheEncoded::new_size_limit(63, Some(1));
+        let cache = SyncChunkCacheEncoded::new_size_limit(63, Some(1));
         retrieve(&cache, 100, 1);
         assert!(cache.size() <= 63);
-        let cache = ChunkCacheEncoded::new_size_limit(65, Some(1));
+        let cache = SyncChunkCacheEncoded::new_size_limit(65, Some(1));
         retrieve(&cache, 100, 1);
         assert!(cache.size() <= 65);
 
         // A zero hint does not panic
-        let cache = ChunkCacheEncoded::new_size_limit(100, Some(0));
+        let cache = SyncChunkCacheEncoded::new_size_limit(100, Some(0));
         retrieve(&cache, 20, 10);
         assert!(cache.size() <= 100);
     }
@@ -539,8 +539,8 @@ mod tests {
         const WAITERS: usize = 7;
         let chunk_indices = ArrayIndices::from([0].as_slice());
         for cache in [
-            ChunkCacheEncoded::new_chunk_limit(4),
-            ChunkCacheEncoded::new_size_limit(100, None),
+            SyncChunkCacheEncoded::new_chunk_limit(4),
+            SyncChunkCacheEncoded::new_size_limit(100, None),
         ] {
             let calls = AtomicUsize::new(0);
             let (loader_started_tx, loader_started_rx) = std::sync::mpsc::channel();
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn chunk_cache_invalidate_discards_retrieval_in_progress() {
-        let cache = ChunkCacheEncoded::new_chunk_limit(4);
+        let cache = SyncChunkCacheEncoded::new_chunk_limit(4);
         let (started, wait_started) = std::sync::mpsc::channel();
         let (invalidated, wait_invalidated) = std::sync::mpsc::channel();
         let cache = &cache;
@@ -750,7 +750,7 @@ mod tests {
 
     #[test]
     fn chunk_cache_partial_decoder_weight_growth_does_not_panic() {
-        let cache = ChunkCachePartialDecoder::new_size_limit(100, None);
+        let cache = SyncChunkCachePartialDecoder::new_size_limit(100, None);
         let decoder = Arc::new(GrowingPartialDecoder {
             held: AtomicUsize::new(10),
         });
@@ -795,7 +795,7 @@ mod tests {
     }
 
     struct DropQueriesCache {
-        cache: Arc<ChunkCachePartialDecoder>,
+        cache: Arc<SyncChunkCachePartialDecoder>,
         held: usize,
     }
 
@@ -838,7 +838,7 @@ mod tests {
     fn chunk_cache_drops_values_outside_shard_locks() {
         let (sender, receiver) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let cache = Arc::new(ChunkCachePartialDecoder::new_size_limit(100, None));
+            let cache = Arc::new(SyncChunkCachePartialDecoder::new_size_limit(100, None));
             // Insert 5 small entries, then a single large entry that evicts >= 3 of them at once.
             for i in 0..5u64 {
                 SyncChunkCacheTraits::try_get_or_insert_with(
@@ -876,7 +876,7 @@ mod tests {
     fn chunk_cache_invalidate_drops_values_outside_shard_locks() {
         let (sender, receiver) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let cache = Arc::new(ChunkCachePartialDecoder::new_size_limit(100, None));
+            let cache = Arc::new(SyncChunkCachePartialDecoder::new_size_limit(100, None));
             SyncChunkCacheTraits::try_get_or_insert_with(
                 cache.as_ref(),
                 ArrayIndices::from([0].as_slice()),
@@ -899,7 +899,7 @@ mod tests {
 
     #[test]
     fn chunk_cache_sync_miss_during_thread_local_teardown() {
-        struct DropReadsCache(ChunkCacheEncoded);
+        struct DropReadsCache(SyncChunkCacheEncoded);
 
         impl Drop for DropReadsCache {
             fn drop(&mut self) {
@@ -918,9 +918,9 @@ mod tests {
         std::thread::spawn(|| {
             // Register EARLY_TLS before any cache access so it is destroyed after `INITIALISING`.
             EARLY_TLS.with_borrow_mut(|slot| {
-                *slot = Some(DropReadsCache(ChunkCacheEncoded::new_chunk_limit(2)));
+                *slot = Some(DropReadsCache(SyncChunkCacheEncoded::new_chunk_limit(2)));
             });
-            let cache = ChunkCacheEncoded::new_chunk_limit(2);
+            let cache = SyncChunkCacheEncoded::new_chunk_limit(2);
             SyncChunkCacheTraits::try_get_or_insert_with(
                 &cache,
                 ArrayIndices::from([0].as_slice()),

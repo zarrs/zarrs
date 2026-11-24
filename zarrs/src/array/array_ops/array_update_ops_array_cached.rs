@@ -201,7 +201,8 @@ mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use super::*;
     use crate::array::cache::{
-        ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, SyncChunkCacheTraits,
+        SyncChunkCacheDecoded, SyncChunkCacheEncoded, SyncChunkCachePartialDecoder,
+        SyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use zarrs_storage::store::MemoryStore;
@@ -293,15 +294,15 @@ mod tests {
 
     #[test]
     fn partial_encoder_invalidates_all_cache_value_types() {
-        test_partial_encoder_invalidates(ChunkCacheEncoded::new_chunk_limit(1));
-        test_partial_encoder_invalidates(ChunkCacheDecoded::new_chunk_limit(1));
-        test_partial_encoder_invalidates(ChunkCachePartialDecoder::new_chunk_limit(1));
+        test_partial_encoder_invalidates(SyncChunkCacheEncoded::new_chunk_limit(1));
+        test_partial_encoder_invalidates(SyncChunkCacheDecoded::new_chunk_limit(1));
+        test_partial_encoder_invalidates(SyncChunkCachePartialDecoder::new_chunk_limit(1));
     }
 
     #[test]
     fn failed_partial_encode_invalidates_all_cache_value_types() {
-        test_failed_partial_encode_invalidates(ChunkCacheEncoded::new_chunk_limit(1));
-        test_failed_partial_encode_invalidates(ChunkCacheDecoded::new_chunk_limit(1));
-        test_failed_partial_encode_invalidates(ChunkCachePartialDecoder::new_chunk_limit(1));
+        test_failed_partial_encode_invalidates(SyncChunkCacheEncoded::new_chunk_limit(1));
+        test_failed_partial_encode_invalidates(SyncChunkCacheDecoded::new_chunk_limit(1));
+        test_failed_partial_encode_invalidates(SyncChunkCachePartialDecoder::new_chunk_limit(1));
     }
 }

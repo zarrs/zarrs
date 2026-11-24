@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 use subchunk_grid_cases::{Case, cases, plain_sharding};
 use zarrs::array::cache::{
-    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, SyncChunkCacheTraits,
+    SyncChunkCacheDecoded, SyncChunkCacheEncoded, SyncChunkCachePartialDecoder,
+    SyncChunkCacheTraits,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, CodecOptions, SyncArrayPartialEncoderTraits, data_type,
@@ -68,7 +69,10 @@ fn local_subchunk_grid_propagates_through_partial_decoders() -> TestResult {
 fn local_subchunk_grid_exposed_by_partial_encoders() -> TestResult {
     let case = plain_sharding();
     let array = build(&case)?;
-    let cached = ArrayCached::new(array.clone(), ChunkCachePartialDecoder::new_chunk_limit(1));
+    let cached = ArrayCached::new(
+        array.clone(),
+        SyncChunkCachePartialDecoder::new_chunk_limit(1),
+    );
 
     let encoders: [(&str, Arc<dyn SyncArrayPartialEncoderTraits>); 2] = [
         (
@@ -122,11 +126,21 @@ fn local_subchunk_grid_via_chunk_caches() -> TestResult {
     check_cache(
         &case,
         &array,
-        ChunkCachePartialDecoder::new_chunk_limit(1),
+        SyncChunkCachePartialDecoder::new_chunk_limit(1),
         true,
     )?;
-    check_cache(&case, &array, ChunkCacheEncoded::new_chunk_limit(1), true)?;
-    check_cache(&case, &array, ChunkCacheDecoded::new_chunk_limit(1), false)
+    check_cache(
+        &case,
+        &array,
+        SyncChunkCacheEncoded::new_chunk_limit(1),
+        true,
+    )?;
+    check_cache(
+        &case,
+        &array,
+        SyncChunkCacheDecoded::new_chunk_limit(1),
+        false,
+    )
 }
 
 #[test]

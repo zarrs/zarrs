@@ -25,16 +25,16 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// ```compile_fail
 /// # use std::sync::Arc;
 /// # use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
-/// # use zarrs::array::cache::ChunkCacheDecoded;
+/// # use zarrs::array::cache::SyncChunkCacheDecoded;
 /// # use zarrs_storage::store::MemoryStore;
 /// let store = Arc::new(MemoryStore::new());
 /// let builder = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8);
 /// let array_a = builder.build_arc(store.clone(), "/a").unwrap();
 /// let array_b = builder.build_arc(store, "/b").unwrap();
-/// let cache = Arc::new(ChunkCacheDecoded::new_chunk_limit(2));
+/// let cache = Arc::new(SyncChunkCacheDecoded::new_chunk_limit(2));
 /// let cached_a = ArrayCached::new(array_a, cache.clone());
 /// let cached_b = ArrayCached::new(array_b, cache);
-/// // error: `retrieve_chunk` requires `Arc<ChunkCacheDecoded>: SyncArrayCache`, which is not satisfied
+/// // error: `retrieve_chunk` requires `Arc<SyncChunkCacheDecoded>: SyncArrayCache`, which is not satisfied
 /// cached_b.retrieve_chunk::<Vec<u8>>(&[0], &Resources::default()).unwrap();
 /// ```
 ///
@@ -97,15 +97,15 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// ```compile_fail
 /// # use std::sync::Arc;
 /// # use zarrs::array::{ArrayBuilder, ArrayCached, data_type};
-/// # use zarrs::array::cache::ChunkCacheEncoded;
+/// # use zarrs::array::cache::SyncChunkCacheEncoded;
 /// # use zarrs_storage::store::MemoryStore;
 /// # async fn f() {
 /// let store = Arc::new(MemoryStore::new());
 /// let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
 ///     .build_arc(store, "/")
 ///     .unwrap();
-/// let cached = ArrayCached::new(array, ChunkCacheEncoded::new_chunk_limit(2));
-/// // error: the trait bound `ChunkCacheEncoded: AsyncArrayCache` is not satisfied
+/// let cached = ArrayCached::new(array, SyncChunkCacheEncoded::new_chunk_limit(2));
+/// // error: the trait bound `SyncChunkCacheEncoded: AsyncArrayCache` is not satisfied
 /// cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap();
 /// # }
 /// ```

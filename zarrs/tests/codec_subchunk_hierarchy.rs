@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs::array::cache::ChunkCacheDecoded;
+use zarrs::array::cache::SyncChunkCacheDecoded;
 use zarrs::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingCodecBuilder};
 use zarrs::array::codec::{BytesCodec, CodecChainBound, TransposeCodec, TransposeOrder};
 use zarrs::array::{
@@ -70,7 +70,7 @@ fn hierarchy_is_pure_ordered_and_shape_independent() -> Result<(), Box<dyn std::
         )?))])
         .array_to_bytes_codec(outer.build_arc());
     let array = builder.build_arc(store.clone(), "/array")?;
-    let cached = ArrayCached::new(array.clone(), ChunkCacheDecoded::new_chunk_limit(1));
+    let cached = ArrayCached::new(array.clone(), SyncChunkCacheDecoded::new_chunk_limit(1));
     let codecs = array.subchunk_codecs();
     let cached_codecs = cached.subchunk_codecs();
     assert_eq!(codecs.len(), array.subchunk_grids().len());

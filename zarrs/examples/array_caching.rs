@@ -24,8 +24,8 @@ use std::fmt::Write;
 use std::sync::Arc;
 
 use zarrs::array::cache::{
-    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, NoCache, SubchunkCache,
-    SyncArrayCache, SyncChunkCacheTraits,
+    NoCache, SubchunkCache, SyncArrayCache, SyncChunkCacheDecoded, SyncChunkCacheEncoded,
+    SyncChunkCachePartialDecoder, SyncChunkCacheTraits,
 };
 use zarrs::array::codec::GzipCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayCached, ArraySubset, Resources, data_type};
@@ -81,22 +81,26 @@ fn main() -> Result<(), Box<dyn Error>> {
             subchunked,
         };
         read.through("NoCache", NoCache, |_| Vec::new())?;
-        read.through("Encoded", ChunkCacheEncoded::new_chunk_limit(2), |cache| {
-            vec![held(cache, "encoded shards")]
-        })?;
-        read.through("Decoded", ChunkCacheDecoded::new_chunk_limit(2), |cache| {
-            vec![held(cache, "decoded shards")]
-        })?;
+        read.through(
+            "Encoded",
+            SyncChunkCacheEncoded::new_chunk_limit(2),
+            |cache| vec![held(cache, "encoded shards")],
+        )?;
+        read.through(
+            "Decoded",
+            SyncChunkCacheDecoded::new_chunk_limit(2),
+            |cache| vec![held(cache, "decoded shards")],
+        )?;
         read.through(
             "PartialDecoder",
-            ChunkCachePartialDecoder::new_chunk_limit(2),
+            SyncChunkCachePartialDecoder::new_chunk_limit(2),
             |cache| vec![held(cache, "shard indexes")],
         )?;
     }
 
     println!(
-        "\nChunks are held in a ChunkCache{{Encoded,Decoded,PartialDecoder}}, or none with NoCache.\n\
-         Subchunks are held in a ChunkCacheDecoded by a SubchunkCache over the chunk cache."
+        "\nChunks are held in a SyncChunkCache{{Encoded,Decoded,PartialDecoder}}, or none with NoCache.\n\
+         Subchunks are held in a SyncChunkCacheDecoded by a SubchunkCache over the chunk cache."
     );
     Ok(())
 }
@@ -138,7 +142,7 @@ impl Read<'_> {
             // subchunks. Hinting their size splits the cache into shards for concurrent reads. Level 0 is the
             // outermost subchunk grid, the subchunks of the shards.
             let subchunks =
-                ChunkCacheDecoded::new_size_limit(64 * SUBCHUNK_BYTES, Some(SUBCHUNK_BYTES));
+                SyncChunkCacheDecoded::new_size_limit(64 * SUBCHUNK_BYTES, Some(SUBCHUNK_BYTES));
             let cache = SubchunkCache::new(0, subchunks, chunks);
             self.read_twice([name, "Decoded"], cache, |cache| {
                 let mut held_ = chunks_held(cache.chunks());
