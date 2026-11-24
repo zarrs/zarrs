@@ -8,15 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.14...HEAD)
 
 ### Changed
+- Rename `FilesystemStore` to `SyncFilesystemStore` and keep `FilesystemStore` as an alias
 - **Breaking**: Bump `zarrs_storage` to 0.5.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
-- *Behavioural change*: `FilesystemStore` no longer serialises operations on the same key
+- *Behavioural change*: `SyncFilesystemStore` no longer serialises operations on the same key
   - A read of a key concurrent with a write of that key is now undefined, which is aligned with the `zarrs` store expectations
-- `FilesystemStore` implements `get_partial` directly, rather than through `get_partial_many`
+- `SyncFilesystemStore` implements `get_partial` directly, rather than through `get_partial_many`
 - Bump `itertools` to 0.15.0 and `lru` to 0.19.0
 
 ### Fixed
-- `FilesystemStore::get_partial_many` returns an `InvalidByteRangeError` for a byte range beyond the end of the file, rather than allocating the requested length or reading from the start of the file (`Suffix`)
+- `SyncFilesystemStore::get_partial_many` returns an `InvalidByteRangeError` for a byte range beyond the end of the file, rather than allocating the requested length or reading from the start of the file (`Suffix`)
   - With direct I/O, such a byte range no longer panics or reads pages beyond the end of the file
 
 ## [0.3.14](https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.14) - 2026-10-13

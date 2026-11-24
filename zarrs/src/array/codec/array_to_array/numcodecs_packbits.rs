@@ -32,13 +32,13 @@ use zarrs_chunk_grid::{ArrayIndices, ArraySubset, ChunkGrid};
 
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesDecodeInput, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, ChunkGridEncodedRef, Codec, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3, CodecSpecificOptions,
-    CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayToArrayCodecGeometryTraits,
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesDecodeInput, ChunkGridDecoded,
+    ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, Codec, CodecCreateError,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecPluginV2, CodecPluginV3,
+    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -329,11 +329,11 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         let packed_handle = self.packed_handle(input_handle.clone(), shape)?;
         let inner =
             self.packbits
@@ -349,11 +349,11 @@ impl ArrayToArrayCodecTraits for NumcodecsPackBitsCodecBound {
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        input_handle: Arc<dyn SyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         let input_handle = self.packed_handle(input_handle, shape)?;
         self.packbits
             .clone()
@@ -404,8 +404,8 @@ mod tests {
     use std::sync::Arc;
 
     use zarrs_codec::{
-        BytesPartialDecoderTraits, Codec, CodecCreateError, CodecMetadataOptions, CodecOptions,
-        CodecSpecificOptions, ComputeResources, CowBytes, Resources,
+        Codec, CodecCreateError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+        ComputeResources, CowBytes, Resources, SyncBytesPartialDecoderTraits,
         UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
     };
     use zarrs_metadata::v2::MetadataV2;
@@ -492,7 +492,7 @@ mod tests {
         use crate::array::{Array, ArrayMetadata};
         use zarrs_metadata::v2::ArrayMetadataV2;
         use zarrs_storage::store::MemoryStore;
-        use zarrs_storage::{ReadableStorageTraits, StoreKey};
+        use zarrs_storage::{StoreKey, SyncReadableStorageTraits};
 
         let metadata: ArrayMetadataV2 = serde_json::from_value(serde_json::json!({
             "zarr_format": 2,
@@ -603,14 +603,14 @@ mod tests {
         Ok(())
     }
 
-    /// Counts the calls to [`BytesPartialDecoderTraits::partial_decode_many`] and [`BytesPartialDecoderTraits::exists`].
+    /// Counts the calls to [`SyncBytesPartialDecoderTraits::partial_decode_many`] and [`SyncBytesPartialDecoderTraits::exists`].
     struct CountingPartialDecoder(
         CowBytes<'static>,
         std::sync::atomic::AtomicUsize,
         std::sync::atomic::AtomicUsize,
     );
 
-    impl BytesPartialDecoderTraits for CountingPartialDecoder {
+    impl SyncBytesPartialDecoderTraits for CountingPartialDecoder {
         fn exists(&self) -> Result<bool, zarrs_storage::StorageError> {
             self.2.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(true)

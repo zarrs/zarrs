@@ -123,7 +123,7 @@ fn nested_sharding_preserves_encoded_bytes_and_unconstrained_compute() {
 
 #[test]
 fn encoded_cache_uses_the_resources_of_each_read() {
-    use zarrs::array::cache::ChunkCacheEncoded;
+    use zarrs::array::cache::SyncChunkCacheEncoded;
     use zarrs::array::{ArrayCached, Resources};
 
     let codec = Arc::new(RecordingCodec::default());
@@ -135,7 +135,7 @@ fn encoded_cache_uses_the_resources_of_each_read() {
     array
         .store_chunk(&[0], &data, &Resources::default())
         .unwrap();
-    let cached = ArrayCached::new(array, ChunkCacheEncoded::new_chunk_limit(1));
+    let cached = ArrayCached::new(array, SyncChunkCacheEncoded::new_chunk_limit(1));
     for target in [7, 3, 0] {
         codec.reset();
         assert_eq!(

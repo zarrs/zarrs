@@ -4,13 +4,13 @@
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
-use zarrs::array::cache::{ChunkCacheDecoded, SyncChunkCacheTraits};
+use zarrs::array::cache::{SyncChunkCacheDecoded, SyncChunkCacheTraits};
 use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
 use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    CowBytes, MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError,
-    StoreKey, StorePrefix, WritableStorageTraits,
+    CowBytes, OffsetBytesIterator, StorageError, StoreKey, StorePrefix, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -36,12 +36,12 @@ impl FailingStore {
     }
 }
 
-impl ReadableStorageTraits for FailingStore {
+impl SyncReadableStorageTraits for FailingStore {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.store.get_partial_many(key, byte_ranges)
     }
 
@@ -54,7 +54,7 @@ impl ReadableStorageTraits for FailingStore {
     }
 }
 
-impl WritableStorageTraits for FailingStore {
+impl SyncWritableStorageTraits for FailingStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.check(key)?;
         self.store.set(key, value)
@@ -88,7 +88,7 @@ fn failed_writes_invalidate_the_chunks_they_may_have_changed() -> TestResult {
     let store = Arc::new(FailingStore::default());
     let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
         .build_arc(store.clone(), "/array")?;
-    let cached = ArrayCached::new(array.clone(), ChunkCacheDecoded::new_chunk_limit(2));
+    let cached = ArrayCached::new(array.clone(), SyncChunkCacheDecoded::new_chunk_limit(2));
     let resources = Resources::default();
     // Each write fails to write chunk 1, after writing any other chunk, and invalidates the chunks it writes
     for write in 0..6 {

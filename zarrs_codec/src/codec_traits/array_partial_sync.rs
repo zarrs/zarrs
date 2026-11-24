@@ -18,7 +18,7 @@ use crate::{
 ///
 /// Implement [`ArrayPartialDecoderNoSubchunkingTraits`] instead of this trait for a partial decoder
 /// without subchunks.
-pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
+pub trait SyncArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
     /// Return the chunk-local subchunk grid hierarchy for this decoder.
     ///
     /// Grids are ordered from outermost to innermost and are relative to the decoded
@@ -55,7 +55,7 @@ pub trait ArrayPartialDecoderSubchunkingTraits: MaybeSend + MaybeSync {
 /// Marker trait for partial array decoders that do not expose subchunks.
 pub trait ArrayPartialDecoderNoSubchunkingTraits {}
 
-impl<T> ArrayPartialDecoderSubchunkingTraits for T
+impl<T> SyncArrayPartialDecoderSubchunkingTraits for T
 where
     T: ArrayPartialDecoderNoSubchunkingTraits + MaybeSend + MaybeSync + ?Sized,
 {
@@ -69,8 +69,8 @@ where
 }
 
 /// Partial array decoder traits.
-pub trait ArrayPartialDecoderTraits:
-    ArrayPartialDecoderSubchunkingTraits + Any + MaybeSend + MaybeSync
+pub trait SyncArrayPartialDecoderTraits:
+    SyncArrayPartialDecoderSubchunkingTraits + Any + MaybeSend + MaybeSync
 {
     /// Return the data type of the partial decoder.
     fn data_type(&self) -> &DataType;
@@ -144,8 +144,8 @@ pub trait ArrayPartialDecoderTraits:
 }
 
 /// Partial array encoder traits.
-pub trait ArrayPartialEncoderTraits:
-    ArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
+pub trait SyncArrayPartialEncoderTraits:
+    SyncArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Erase the chunk.
     ///

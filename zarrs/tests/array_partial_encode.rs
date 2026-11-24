@@ -7,7 +7,7 @@ use zarrs::array::Resources;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{ArrayBuilder, data_type};
 use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
-use zarrs::storage::ReadableStorageTraits;
+use zarrs::storage::SyncReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions};

@@ -157,8 +157,8 @@ use zarrs_metadata::v3::AdditionalFieldV3;
 pub use zarrs_metadata::v3::GroupMetadataV3;
 use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use zarrs_storage::{
-    ListableStorageTraits, ReadableStorageTraits, StorageError, StorageHandle,
-    WritableStorageTraits,
+    StorageError, StorageHandle, SyncListableStorageTraits, SyncReadableStorageTraits,
+    SyncWritableStorageTraits,
 };
 
 /// A group.
@@ -197,7 +197,7 @@ impl<TStorage: ?Sized> Clone for Group<TStorage> {
 
 impl<TStorage: ?Sized> Group<TStorage> {
     /// Create a group in `storage` at `path` with `metadata`.
-    /// This does **not** write to the store, use [`store_metadata`](Group<WritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
+    /// This does **not** write to the store, use [`store_metadata`](Group<SyncWritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
     ///
     /// Options are populated from the global config using [`GroupOpenOptions::from_config`].
     /// Use [`Group::new_with_metadata_opt`] to specify options explicitly.
@@ -215,7 +215,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     }
 
     /// Create a group in `storage` at `path` with `metadata` and non-default options.
-    /// This does **not** write to the store, use [`store_metadata`](Group<WritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
+    /// This does **not** write to the store, use [`store_metadata`](Group<SyncWritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
     ///
     /// # Errors
     ///
@@ -425,7 +425,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits> Group<TStorage> {
     /// Open a group in `storage` at `path` with default options.
     /// The metadata is read from the store.
     ///
@@ -493,7 +493,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits> Group<TStorage> {
     /// Return the children of the group
     ///
     /// The `recursive` argument determines whether the returned `Node`s will have their
@@ -853,9 +853,9 @@ pub enum GroupCreateError {
     MissingMetadata,
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {}
+impl<TStorage: ?Sized + SyncReadableStorageTraits> Group<TStorage> {}
 
-impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
+impl<TStorage: ?Sized + SyncWritableStorageTraits> Group<TStorage> {
     /// Store the group metadata.
     ///
     /// # Errors
@@ -1186,8 +1186,12 @@ mod tests {
     #[test]
     fn group_invalid_metadata() {
         let store: std::sync::Arc<MemoryStore> = std::sync::Arc::new(MemoryStore::new());
-        WritableStorageTraits::set(&store, &StoreKey::new("zarr.json").unwrap(), vec![0].into())
-            .unwrap();
+        SyncWritableStorageTraits::set(
+            &store,
+            &StoreKey::new("zarr.json").unwrap(),
+            vec![0].into(),
+        )
+        .unwrap();
         assert_eq!(
             Group::open(store, "/").unwrap_err().to_string(),
             "error parsing metadata for zarr.json: expected value at line 1 column 1"

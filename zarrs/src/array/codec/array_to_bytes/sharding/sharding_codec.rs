@@ -31,13 +31,13 @@ use crate::array::{
     CodecChainBound, CowBytes, DataType, FillValue, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeInput,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ArrayToBytesCodecTraits, BytesDecodeInput, ChunkGridDecoded, ChunkGridDecodedRef,
     CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
     CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits, copy_fill_value_into,
-    decode_into_array_bytes_target,
+    RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
+    SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
+    UnboundArrayToBytesCodecTraits, copy_fill_value_into, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -770,11 +770,11 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(ShardingPartialDecoder::new(
             input_handle,
             shape,
@@ -813,13 +813,13 @@ impl ArrayToBytesCodecTraits for ShardingCodecBound {
     }
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
-            sharding_partial_encoder::ShardingPartialEncoder::new(
+            sharding_partial_encoder::SyncShardingPartialEncoder::new(
                 input_output_handle,
                 shape,
                 self.subchunk_shape.clone(),

@@ -5,8 +5,8 @@ use super::get_reshaped_indexer;
 use super::reshape_codec_grid_mapping::reshape_rectilinear_grid;
 use crate::array::{ChunkGrid, DataType};
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
+    ArrayBytes, CodecError, CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -23,9 +23,9 @@ pub(crate) struct ReshapeCodecPartial<T: ?Sized> {
     data_type: DataType,
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for ReshapeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for ReshapeCodecPartial<T>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_handle.erase()
@@ -108,9 +108,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for ReshapeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits for ReshapeCodecPartial<T>
 where
-    T: ArrayPartialDecoderSubchunkingTraits,
+    T: SyncArrayPartialDecoderSubchunkingTraits,
 {
     fn local_subchunk_grids(
         &self,
@@ -125,9 +125,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for ReshapeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for ReshapeCodecPartial<T>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
         &self.data_type

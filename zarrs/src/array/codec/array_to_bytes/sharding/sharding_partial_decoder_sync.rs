@@ -18,10 +18,10 @@ use crate::array::{
     DataType, Indexer, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits,
-    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
-    BytesPartialDecoderTraits, CodecError, CodecOptions, ExpectedOptionalBytesError,
-    InvalidNumberOfElementsError, copy_fill_value_into, decode_into_array_bytes_target,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
+    CodecError, CodecOptions, ExpectedOptionalBytesError, InvalidNumberOfElementsError,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    SyncBytesPartialDecoderTraits, copy_fill_value_into, decode_into_array_bytes_target,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
@@ -56,7 +56,7 @@ impl<T: ?Sized> ShardingPartialDecoder<T> {
     }
 }
 
-impl<T: BytesPartialDecoderTraits + ?Sized> ShardingPartialDecoder<T> {
+impl<T: SyncBytesPartialDecoderTraits + ?Sized> ShardingPartialDecoder<T> {
     /// Create a new partial decoder for the sharding codec.
     ///
     /// # Errors
@@ -120,7 +120,7 @@ impl<T: BytesPartialDecoderTraits + ?Sized> ShardingPartialDecoder<T> {
 }
 
 #[expect(clippy::too_many_arguments)]
-pub(crate) fn partial_decode<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+pub(crate) fn partial_decode<T: SyncBytesPartialDecoderTraits + ?Sized + 'static>(
     input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
@@ -175,7 +175,7 @@ pub(crate) fn partial_decode<T: BytesPartialDecoderTraits + ?Sized + 'static>(
     }
 }
 
-impl<T: BytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderSubchunkingTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecoderSubchunkingTraits
     for ShardingPartialDecoder<T>
 {
     fn local_subchunk_grids(
@@ -190,7 +190,7 @@ impl<T: BytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderSubchun
     }
 }
 
-impl<T: BytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderTraits
+impl<T: SyncBytesPartialDecoderTraits + ?Sized + 'static> SyncArrayPartialDecoderTraits
     for ShardingPartialDecoder<T>
 {
     fn data_type(&self) -> &DataType {
@@ -302,7 +302,7 @@ impl<T: BytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderTraits
     }
 }
 
-fn get_subchunk_partial_decoder<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+fn get_subchunk_partial_decoder<T: SyncBytesPartialDecoderTraits + ?Sized + 'static>(
     input_handle: &Arc<T>,
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChainBound>,
@@ -310,7 +310,7 @@ fn get_subchunk_partial_decoder<T: BytesPartialDecoderTraits + ?Sized + 'static>
     resources: &Resources,
     byte_offset: ByteOffset,
     byte_length: ByteLength,
-) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
     inner_codecs
         .clone()
         .partial_decoder(
@@ -336,7 +336,7 @@ fn get_subchunk_partial_decoder<T: BytesPartialDecoderTraits + ?Sized + 'static>
 }
 
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_fixed_array_subset_into<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+fn partial_decode_fixed_array_subset_into<T: SyncBytesPartialDecoderTraits + ?Sized + 'static>(
     input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
@@ -423,7 +423,7 @@ fn partial_decode_fixed_array_subset_into<T: BytesPartialDecoderTraits + ?Sized 
 ///
 /// This supports any data type, including variable length and optional data types.
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_merged_array_subset<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+fn partial_decode_merged_array_subset<T: SyncBytesPartialDecoderTraits + ?Sized + 'static>(
     input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
@@ -507,7 +507,7 @@ fn partial_decode_merged_array_subset<T: BytesPartialDecoderTraits + ?Sized + 's
 }
 
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_indexer<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+fn partial_decode_indexer<T: SyncBytesPartialDecoderTraits + ?Sized + 'static>(
     input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],
@@ -566,7 +566,7 @@ fn partial_decode_indexer<T: BytesPartialDecoderTraits + ?Sized + 'static>(
 ///
 /// The `indexer` must be validated against the shard shape.
 #[expect(clippy::too_many_arguments)]
-fn partial_decode_fixed_indexer_into<T: BytesPartialDecoderTraits + ?Sized + 'static>(
+fn partial_decode_fixed_indexer_into<T: SyncBytesPartialDecoderTraits + ?Sized + 'static>(
     input_handle: &Arc<T>,
     subchunk_grid: &RegularBoundedChunkGrid,
     subchunk_shape: &[NonZeroU64],

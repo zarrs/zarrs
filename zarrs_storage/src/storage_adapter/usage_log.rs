@@ -12,9 +12,9 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    Bytes, CowBytes, MaybeBytes, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError, StoreKey,
+    StoreKeys, StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
@@ -90,7 +90,7 @@ impl<TStorage: ?Sized> UsageLogStorageAdapter<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
@@ -108,7 +108,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
@@ -153,7 +153,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
+impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
     fn list(&self) -> Result<StoreKeys, StorageError> {
@@ -219,7 +219,7 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
+impl<TStorage: ?Sized + SyncWritableStorageTraits> SyncWritableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {

@@ -22,7 +22,7 @@ use crate::{
     storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits},
 };
 pub use zarrs_metadata::NodeMetadata;
-use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits};
+use zarrs_storage::{SyncListableStorageTraits, SyncReadableStorageTraits};
 
 /// A Zarr hierarchy.
 #[derive(Debug, Clone)]
@@ -114,7 +114,7 @@ impl Hierarchy {
     ///
     /// # Errors
     /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub fn open<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub fn open<TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
     ) -> Result<Self, HierarchyCreateError> {
@@ -126,7 +126,7 @@ impl Hierarchy {
     ///
     /// # Errors
     /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub fn open_opt<TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
         options: &HierarchyOpenOptions,
@@ -211,7 +211,9 @@ impl Hierarchy {
     ///
     /// # Errors
     /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes.
-    pub fn try_from_group<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub fn try_from_group<
+        TStorage: ?Sized + SyncReadableStorageTraits + SyncListableStorageTraits,
+    >(
         group: &Group<TStorage>,
     ) -> Result<Self, HierarchyCreateError> {
         let mut hierarchy = Hierarchy::new();
@@ -359,7 +361,7 @@ mod tests {
     #[cfg(feature = "async")]
     use zarrs_storage::AsyncReadableWritableListableStorageTraits;
     use zarrs_storage::store::MemoryStore;
-    use zarrs_storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::{StoreKey, SyncWritableStorageTraits};
 
     const EXPECTED_TREE: &str = "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n";
 

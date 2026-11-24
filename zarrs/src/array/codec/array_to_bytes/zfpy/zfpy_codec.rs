@@ -17,9 +17,9 @@ use zarrs_metadata_ext::codec::zfpy::{
     ZfpyCodecConfiguration, ZfpyCodecConfigurationMode, ZfpyCodecConfigurationNumcodecs,
 };
 
-use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_codec::{SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits};
 
 /// A `zfpy` codec implementation.
 ///
@@ -197,11 +197,11 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         self.inner
             .clone()
             .partial_decoder(input_handle, shape, options, resources)

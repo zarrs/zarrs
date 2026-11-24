@@ -19,15 +19,16 @@ use crate::array::{
     transmute_to_bytes,
 };
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions, Resources, update_array_bytes,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
+    update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
 
-pub(crate) struct ShardingPartialEncoder {
-    input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+pub(crate) struct SyncShardingPartialEncoder {
+    input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
     subchunk_shape: ChunkShape,
     chunk_grid: RegularBoundedChunkGrid,
     inner_codecs: Arc<CodecChainBound>,
@@ -39,11 +40,11 @@ pub(crate) struct ShardingPartialEncoder {
     sharding_options: ShardingCodecOptions,
 }
 
-impl ShardingPartialEncoder {
+impl SyncShardingPartialEncoder {
     /// Create a new partial encoder for the sharding codec.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shard_shape: &[std::num::NonZeroU64],
         subchunk_shape: ChunkShape,
         inner_codecs: Arc<CodecChainBound>,
@@ -273,7 +274,7 @@ impl ShardingPartialEncoder {
     }
 }
 
-impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
+impl SyncArrayPartialDecoderSubchunkingTraits for SyncShardingPartialEncoder {
     fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
@@ -283,7 +284,7 @@ impl ArrayPartialDecoderSubchunkingTraits for ShardingPartialEncoder {
     }
 }
 
-impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
+impl SyncArrayPartialDecoderTraits for SyncShardingPartialEncoder {
     fn data_type(&self) -> &DataType {
         self.inner_codecs.data_type()
     }
@@ -303,7 +304,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let handle: Arc<dyn BytesPartialDecoderTraits> = self.input_output_handle.clone();
+        let handle: Arc<dyn SyncBytesPartialDecoderTraits> = self.input_output_handle.clone();
         super::sharding_partial_decoder_sync::partial_decode(
             &handle,
             &self.chunk_grid,
@@ -321,7 +322,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     }
 }
 
-impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
+impl SyncArrayPartialEncoderTraits for SyncShardingPartialEncoder {
     fn erase(&self) -> Result<(), super::CodecError> {
         let mut shard_index = self.shard_index.lock().unwrap();
         self.input_output_handle.erase()?;

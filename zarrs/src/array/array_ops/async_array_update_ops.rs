@@ -3,7 +3,7 @@ use super::{
     AsyncReadableStorageTraits, Indexer, IntoArrayBytes, MaybeSend,
 };
 #[cfg(doc)]
-use super::{ArrayOps, ArrayUpdateOps};
+use super::{ArrayOps, SyncArrayUpdateOps};
 use std::sync::Arc;
 use zarrs_codec::{AsyncArrayPartialEncoderTraits, Resources};
 
@@ -14,7 +14,7 @@ use zarrs_codec::{AsyncArrayPartialEncoderTraits, Resources};
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
-    /// Async variant of [`ArrayUpdateOps::store_partial_chunk`].
+    /// Async variant of [`SyncArrayUpdateOps::store_partial_chunk`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_store_partial_chunk<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
@@ -24,7 +24,7 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayUpdateOps::store_array_subset`].
+    /// Async variant of [`SyncArrayUpdateOps::store_array_subset`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_store_array_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
@@ -33,7 +33,7 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
         resources: &Resources,
     ) -> Result<(), ArrayError>;
 
-    /// Async variant of [`ArrayUpdateOps::compact_chunk`].
+    /// Async variant of [`SyncArrayUpdateOps::compact_chunk`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_compact_chunk(
         &self,
@@ -44,7 +44,7 @@ pub trait AsyncArrayUpdateOps: AsyncArrayReadOps + AsyncArrayWriteOps {
     /// Return a read-only instantiation of the array.
     fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits>;
 
-    /// Async variant of [`ArrayUpdateOps::partial_encoder`].
+    /// Async variant of [`SyncArrayUpdateOps::partial_encoder`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_partial_encoder(
         &self,

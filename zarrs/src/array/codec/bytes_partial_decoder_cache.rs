@@ -3,11 +3,11 @@
 use crate::array::CowBytes;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions, Resources};
+use zarrs_codec::{CodecError, CodecOptions, Resources, SyncBytesPartialDecoderTraits};
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 
-/// A cache for a [`BytesPartialDecoderTraits`] partial decoder.
+/// A cache for a [`SyncBytesPartialDecoderTraits`] partial decoder.
 pub(crate) struct BytesPartialDecoderCache {
     cache: Option<Vec<u8>>,
 }
@@ -18,7 +18,7 @@ impl BytesPartialDecoderCache {
     /// # Errors
     /// Returns a [`CodecError`] if caching fails.
     pub(crate) fn new(
-        input_handle: &dyn BytesPartialDecoderTraits,
+        input_handle: &dyn SyncBytesPartialDecoderTraits,
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Self, CodecError> {
@@ -46,7 +46,7 @@ impl BytesPartialDecoderCache {
     }
 }
 
-impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
+impl SyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(self.cache.is_some())
     }
@@ -96,7 +96,12 @@ impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<Option<Vec<CowBytes<'a>>>, CodecError> {
-        BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options, resources)
+        SyncBytesPartialDecoderTraits::partial_decode_many(
+            self,
+            decoded_regions,
+            options,
+            resources,
+        )
     }
 
     fn supports_partial_decode(&self) -> bool {

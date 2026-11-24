@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs::array::cache::ChunkCacheEncoded;
+use zarrs::array::cache::SyncChunkCacheEncoded;
 use zarrs::array::codec::ShardingCodecBuilder;
 use zarrs::array::{
     ArrayBuilder, ArrayCached, ArraySubset, ComputeResources, DataType, FillValue, data_type,
@@ -316,7 +316,7 @@ fn array_retrieve_into_target_shape() -> Result<(), Box<dyn std::error::Error>> 
                 retrieve_array_subset_into
             ]
         );
-        let cached = ArrayCached::new(array.clone(), ChunkCacheEncoded::new_chunk_limit(4));
+        let cached = ArrayCached::new(array.clone(), SyncChunkCacheEncoded::new_chunk_limit(4));
         check_retrieve_into!(
             &data_type,
             cached,

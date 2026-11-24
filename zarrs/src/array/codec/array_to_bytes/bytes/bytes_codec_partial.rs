@@ -6,8 +6,9 @@ use super::bytes_codec::decoded_len;
 use super::{BytesDataTypeTraitsArc, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
-    ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, Resources,
+    ArrayPartialDecoderNoSubchunkingTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -136,9 +137,9 @@ impl<T: ?Sized> BytesCodecPartial<T> {
 /// The `bytes` codec encodes a chunk as a whole, so it has no subchunks.
 impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits for BytesCodecPartial<T> {}
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for BytesCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for BytesCodecPartial<T>
 where
-    T: BytesPartialDecoderTraits,
+    T: SyncBytesPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
         &self.data_type
@@ -243,9 +244,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for BytesCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for BytesCodecPartial<T>
 where
-    T: BytesPartialEncoderTraits,
+    T: SyncBytesPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()

@@ -16,18 +16,18 @@ use zarrs::array::cache::{
     AsyncChunkCacheTraits,
 };
 use zarrs::array::cache::{
-    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, NoCache, SubchunkCache,
-    SyncArrayCache, SyncChunkCacheTraits,
+    NoCache, SubchunkCache, SyncArrayCache, SyncChunkCacheDecoded, SyncChunkCacheEncoded,
+    SyncChunkCachePartialDecoder, SyncChunkCacheTraits,
 };
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
-    ArrayError, ArrayReadOps, ArraySubset, CodecOptions, DataType, ElementOrder, FillValue,
-    Resources, data_type,
+    ArrayError, ArraySubset, CodecOptions, DataType, ElementOrder, FillValue, Resources,
+    SyncArrayReadOps, data_type,
 };
 #[cfg(feature = "async")]
 use zarrs::storage::AsyncReadableWritableStorageTraits;
-use zarrs::storage::ReadableWritableStorageTraits;
+use zarrs::storage::SyncReadableWritableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 
@@ -77,6 +77,11 @@ fn flat_target(
         types(
             "Async{}",
             AsyncArrayCache => SyncArrayCache,
+            AsyncReadableWritableStorageTraits => SyncReadableWritableStorageTraits,
+            AsyncArrayReadOps => SyncArrayReadOps,
+            AsyncChunkCacheDecoded => SyncChunkCacheDecoded,
+            AsyncChunkCacheEncoded => SyncChunkCacheEncoded,
+            AsyncChunkCachePartialDecoder => SyncChunkCachePartialDecoder,
             AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),

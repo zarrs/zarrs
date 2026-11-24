@@ -7,8 +7,8 @@ use super::{
     AsyncWritableStorageTraits,
 };
 use super::{
-    ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits, StorageError,
-    StoreKey, StorePrefix, WritableStorageTraits,
+    MaybeBytes, StorageError, StoreKey, StorePrefix, SyncListableStorageTraits,
+    SyncMaybeBytesIterator, SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 use crate::OffsetBytesIterator;
 
@@ -25,7 +25,9 @@ impl<TStorage: ?Sized> StorageHandle<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for StorageHandle<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
+    for StorageHandle<TStorage>
+{
     fn get(&self, key: &super::StoreKey) -> Result<MaybeBytes, super::StorageError> {
         self.0.get(key)
     }
@@ -34,7 +36,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.0.get_partial_many(key, byte_ranges)
     }
 
@@ -55,7 +57,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
     }
 }
 
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for StorageHandle<TStorage> {
+impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
+    for StorageHandle<TStorage>
+{
     fn list(&self) -> Result<super::StoreKeys, super::StorageError> {
         self.0.list()
     }
@@ -83,7 +87,9 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for Storage
     }
 }
 
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for StorageHandle<TStorage> {
+impl<TStorage: ?Sized + SyncWritableStorageTraits> SyncWritableStorageTraits
+    for StorageHandle<TStorage>
+{
     fn set(
         &self,
         key: &super::StoreKey,

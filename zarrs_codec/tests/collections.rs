@@ -1,10 +1,10 @@
 #![allow(missing_docs)]
 
 use std::sync::Mutex;
-use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, Resources};
+use zarrs_codec::{CodecOptions, Resources, SyncBytesPartialDecoderTraits};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::store::MemoryStore;
-use zarrs_storage::{StoreKey, WritableStorageTraits};
+use zarrs_storage::{StoreKey, SyncWritableStorageTraits};
 
 #[test]
 fn partial_decode_collections() {
@@ -15,7 +15,7 @@ fn partial_decode_collections() {
     let mutex_decoder = Mutex::new(Some(vec![42, 43]));
     let options = CodecOptions::default();
     for decoder in [
-        &storage_decoder as &dyn BytesPartialDecoderTraits,
+        &storage_decoder as &dyn SyncBytesPartialDecoderTraits,
         &mutex_decoder,
     ] {
         for count in [0, 1, 1024] {
@@ -45,7 +45,7 @@ fn partial_decode_collections() {
     }
     let missing = (MemoryStore::new(), StoreKey::new("missing").unwrap());
     let empty = Mutex::new(None);
-    for decoder in [&missing as &dyn BytesPartialDecoderTraits, &empty] {
+    for decoder in [&missing as &dyn SyncBytesPartialDecoderTraits, &empty] {
         let ranges = std::iter::once_with(|| panic!("missing values must not consume ranges"));
         assert!(
             decoder

@@ -10,11 +10,11 @@ use crate::array::{
     unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
-    ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayToArrayCodecTraits, ChunkGridDecoded,
+    ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -279,21 +279,21 @@ impl ArrayToArrayCodecTraits for ReshapeCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(self.new_partial(input_handle, shape)?))
     }
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(self.new_partial(input_output_handle, shape)?))
     }
 

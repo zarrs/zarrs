@@ -10,9 +10,9 @@ use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources,
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    ComputeResources, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    Resources, SyncBytesPartialDecoderTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
@@ -165,11 +165,11 @@ impl BytesToBytesCodecTraits for Adler32Codec {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncBytesPartialDecoderTraits>, CodecError> {
         match self.location {
             Adler32CodecConfigurationChecksumLocation::Start => Ok(Arc::new(
                 StripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),

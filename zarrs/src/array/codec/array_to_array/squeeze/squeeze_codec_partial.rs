@@ -4,9 +4,9 @@ use super::{get_squeezed_array_subset, get_squeezed_indexer};
 use crate::array::{ChunkGrid, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions,
-    Resources,
+    ArrayBytes, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    SyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -43,9 +43,9 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for SqueezeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits for SqueezeCodecPartial<T>
 where
-    T: ArrayPartialDecoderSubchunkingTraits,
+    T: SyncArrayPartialDecoderSubchunkingTraits,
 {
     fn local_subchunk_grids(
         &self,
@@ -60,9 +60,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for SqueezeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for SqueezeCodecPartial<T>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
         &self.data_type
@@ -98,9 +98,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for SqueezeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for SqueezeCodecPartial<T>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()

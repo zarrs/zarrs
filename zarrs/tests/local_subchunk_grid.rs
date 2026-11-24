@@ -9,11 +9,11 @@ use serial_test::serial;
 use zarrs::array::chunk_grid::RegularChunkGrid;
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    Array, ArrayBuilder, ArrayBytes, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesRepresentation, ChunkGrid, ChunkShape, ChunkShapeTraits, Codec,
-    CodecChain, CodecChainBound, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, ComputeResources, CowBytes, DataType, FillValue, RecommendedConcurrency,
-    Resources, UnboundArrayToBytesCodecTraits, data_type,
+    Array, ArrayBuilder, ArrayBytes, ArrayToBytesCodecTraits, BytesRepresentation, ChunkGrid,
+    ChunkShape, ChunkShapeTraits, Codec, CodecChain, CodecChainBound, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, ComputeResources, CowBytes, DataType,
+    FillValue, RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
+    SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits, data_type,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
@@ -22,10 +22,11 @@ use zarrs::storage::byte_range::ByteRange;
 use zarrs::storage::store::MemoryStore;
 use zarrs_chunk_grid::ChunkGridCreateError;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderSubchunkingTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecSubchunkingTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded,
-    ChunkGridEncodedRef, CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
-    UnboundArrayToArrayCodecTraits, register_codec_v3, unregister_codec_v3,
+    ArrayCodecTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, ChunkGridEncodedRef,
+    CodecSpecificOptions, PartialDecoderCapability, PartialEncoderCapability,
+    SyncArrayPartialDecoderSubchunkingTraits, UnboundArrayToArrayCodecTraits, register_codec_v3,
+    unregister_codec_v3,
 };
 use zarrs_plugin::{ExtensionName, RuntimePlugin, ZarrVersion};
 
@@ -39,7 +40,7 @@ struct DynamicLocalSubchunkCodecBound {
 }
 
 struct DynamicLocalSubchunkPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+    input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
     shape: ChunkShape,
     data_type: DataType,
 }
@@ -241,11 +242,11 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(DynamicLocalSubchunkPartialDecoder {
             input_handle,
             shape: shape.to_vec(),
@@ -254,7 +255,7 @@ impl ArrayToBytesCodecTraits for DynamicLocalSubchunkCodecBound {
     }
 }
 
-impl ArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDecoder {
+impl SyncArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDecoder {
     fn local_subchunk_grids(
         &self,
         options: &CodecOptions,
@@ -277,7 +278,7 @@ impl ArrayPartialDecoderSubchunkingTraits for DynamicLocalSubchunkPartialDecoder
     }
 }
 
-impl ArrayPartialDecoderTraits for DynamicLocalSubchunkPartialDecoder {
+impl SyncArrayPartialDecoderTraits for DynamicLocalSubchunkPartialDecoder {
     fn data_type(&self) -> &DataType {
         &self.data_type
     }

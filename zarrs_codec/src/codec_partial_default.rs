@@ -5,11 +5,11 @@ use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderSubchunkingTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, CowBytes,
-    DataType, Resources,
+    ArrayBytes, ArrayPartialDecoderNoSubchunkingTraits, ArraySubset, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecTraits, ChunkShape, CodecError,
+    CodecOptions, CowBytes, DataType, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits,
 };
 use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
@@ -145,10 +145,10 @@ impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn local_subchunk_grids(
         &self,
@@ -163,10 +163,10 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits
+impl<T: ?Sized> SyncArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()
@@ -216,10 +216,10 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits
+impl<T: ?Sized> SyncArrayPartialEncoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()
@@ -300,10 +300,10 @@ impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits
 {
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits
+impl<T: ?Sized> SyncArrayPartialDecoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
-    T: BytesPartialDecoderTraits,
+    T: SyncBytesPartialDecoderTraits,
 {
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()
@@ -361,10 +361,10 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits
+impl<T: ?Sized> SyncArrayPartialEncoderTraits
     for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
-    T: BytesPartialEncoderTraits,
+    T: SyncBytesPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()
@@ -442,10 +442,10 @@ where
     }
 }
 
-impl<T: ?Sized> BytesPartialDecoderTraits
+impl<T: ?Sized> SyncBytesPartialDecoderTraits
     for CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>
 where
-    T: BytesPartialDecoderTraits,
+    T: SyncBytesPartialDecoderTraits,
 {
     fn exists(&self) -> Result<bool, StorageError> {
         self.input_output_handle.exists()
@@ -488,10 +488,10 @@ where
     }
 }
 
-impl<T: ?Sized> BytesPartialEncoderTraits
+impl<T: ?Sized> SyncBytesPartialEncoderTraits
     for CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>
 where
-    T: BytesPartialEncoderTraits,
+    T: SyncBytesPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), super::CodecError> {
         self.input_output_handle.erase()

@@ -9,7 +9,7 @@ use serde_json::Value;
 use zarrs::array::{
     Array, ArrayBytes, ArrayMetadata, ArrayMetadataOptions, ArraySubset, Resources,
 };
-use zarrs::filesystem::FilesystemStore;
+use zarrs::filesystem::SyncFilesystemStore;
 
 use zarrs_regression_testing::schema::{Status, Write};
 
@@ -331,7 +331,8 @@ pub(crate) fn write_current(
     shape: &[u64],
     data: &Data,
 ) -> Result<(), String> {
-    let store = Arc::new(FilesystemStore::new(path).map_err(|err| format!("create store: {err}"))?);
+    let store =
+        Arc::new(SyncFilesystemStore::new(path).map_err(|err| format!("create store: {err}"))?);
     let metadata = serde_json::from_value::<ArrayMetadata>(metadata.clone())
         .map_err(|err| format!("parse metadata: {err}"))?;
     let array = Array::new_with_metadata(store, ARRAY_PATH, metadata)
@@ -352,7 +353,8 @@ pub(crate) fn write_current(
 
 /// Read the whole array with `shape` in the filesystem store at `path` with the current `zarrs`.
 pub(crate) fn read_current(path: &Path, shape: &[u64]) -> Result<Data, String> {
-    let store = Arc::new(FilesystemStore::new(path).map_err(|err| format!("create store: {err}"))?);
+    let store =
+        Arc::new(SyncFilesystemStore::new(path).map_err(|err| format!("create store: {err}"))?);
     let array = Array::open(store, ARRAY_PATH).map_err(|err| format!("open array: {err}"))?;
     let bytes = array
         .retrieve_array_subset::<ArrayBytes>(

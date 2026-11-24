@@ -399,7 +399,7 @@ mod tests {
     use super::*;
     use crate::array::{BytesRepresentation, CowBytes};
     use zarrs_codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions, ComputeResources,
+        BytesToBytesCodecTraits, CodecOptions, ComputeResources, SyncBytesPartialDecoderTraits,
     };
     use zarrs_storage::byte_range::ByteRange;
 

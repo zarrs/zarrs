@@ -8,7 +8,7 @@ use zarrs::array::Resources;
 use zarrs::array::codec::BitroundCodec;
 use zarrs::array::{ArrayBuilder, ArrayMetadataOptions, ArraySubset, data_type};
 use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
-use zarrs_filesystem::FilesystemStore;
+use zarrs_filesystem::SyncFilesystemStore;
 
 /// Helper function to print binary representation table
 fn print_bitround_table_f32(original: &[f32], rounded: &[f32], keepbits: u8) {
@@ -69,7 +69,7 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&test_dir)?;
 
     // Create array with bitround codec
-    let store = Arc::new(FilesystemStore::new(&test_dir)?);
+    let store = Arc::new(SyncFilesystemStore::new(&test_dir)?);
     let array_path = "/bitround_float32.zarr";
 
     let mut builder = ArrayBuilder::new(
@@ -148,7 +148,7 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
     // Create the directory if it doesn't exist
     std::fs::create_dir_all(&test_dir)?;
 
-    let store = Arc::new(FilesystemStore::new(&test_dir)?);
+    let store = Arc::new(SyncFilesystemStore::new(&test_dir)?);
     let array_path = "/bitround_uint8.zarr";
 
     let mut builder = ArrayBuilder::new(

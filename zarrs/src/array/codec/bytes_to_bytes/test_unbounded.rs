@@ -15,7 +15,7 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, SyncBytesPartialDecoderTraits};
     use zarrs_storage::byte_range::ByteRange;
 
     #[test]

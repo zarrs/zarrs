@@ -26,8 +26,8 @@ use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
 use zarrs_storage::{
-    ListableStorage, MaybeSend, MaybeSync, ReadableStorage, ReadableWritableStorage, StorageError,
-    WritableStorage,
+    MaybeSend, MaybeSync, StorageError, SyncListableStorage, SyncReadableStorage,
+    SyncReadableWritableStorage, SyncWritableStorage,
 };
 
 /// An [`Arc`] wrapped storage transformer.
@@ -144,8 +144,8 @@ pub trait StorageTransformerTraits:
     /// Returns an error if creation fails.
     fn create_readable_transformer(
         self: Arc<Self>,
-        storage: ReadableStorage,
-    ) -> Result<ReadableStorage, StorageError>;
+        storage: SyncReadableStorage,
+    ) -> Result<SyncReadableStorage, StorageError>;
 
     /// Create a writable transformer.
     ///
@@ -153,8 +153,8 @@ pub trait StorageTransformerTraits:
     /// Returns an error if creation fails.
     fn create_writable_transformer(
         self: Arc<Self>,
-        storage: WritableStorage,
-    ) -> Result<WritableStorage, StorageError>;
+        storage: SyncWritableStorage,
+    ) -> Result<SyncWritableStorage, StorageError>;
 
     /// Create a readable and writable transformer.
     ///
@@ -162,8 +162,8 @@ pub trait StorageTransformerTraits:
     /// Returns an error if creation fails.
     fn create_readable_writable_transformer(
         self: Arc<Self>,
-        storage: ReadableWritableStorage,
-    ) -> Result<ReadableWritableStorage, StorageError>;
+        storage: SyncReadableWritableStorage,
+    ) -> Result<SyncReadableWritableStorage, StorageError>;
 
     /// Create a listable transformer.
     ///
@@ -171,8 +171,8 @@ pub trait StorageTransformerTraits:
     /// Returns an error if creation fails.
     fn create_listable_transformer(
         self: Arc<Self>,
-        storage: ListableStorage,
-    ) -> Result<ListableStorage, StorageError>;
+        storage: SyncListableStorage,
+    ) -> Result<SyncListableStorage, StorageError>;
 
     #[cfg(feature = "async")]
     /// Create an asynchronous readable transformer.

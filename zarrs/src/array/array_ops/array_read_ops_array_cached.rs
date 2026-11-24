@@ -7,8 +7,8 @@ use rayon::iter::ParallelIterator;
 
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
-    Array, ArrayCached, ArrayError, ArrayReadOps, ArraySubset, ArraySubsetTraits, COrderBytes,
-    ChunkGrid, CodecOptions, FromArrayBytes, Indexer, ReadableStorageTraits,
+    Array, ArrayCached, ArrayError, ArraySubset, ArraySubsetTraits, COrderBytes, ChunkGrid,
+    CodecOptions, FromArrayBytes, Indexer, SyncArrayReadOps, SyncReadableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
@@ -20,7 +20,7 @@ use crate::array::cache::{
 };
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, DataType};
-use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits};
+use zarrs_codec::{ArrayBytesTarget, SyncArrayPartialDecoderTraits};
 use zarrs_storage::Bytes;
 
 /// Retrieve `array_subset`, which spans `chunks`, with elements in C order.
@@ -35,7 +35,7 @@ fn retrieve_array_subset_bytes<TStorage, C>(
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     match chunks.num_elements_usize() {
@@ -106,7 +106,7 @@ fn retrieve_multi_chunk_variable<TStorage, C>(
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     let indices = chunks.indices();
@@ -152,7 +152,7 @@ fn retrieve_multi_chunk_fixed<TStorage, C>(
     resources: &Resources,
 ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     // Zero-sized data has no bytes to decode, unlike the masks of zero-sized optional data
@@ -191,7 +191,7 @@ where
 
 impl<TStorage, C> ArrayCached<TStorage, C>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     pub(in crate::array) fn retrieve_chunk_into_with_options(
@@ -230,9 +230,9 @@ where
 }
 
 #[inherent]
-impl<TStorage, C> ArrayReadOps for ArrayCached<TStorage, C>
+impl<TStorage, C> SyncArrayReadOps for ArrayCached<TStorage, C>
 where
-    TStorage: ?Sized + ReadableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized,
 {
     #[allow(clippy::missing_errors_doc)]
@@ -471,7 +471,7 @@ where
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
         let options = self.codec_options();
         self.cache().cached_partial_decoder(
             self.array().as_ref(),
@@ -504,8 +504,8 @@ mod tests {
 
     use super::*;
     use crate::array::cache::{
-        ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, ChunkCacheType,
-        ChunkCacheTypeDecoded, SyncChunkCacheTraits,
+        ChunkCacheType, ChunkCacheTypeDecoded, SyncChunkCacheDecoded, SyncChunkCacheEncoded,
+        SyncChunkCachePartialDecoder, SyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArrayError, ArrayIndices, ArraySubset, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
@@ -726,40 +726,40 @@ mod tests {
 
     #[test]
     fn chunk_caches_support_encoded_values() {
-        test_cache(Box::new(ChunkCacheEncoded::new_chunk_limit(2)));
-        test_cache(Box::new(ChunkCacheEncoded::new_size_limit(1024, None)));
-        test_cache_sharded(ChunkCacheEncoded::new_chunk_limit(4));
-        test_cache_sharded(ChunkCacheEncoded::new_size_limit(4096, None));
-        test_cache_nested_optional(ChunkCacheEncoded::new_chunk_limit(4));
-        test_cache_nested_optional(ChunkCacheEncoded::new_size_limit(4096, None));
-        test_cache_variable(ChunkCacheEncoded::new_chunk_limit(9));
-        test_cache_variable(ChunkCacheEncoded::new_size_limit(4096, None));
+        test_cache(Box::new(SyncChunkCacheEncoded::new_chunk_limit(2)));
+        test_cache(Box::new(SyncChunkCacheEncoded::new_size_limit(1024, None)));
+        test_cache_sharded(SyncChunkCacheEncoded::new_chunk_limit(4));
+        test_cache_sharded(SyncChunkCacheEncoded::new_size_limit(4096, None));
+        test_cache_nested_optional(SyncChunkCacheEncoded::new_chunk_limit(4));
+        test_cache_nested_optional(SyncChunkCacheEncoded::new_size_limit(4096, None));
+        test_cache_variable(SyncChunkCacheEncoded::new_chunk_limit(9));
+        test_cache_variable(SyncChunkCacheEncoded::new_size_limit(4096, None));
     }
 
     #[test]
     fn chunk_caches_support_decoded_values() {
-        test_cache(Box::new(ChunkCacheDecoded::new_chunk_limit(2)));
-        test_cache(Box::new(ChunkCacheDecoded::new_size_limit(1024, None)));
-        test_cache_sharded(ChunkCacheDecoded::new_chunk_limit(4));
-        test_cache_sharded(ChunkCacheDecoded::new_size_limit(4096, None));
-        test_cache_nested_optional(ChunkCacheDecoded::new_chunk_limit(4));
-        test_cache_nested_optional(ChunkCacheDecoded::new_size_limit(4096, None));
-        test_cache_variable(ChunkCacheDecoded::new_chunk_limit(9));
-        test_cache_variable(ChunkCacheDecoded::new_size_limit(4096, None));
+        test_cache(Box::new(SyncChunkCacheDecoded::new_chunk_limit(2)));
+        test_cache(Box::new(SyncChunkCacheDecoded::new_size_limit(1024, None)));
+        test_cache_sharded(SyncChunkCacheDecoded::new_chunk_limit(4));
+        test_cache_sharded(SyncChunkCacheDecoded::new_size_limit(4096, None));
+        test_cache_nested_optional(SyncChunkCacheDecoded::new_chunk_limit(4));
+        test_cache_nested_optional(SyncChunkCacheDecoded::new_size_limit(4096, None));
+        test_cache_variable(SyncChunkCacheDecoded::new_chunk_limit(9));
+        test_cache_variable(SyncChunkCacheDecoded::new_size_limit(4096, None));
     }
 
     #[test]
     fn chunk_caches_support_partial_decoder_values() {
-        test_cache(Box::new(ChunkCachePartialDecoder::new_chunk_limit(2)));
-        test_cache(Box::new(ChunkCachePartialDecoder::new_size_limit(
+        test_cache(Box::new(SyncChunkCachePartialDecoder::new_chunk_limit(2)));
+        test_cache(Box::new(SyncChunkCachePartialDecoder::new_size_limit(
             1024, None,
         )));
-        test_cache_sharded(ChunkCachePartialDecoder::new_chunk_limit(4));
-        test_cache_sharded(ChunkCachePartialDecoder::new_size_limit(4096, None));
-        test_cache_nested_optional(ChunkCachePartialDecoder::new_chunk_limit(4));
-        test_cache_nested_optional(ChunkCachePartialDecoder::new_size_limit(4096, None));
-        test_cache_variable(ChunkCachePartialDecoder::new_chunk_limit(9));
-        test_cache_variable(ChunkCachePartialDecoder::new_size_limit(4096, None));
+        test_cache_sharded(SyncChunkCachePartialDecoder::new_chunk_limit(4));
+        test_cache_sharded(SyncChunkCachePartialDecoder::new_size_limit(4096, None));
+        test_cache_nested_optional(SyncChunkCachePartialDecoder::new_chunk_limit(4));
+        test_cache_nested_optional(SyncChunkCachePartialDecoder::new_size_limit(4096, None));
+        test_cache_variable(SyncChunkCachePartialDecoder::new_chunk_limit(9));
+        test_cache_variable(SyncChunkCachePartialDecoder::new_size_limit(4096, None));
     }
 
     #[derive(Default)]
@@ -835,7 +835,7 @@ mod tests {
             dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>,
         > = ArrayCached::new_boxed(
             array.clone(),
-            Box::new(ChunkCacheDecoded::new_chunk_limit(4)),
+            Box::new(SyncChunkCacheDecoded::new_chunk_limit(4)),
         );
         assert_eq!(
             cached
@@ -848,21 +848,21 @@ mod tests {
         assert!(cached.cache().is_empty());
 
         test_cache::<dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>>(Box::new(
-            ChunkCacheDecoded::new_chunk_limit(4),
+            SyncChunkCacheDecoded::new_chunk_limit(4),
         ));
 
         // SubchunkCache over dyn SyncChunkCacheTraits and dyn SyncArrayCache
         let dyn_subchunks: Box<dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>> =
-            Box::new(ChunkCacheDecoded::new_chunk_limit(4));
+            Box::new(SyncChunkCacheDecoded::new_chunk_limit(4));
         let dyn_chunks: Box<dyn SyncArrayCache> =
-            Box::new(ChunkCachePartialDecoder::new_chunk_limit(4));
+            Box::new(SyncChunkCachePartialDecoder::new_chunk_limit(4));
         let subchunk_cache = SubchunkCache::new_boxed(0, dyn_subchunks, dyn_chunks);
 
         // Heterogeneous caches behind ArrayCached<MemoryStore, dyn SyncArrayCache>
         let caches: Vec<Box<dyn SyncArrayCache>> = vec![
-            Box::new(ChunkCacheEncoded::new_chunk_limit(4)),
-            Box::new(ChunkCacheDecoded::new_chunk_limit(4)),
-            Box::new(ChunkCachePartialDecoder::new_chunk_limit(4)),
+            Box::new(SyncChunkCacheEncoded::new_chunk_limit(4)),
+            Box::new(SyncChunkCacheDecoded::new_chunk_limit(4)),
+            Box::new(SyncChunkCachePartialDecoder::new_chunk_limit(4)),
             Box::new(subchunk_cache),
             Box::new(NoCache),
         ];

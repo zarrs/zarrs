@@ -43,12 +43,12 @@ fn chunk_read_accepts_scattered_indices() -> Result<(), Box<dyn std::error::Erro
 #[test]
 fn decoded_cache_validates_absent_chunk_indexer() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::array::ArrayCached;
-    use zarrs::array::cache::ChunkCacheDecoded;
+    use zarrs::array::cache::SyncChunkCacheDecoded;
 
     let store = Arc::new(MemoryStore::default());
     let array = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::uint16(), 0u16)
         .build(store, "/array")?;
-    let cached = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(4));
+    let cached = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(4));
     let scattered: Vec<Vec<u64>> = vec![vec![0, 1], vec![1, 1]];
     assert_eq!(
         cached.retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &scattered, &Resources::default())?,

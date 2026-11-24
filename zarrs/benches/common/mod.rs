@@ -12,9 +12,9 @@ use zarrs::storage::{
     AsyncWritableStorageTraits,
 };
 use zarrs::storage::{
-    ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator, SyncReadableStorageTraits,
+    SyncWritableStorageTraits,
 };
 use zarrs_storage::CowBytes;
 
@@ -95,7 +95,9 @@ impl Drop for InFlight<'_> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for LatencyStore<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
+    for LatencyStore<TStorage>
+{
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let _guard = self.wait_sync();
         self.storage.get(key)
@@ -105,7 +107,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Latency
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         let _guard = self.wait_sync();
         self.storage.get_partial_many(key, byte_ranges)
     }
@@ -119,7 +121,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Latency
     }
 }
 
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for LatencyStore<TStorage> {
+impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
+    for LatencyStore<TStorage>
+{
     fn list(&self) -> Result<StoreKeys, StorageError> {
         self.storage.list()
     }
@@ -137,7 +141,9 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for Latency
     }
 }
 
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for LatencyStore<TStorage> {
+impl<TStorage: ?Sized + SyncWritableStorageTraits> SyncWritableStorageTraits
+    for LatencyStore<TStorage>
+{
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         let _guard = self.wait_sync();
         self.storage.set(key, value)

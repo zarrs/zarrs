@@ -10,9 +10,9 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// The performance metrics storage transformer. Accumulates metrics, such as bytes read and written.
@@ -94,7 +94,7 @@ impl<TStorage: ?Sized> PerformanceMetricsStorageAdapter<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
@@ -111,7 +111,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self.storage.get_partial_many(key, byte_ranges)?;
         if let Some(values) = values {
@@ -141,7 +141,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
+impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
     fn list(&self) -> Result<StoreKeys, StorageError> {
@@ -165,7 +165,7 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
+impl<TStorage: ?Sized + SyncWritableStorageTraits> SyncWritableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {

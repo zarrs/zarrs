@@ -3,7 +3,9 @@ use std::error::Error;
 use crate::byte_range::ByteRange;
 #[cfg(feature = "async")]
 use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
-use crate::{ListableStorageTraits, ReadableStorageTraits, StorePrefix, WritableStorageTraits};
+use crate::{
+    StorePrefix, SyncListableStorageTraits, SyncReadableStorageTraits, SyncWritableStorageTraits,
+};
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// Create a store with the following data
@@ -20,7 +22,7 @@ use crate::{ListableStorageTraits, ReadableStorageTraits, StorePrefix, WritableS
 ///   - j/
 ///     - k [0, 1]
 /// ```
-pub fn store_write<T: WritableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
+pub fn store_write<T: SyncWritableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
     store.erase_prefix(&StorePrefix::root())?;
 
     store.set(&"a/b".try_into()?, vec![255, 255, 255].into())?;
@@ -51,7 +53,7 @@ pub fn store_write<T: WritableStorageTraits>(store: &T) -> Result<(), Box<dyn Er
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// Read from the store and check the data matches the expected values after [`store_write`].
-pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
+pub fn store_read<T: SyncReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
     assert!(store.get(&"notfound".try_into()?)?.is_none());
     assert!(store.size_key(&"notfound".try_into()?)?.is_none());
     assert_eq!(
@@ -98,7 +100,7 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// List the store and check the data matches the expected values after [`store_write`].
-pub fn store_list<T: ListableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
+pub fn store_list<T: SyncListableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
     assert_eq!(
         store.list()?,
         &[
@@ -159,7 +161,7 @@ pub fn store_list<T: ListableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
 ///
 /// This test is not applicable to stores that perform compression or transformation of values.
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-pub fn store_list_size<T: ListableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
+pub fn store_list_size<T: SyncListableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
     assert_eq!(store.size()?, 7);
     assert_eq!(store.size_prefix(&"a/".try_into()?)?, 5);
     assert_eq!(store.size_prefix(&"i/".try_into()?)?, 2);

@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecGeometryTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions, CowBytes, InvalidBytesLengthError,
-    Resources,
+    ArrayBytes, ArrayBytesTarget, ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions,
+    CowBytes, InvalidBytesLengthError, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -82,7 +82,7 @@ fn split_subsets<'a>(
         .collect())
 }
 
-impl<T: ArrayPartialDecoderTraits + ?Sized> BytesPartialDecoderTraits
+impl<T: SyncArrayPartialDecoderTraits + ?Sized> SyncBytesPartialDecoderTraits
     for NumcodecsPackBitsPartial<T>
 {
     fn exists(&self) -> Result<bool, StorageError> {
@@ -117,7 +117,7 @@ impl<T: ArrayPartialDecoderTraits + ?Sized> BytesPartialDecoderTraits
     }
 }
 
-impl<T: ArrayPartialEncoderTraits + ?Sized> BytesPartialEncoderTraits
+impl<T: SyncArrayPartialEncoderTraits + ?Sized> SyncBytesPartialEncoderTraits
     for NumcodecsPackBitsPartial<T>
 {
     fn erase(&self) -> Result<(), CodecError> {
@@ -273,8 +273,10 @@ impl<T: ?Sized, D: ?Sized> NumcodecsPackBitsPartialDecoder<T, D> {
     }
 }
 
-impl<T: ArrayPartialDecoderSubchunkingTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Sized>
-    ArrayPartialDecoderSubchunkingTraits for NumcodecsPackBitsPartialDecoder<T, D>
+impl<
+    T: SyncArrayPartialDecoderSubchunkingTraits + ?Sized,
+    D: SyncArrayPartialDecoderTraits + ?Sized,
+> SyncArrayPartialDecoderSubchunkingTraits for NumcodecsPackBitsPartialDecoder<T, D>
 {
     fn local_subchunk_grids(
         &self,
@@ -288,8 +290,8 @@ impl<T: ArrayPartialDecoderSubchunkingTraits + ?Sized, D: ArrayPartialDecoderTra
     }
 }
 
-impl<T: ArrayPartialDecoderTraits + ?Sized, D: ArrayPartialDecoderTraits + ?Sized>
-    ArrayPartialDecoderTraits for NumcodecsPackBitsPartialDecoder<T, D>
+impl<T: SyncArrayPartialDecoderTraits + ?Sized, D: SyncArrayPartialDecoderTraits + ?Sized>
+    SyncArrayPartialDecoderTraits for NumcodecsPackBitsPartialDecoder<T, D>
 {
     fn data_type(&self) -> &DataType {
         self.inner.data_type()

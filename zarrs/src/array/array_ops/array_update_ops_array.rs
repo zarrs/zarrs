@@ -9,16 +9,18 @@ use rayon::iter::ParallelIterator;
 
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::{
-    Array, ArrayError, ArrayUpdateOps, CodecOptions, Indexer, IntoArrayBytes,
-    ReadableStorageTraits, ReadableWritableStorageTraits, WritableStorageTraits,
+    Array, ArrayError, CodecOptions, Indexer, IntoArrayBytes, SyncArrayUpdateOps,
+    SyncReadableStorageTraits, SyncReadableWritableStorageTraits, SyncWritableStorageTraits,
     recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArrayIndices, ArraySubsetTraits, update_array_bytes};
-use zarrs_codec::{ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecError, CodecTraits};
+use zarrs_codec::{
+    ArrayToBytesCodecTraits, CodecError, CodecTraits, SyncArrayPartialEncoderTraits,
+};
 
 #[inherent]
-impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
+impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> SyncArrayUpdateOps
     for Array<TStorage>
 {
     #[allow(clippy::missing_errors_doc)]
@@ -169,7 +171,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
     }
 
     #[allow(clippy::must_use_candidate)]
-    pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
+    pub fn readable(&self) -> Array<dyn SyncReadableStorageTraits> {
         self.with_storage(self.storage.clone().readable())
     }
 
@@ -178,12 +180,12 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, ArrayError> {
         self.partial_encoder_with_options(chunk_indices, self.codec_options(), resources)
     }
 }
 
-impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> Array<TStorage> {
     pub(in crate::array) fn store_partial_chunk_with_options<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
@@ -295,7 +297,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, ArrayError> {
         // Input/output
         let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.readable_writable_storage()?;

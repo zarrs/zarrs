@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
+    ArrayBytes, CodecError, CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -121,9 +121,9 @@ fn require_fixed(data_type: &DataType) -> Result<(), CodecError> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits for CastValueCodecPartial<T>
 where
-    T: ArrayPartialDecoderSubchunkingTraits,
+    T: SyncArrayPartialDecoderSubchunkingTraits,
 {
     fn local_subchunk_grids(
         &self,
@@ -135,9 +135,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for CastValueCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for CastValueCodecPartial<T>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
         &self.decoded_data_type
@@ -169,9 +169,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for CastValueCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for CastValueCodecPartial<T>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()

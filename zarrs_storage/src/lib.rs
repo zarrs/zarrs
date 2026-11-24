@@ -49,28 +49,29 @@ pub use self::storage_async::{
 };
 pub use self::storage_handle::StorageHandle;
 pub use self::storage_sync::{
-    discover_children, store_set_partial_many, AtomicRenameStorageTraits, ListableStorageTraits,
-    ReadableListableStorageTraits, ReadableStorageTraits, ReadableWritableListableStorageTraits,
-    ReadableWritableStorageTraits, WritableStorageTraits,
+    discover_children, store_set_partial_many, SyncAtomicRenameStorageTraits,
+    SyncListableStorageTraits, SyncReadableListableStorageTraits, SyncReadableStorageTraits,
+    SyncReadableWritableListableStorageTraits, SyncReadableWritableStorageTraits,
+    SyncWritableStorageTraits,
 };
 
 /// [`Arc`] wrapped readable storage.
-pub type ReadableStorage = Arc<dyn ReadableStorageTraits>;
+pub type SyncReadableStorage = Arc<dyn SyncReadableStorageTraits>;
 
 /// [`Arc`] wrapped writable storage.
-pub type WritableStorage = Arc<dyn WritableStorageTraits>;
+pub type SyncWritableStorage = Arc<dyn SyncWritableStorageTraits>;
 
 /// [`Arc`] wrapped readable and writable storage.
-pub type ReadableWritableStorage = Arc<dyn ReadableWritableStorageTraits>;
+pub type SyncReadableWritableStorage = Arc<dyn SyncReadableWritableStorageTraits>;
 
 /// [`Arc`] wrapped listable storage.
-pub type ListableStorage = Arc<dyn ListableStorageTraits>;
+pub type SyncListableStorage = Arc<dyn SyncListableStorageTraits>;
 
 /// [`Arc`] wrapped readable and listable storage.
-pub type ReadableListableStorage = Arc<dyn ReadableListableStorageTraits>;
+pub type SyncReadableListableStorage = Arc<dyn SyncReadableListableStorageTraits>;
 
 /// [`Arc`] wrapped readable, writable, and listable storage.
-pub type ReadableWritableListableStorage = Arc<dyn ReadableWritableListableStorageTraits>;
+pub type SyncReadableWritableListableStorage = Arc<dyn SyncReadableWritableListableStorageTraits>;
 
 #[cfg(feature = "async")]
 /// [`Arc`] wrapped asynchronous readable storage.
@@ -110,10 +111,10 @@ pub type Bytes = bytes::Bytes;
 pub type MaybeBytes = Option<Bytes>;
 
 /// An iterator of [`Bytes`].
-type BytesIterator<'a> = Box<dyn Iterator<Item = Result<Bytes, StorageError>> + 'a>;
+type SyncBytesIterator<'a> = Box<dyn Iterator<Item = Result<Bytes, StorageError>> + 'a>;
 
 /// An iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
-pub type MaybeBytesIterator<'a> = Option<BytesIterator<'a>>;
+pub type SyncMaybeBytesIterator<'a> = Option<SyncBytesIterator<'a>>;
 
 #[cfg(feature = "async")]
 /// An asynchronous iterator of [`Bytes`].

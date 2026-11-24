@@ -17,9 +17,9 @@ use zarrs::array::Resources;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::ArraySubset;
-use zarrs::filesystem::FilesystemStore;
+use zarrs::filesystem::SyncFilesystemStore;
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{ReadableStorage, ReadableWritableListableStorage};
+use zarrs::storage::{SyncReadableStorage, SyncReadableWritableListableStorage};
 
 /// If `true`, benchmark with an in-memory store; if `false`, use a filesystem store.
 const USE_MEMORY_STORE: bool = false;
@@ -53,17 +53,17 @@ fn random_data(n: usize) -> Vec<f64> {
         .collect()
 }
 
-fn make_store() -> ReadableWritableListableStorage {
+fn make_store() -> SyncReadableWritableListableStorage {
     if USE_MEMORY_STORE {
         Arc::new(MemoryStore::new())
     } else {
         let path = data_path();
         std::fs::create_dir_all(&path).unwrap();
-        Arc::new(FilesystemStore::new(&path).unwrap())
+        Arc::new(SyncFilesystemStore::new(&path).unwrap())
     }
 }
 
-fn populate_array(store: ReadableWritableListableStorage) {
+fn populate_array(store: SyncReadableWritableListableStorage) {
     let array = zarrs::array::ArrayBuilder::new(
         SHAPE.to_vec(),
         SHARD_SHAPE.to_vec(),
@@ -87,9 +87,9 @@ fn populate_array(store: ReadableWritableListableStorage) {
 }
 
 /// Returns a store loaded with array data, writing it first if needed.
-fn open_store() -> ReadableStorage {
+fn open_store() -> SyncReadableStorage {
     if USE_MEMORY_STORE {
-        let store: ReadableWritableListableStorage = Arc::new(MemoryStore::new());
+        let store: SyncReadableWritableListableStorage = Arc::new(MemoryStore::new());
         populate_array(Arc::clone(&store));
         store
     } else {
@@ -98,7 +98,7 @@ fn open_store() -> ReadableStorage {
         if !zarr_json.exists() {
             populate_array(make_store());
         }
-        Arc::new(FilesystemStore::new(path).unwrap())
+        Arc::new(SyncFilesystemStore::new(path).unwrap())
     }
 }
 

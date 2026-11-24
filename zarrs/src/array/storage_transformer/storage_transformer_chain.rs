@@ -11,7 +11,8 @@ use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
 use zarrs_storage::{
-    ListableStorage, ReadableStorage, ReadableWritableStorage, StorageError, WritableStorage,
+    StorageError, SyncListableStorage, SyncReadableStorage, SyncReadableWritableStorage,
+    SyncWritableStorage,
 };
 
 /// Configuration for a storage transformer chain.
@@ -76,8 +77,8 @@ impl StorageTransformerChain {
     /// Returns an error if creation fails.
     pub fn create_readable_transformer(
         &self,
-        mut storage: ReadableStorage,
-    ) -> Result<ReadableStorage, StorageError> {
+        mut storage: SyncReadableStorage,
+    ) -> Result<SyncReadableStorage, StorageError> {
         for transformer in &self.0 {
             storage = transformer.clone().create_readable_transformer(storage)?;
         }
@@ -90,8 +91,8 @@ impl StorageTransformerChain {
     /// Returns an error if creation fails.
     pub fn create_writable_transformer(
         &self,
-        mut storage: WritableStorage,
-    ) -> Result<WritableStorage, StorageError> {
+        mut storage: SyncWritableStorage,
+    ) -> Result<SyncWritableStorage, StorageError> {
         for transformer in &self.0 {
             storage = transformer.clone().create_writable_transformer(storage)?;
         }
@@ -104,8 +105,8 @@ impl StorageTransformerChain {
     /// Returns an error if creation fails.
     pub fn create_readable_writable_transformer(
         &self,
-        mut storage: ReadableWritableStorage,
-    ) -> Result<ReadableWritableStorage, StorageError> {
+        mut storage: SyncReadableWritableStorage,
+    ) -> Result<SyncReadableWritableStorage, StorageError> {
         for transformer in &self.0 {
             storage = transformer
                 .clone()
@@ -120,8 +121,8 @@ impl StorageTransformerChain {
     /// Returns an error if creation fails.
     pub fn create_listable_transformer(
         &self,
-        mut storage: ListableStorage,
-    ) -> Result<ListableStorage, StorageError> {
+        mut storage: SyncListableStorage,
+    ) -> Result<SyncListableStorage, StorageError> {
         for transformer in &self.0 {
             storage = transformer.clone().create_listable_transformer(storage)?;
         }

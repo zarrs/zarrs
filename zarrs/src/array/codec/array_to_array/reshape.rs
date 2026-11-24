@@ -51,7 +51,7 @@
 //! The boxes are chunk or subchunk boundaries.
 //! A subchunk can be resolved when its linear span is an n-dimensional box in both representations.
 //! With some chunk grids, the global subchunk grid may not be fully resolvable.
-//! However, the local subchunk grid of an individual chunk can still be recovered via [`ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid`](zarrs_codec::ArrayPartialDecoderSubchunkingTraits::local_subchunk_grid).
+//! However, the local subchunk grid of an individual chunk can still be recovered via [`SyncArrayPartialDecoderSubchunkingTraits::local_subchunk_grid`](zarrs_codec::SyncArrayPartialDecoderSubchunkingTraits::local_subchunk_grid).
 
 mod reshape_codec;
 mod reshape_codec_grid_mapping;
@@ -210,8 +210,8 @@ mod tests {
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_chunk_grid::ChunkGrid;
     use zarrs_codec::{
-        ArrayPartialDecoderTraits, ChunkGridDecoded, ChunkGridEncoded, CodecOptions,
-        CodecSpecificOptions, ComputeResources, UnboundArrayToArrayCodecTraits,
+        ChunkGridDecoded, ChunkGridEncoded, CodecOptions, CodecSpecificOptions, ComputeResources,
+        SyncArrayPartialDecoderTraits, UnboundArrayToArrayCodecTraits,
         UnboundArrayToBytesCodecTraits,
     };
 
@@ -978,7 +978,7 @@ mod tests {
         codec: &Arc<ReshapeCodec>,
         shape: &[NonZeroU64],
         elements: Vec<u16>,
-    ) -> Arc<dyn ArrayPartialDecoderTraits> {
+    ) -> Arc<dyn SyncArrayPartialDecoderTraits> {
         let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -1029,7 +1029,7 @@ mod tests {
     }
 
     fn partial_decode_u16(
-        partial_decoder: &dyn ArrayPartialDecoderTraits,
+        partial_decoder: &dyn SyncArrayPartialDecoderTraits,
         indexer: &dyn Indexer,
     ) -> Vec<u16> {
         let decoded_partial_chunk = partial_decoder

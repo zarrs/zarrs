@@ -24,7 +24,7 @@
 //!
 //! ```rust,no_run
 //! # use std::sync::Arc;
-//! # use zarrs::array::{Array, ArrayOps, ArrayReadOps, CodecOptions, Resources};
+//! # use zarrs::array::{Array, ArrayOps, SyncArrayReadOps, CodecOptions, Resources};
 //! # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 //! # let array = Array::open(store, "/group/array")?;
 //! // Default options and resources
@@ -44,9 +44,9 @@
 //! options too:
 //!
 //! ```rust
-//! # use zarrs::array::{ArrayOps, ArrayWriteOps};
+//! # use zarrs::array::{ArrayOps, SyncArrayWriteOps};
 //! # use zarrs::config::MetadataEraseVersion;
-//! fn erase_all_metadata<A: ArrayWriteOps>(
+//! fn erase_all_metadata<A: SyncArrayWriteOps>(
 //!     array: &A,
 //! ) -> Result<(), zarrs::storage::StorageError> {
 //!     array
@@ -78,8 +78,8 @@ use zarrs_storage::{
     MaybeSend,
 };
 use zarrs_storage::{
-    ReadableStorageTraits, ReadableWritableStorageTraits, StorageError, StoreKey,
-    WritableStorageTraits,
+    StorageError, StoreKey, SyncReadableStorageTraits, SyncReadableWritableStorageTraits,
+    SyncWritableStorageTraits,
 };
 
 mod array_mut_ops;
@@ -122,9 +122,9 @@ mod async_array_write_ops_array_cached;
 
 pub use array_mut_ops::ArrayMutOps;
 pub use array_ops::ArrayOps;
-pub use array_read_ops::ArrayReadOps;
-pub use array_update_ops::ArrayUpdateOps;
-pub use array_write_ops::ArrayWriteOps;
+pub use array_read_ops::SyncArrayReadOps;
+pub use array_update_ops::SyncArrayUpdateOps;
+pub use array_write_ops::SyncArrayWriteOps;
 #[cfg(feature = "async")]
 pub use async_array_read_ops::AsyncArrayReadOps;
 #[cfg(feature = "async")]

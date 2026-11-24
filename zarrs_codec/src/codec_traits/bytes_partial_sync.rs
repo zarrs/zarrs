@@ -4,14 +4,14 @@ use std::sync::Mutex;
 use zarrs_plugin::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 use zarrs_storage::{
-    OffsetBytesIterator, ReadableStorageTraits, ReadableWritableStorageTraits, StorageError,
-    StoreKey,
+    OffsetBytesIterator, StorageError, StoreKey, SyncReadableStorageTraits,
+    SyncReadableWritableStorageTraits,
 };
 
 use crate::{CodecError, CodecOptions, CowBytes, Resources};
 
 /// Partial bytes decoder traits.
-pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
+pub trait SyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns whether the chunk exists.
     ///
     /// # Errors
@@ -75,8 +75,8 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 }
 
 /// Partial bytes encoder traits.
-pub trait BytesPartialEncoderTraits:
-    BytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
+pub trait SyncBytesPartialEncoderTraits:
+    SyncBytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Erase the chunk.
     ///
@@ -129,7 +129,7 @@ pub trait BytesPartialEncoderTraits:
     fn supports_partial_encode(&self) -> bool;
 }
 
-impl BytesPartialDecoderTraits for CowBytes<'static> {
+impl SyncBytesPartialDecoderTraits for CowBytes<'static> {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(true)
     }
@@ -157,7 +157,7 @@ impl BytesPartialDecoderTraits for CowBytes<'static> {
     }
 }
 
-impl BytesPartialDecoderTraits for Vec<u8> {
+impl SyncBytesPartialDecoderTraits for Vec<u8> {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(true)
     }
@@ -185,7 +185,7 @@ impl BytesPartialDecoderTraits for Vec<u8> {
     }
 }
 
-impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
+impl SyncBytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(self.lock().unwrap().is_some())
     }
@@ -217,7 +217,7 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
     }
 }
 
-impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
+impl SyncBytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
     fn erase(&self) -> Result<(), CodecError> {
         *self.lock().unwrap() = None;
         Ok(())
@@ -258,7 +258,9 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
     }
 }
 
-impl<TStorage: ReadableStorageTraits + 'static> BytesPartialDecoderTraits for (TStorage, StoreKey) {
+impl<TStorage: SyncReadableStorageTraits + 'static> SyncBytesPartialDecoderTraits
+    for (TStorage, StoreKey)
+{
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(self.0.size_key(&self.1)?.is_some())
     }
@@ -290,7 +292,7 @@ impl<TStorage: ReadableStorageTraits + 'static> BytesPartialDecoderTraits for (T
     }
 }
 
-impl<Tstorage: ReadableWritableStorageTraits + 'static> BytesPartialEncoderTraits
+impl<Tstorage: SyncReadableWritableStorageTraits + 'static> SyncBytesPartialEncoderTraits
     for (Tstorage, StoreKey)
 {
     fn erase(&self) -> Result<(), CodecError> {
@@ -355,7 +357,7 @@ mod tests {
     #[test]
     fn storage_encode_replaces() {
         use std::sync::Arc;
-        use zarrs_storage::WritableStorageTraits;
+        use zarrs_storage::SyncWritableStorageTraits;
         use zarrs_storage::store::MemoryStore;
 
         let store = Arc::new(MemoryStore::new());

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use serial_test::serial;
 use zarrs::config::{Config, global_config_mut};
-use zarrs::filesystem::FilesystemStore;
+use zarrs::filesystem::SyncFilesystemStore;
 use zarrs::group::Group;
 use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use zarrs::node::Node;
@@ -35,9 +35,9 @@ fn reset_config() {
     *global_config_mut() = Config::default();
 }
 
-fn sync_store() -> Arc<FilesystemStore> {
+fn sync_store() -> Arc<SyncFilesystemStore> {
     Arc::new(
-        FilesystemStore::new("./tests/data/hierarchy.zarr")
+        SyncFilesystemStore::new("./tests/data/hierarchy.zarr")
             .unwrap()
             .sorted(),
     )
@@ -327,7 +327,7 @@ mod consolidated_open {
     use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
     use zarrs::node::Node;
     use zarrs_storage::store::MemoryStore;
-    use zarrs_storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::{StoreKey, SyncWritableStorageTraits};
 
     /// Build a v3 root group with a `consolidated_metadata` block that lists a
     /// phantom child array `phantom`. The child is *not* written to storage.
@@ -779,8 +779,8 @@ mod consolidated_open {
 
         use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
         use zarrs_storage::{
-            ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits,
-            StorageError, StoreKeys, StoreKeysPrefixes, StorePrefix,
+            MaybeBytes, StorageError, StoreKeys, StoreKeysPrefixes, StorePrefix,
+            SyncListableStorageTraits, SyncMaybeBytesIterator, SyncReadableStorageTraits,
         };
 
         struct CountingStore {
@@ -799,7 +799,7 @@ mod consolidated_open {
             }
         }
 
-        impl ReadableStorageTraits for CountingStore {
+        impl SyncReadableStorageTraits for CountingStore {
             fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
                 self.gets.lock().unwrap().push(key.as_str().to_string());
                 self.inner.get(key)
@@ -808,7 +808,7 @@ mod consolidated_open {
                 &'a self,
                 key: &StoreKey,
                 byte_ranges: ByteRangeIterator<'a>,
-            ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+            ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
                 self.gets.lock().unwrap().push(key.as_str().to_string());
                 self.inner.get_partial_many(key, byte_ranges)
             }
@@ -828,7 +828,7 @@ mod consolidated_open {
             }
         }
 
-        impl ListableStorageTraits for CountingStore {
+        impl SyncListableStorageTraits for CountingStore {
             fn list(&self) -> Result<StoreKeys, StorageError> {
                 self.inner.list()
             }

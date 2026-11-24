@@ -11,7 +11,7 @@ use zarrs::array::{
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{StoreKey, WritableStorageTraits};
+use zarrs::storage::{StoreKey, SyncWritableStorageTraits};
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions};
 
 /// Bytes that no case can decode.

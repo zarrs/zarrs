@@ -3,8 +3,8 @@ use std::sync::Arc;
 use super::BitroundDataTypeTraitsArc;
 use crate::array::DataType;
 use zarrs_codec::{
-    ArrayBytes, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError, CodecOptions, Resources,
+    ArrayBytes, CodecError, CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -39,9 +39,9 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits for BitroundCodecPartial<T>
 where
-    T: ArrayPartialDecoderSubchunkingTraits,
+    T: SyncArrayPartialDecoderSubchunkingTraits,
 {
     fn local_subchunk_grids(
         &self,
@@ -53,9 +53,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for BitroundCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for BitroundCodecPartial<T>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
         &self.data_type
@@ -85,9 +85,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for BitroundCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for BitroundCodecPartial<T>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()

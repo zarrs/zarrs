@@ -1,22 +1,22 @@
 use super::{
-    Arc, Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ArrayWriteOps, Indexer,
-    IntoArrayBytes, ReadableStorageTraits,
+    Arc, Array, ArrayError, ArraySubsetTraits, Indexer, IntoArrayBytes, SyncArrayReadOps,
+    SyncArrayWriteOps, SyncReadableStorageTraits,
 };
 #[cfg(doc)]
 use super::{ArrayOps, ArraySubset};
-use zarrs_codec::{ArrayPartialEncoderTraits, Resources};
+use zarrs_codec::{Resources, SyncArrayPartialEncoderTraits};
 
 /// Synchronous array read/write update operations.
 ///
 /// These operations encode and decode with the array's
 /// [`codec_options`](ArrayOps::codec_options).
-pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
+pub trait SyncArrayUpdateOps: SyncArrayReadOps + SyncArrayWriteOps {
     /// Encode `indexer_data` and store it in the elements selected by `indexer` in the chunk at `chunk_indices`.
     ///
     /// `indexer` is relative to the chunk. It may be an [`ArraySubset`] or any other
     /// [`Indexer`], such as a list of chunk-relative indices.
     ///
-    /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) where possible, since this function may decode the chunk before updating it and reencoding it.
+    /// Prefer to use [`store_chunk`](crate::array::SyncArrayWriteOps::store_chunk) where possible, since this function may decode the chunk before updating it and reencoding it.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
@@ -38,7 +38,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
 
     /// Encode `subset_data` and store in `array_subset`.
     ///
-    /// Prefer to use [`store_chunk`](crate::array::ArrayWriteOps::store_chunk) or [`store_chunks`](crate::array::ArrayWriteOps::store_chunks) where possible, since this will decode and encode each chunk intersecting `array_subset`.
+    /// Prefer to use [`store_chunk`](crate::array::SyncArrayWriteOps::store_chunk) or [`store_chunks`](crate::array::SyncArrayWriteOps::store_chunks) where possible, since this will decode and encode each chunk intersecting `array_subset`.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if
@@ -72,7 +72,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     ) -> Result<bool, ArrayError>;
 
     /// Return a read-only instantiation of the array.
-    fn readable(&self) -> Array<dyn ReadableStorageTraits>;
+    fn readable(&self) -> Array<dyn SyncReadableStorageTraits>;
 
     /// Initialises a partial encoder for the chunk at `chunk_indices`.
     ///
@@ -80,7 +80,7 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
     /// - partial encoders can hold internal state that may become out of sync, and
     /// - parallel writing to the same chunk [may result in data loss](#parallel-writing).
     ///
-    /// Partial encoding with [`ArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
+    /// Partial encoding with [`SyncArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if initialisation of the partial encoder fails.
@@ -88,5 +88,5 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError>;
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, ArrayError>;
 }

@@ -21,11 +21,11 @@ use crate::array::{
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderTraits, Resources, decode_into_array_bytes_target,
+    ArrayBytesTarget, Resources, SyncArrayPartialDecoderTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_storage::AsyncReadableStorageTraits;
-use zarrs_storage::{Bytes, MaybeSend, MaybeSync, ReadableStorageTraits};
+use zarrs_storage::{Bytes, MaybeSend, MaybeSync, SyncReadableStorageTraits};
 
 /// Storage-independent array metadata needed by cache operations.
 pub trait CachedArrayMeta: MaybeSend + MaybeSync {
@@ -108,7 +108,7 @@ pub trait SyncCachedArray: CachedArrayMeta {
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>;
 
     fn retrieve_partial_chunk_with_options(
         &self,
@@ -119,7 +119,7 @@ pub trait SyncCachedArray: CachedArrayMeta {
     ) -> Result<ArrayBytes<'static>, ArrayError>;
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> SyncCachedArray for Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> SyncCachedArray for Array<TStorage> {
     fn retrieve_encoded_chunk(&self, chunk_indices: &[u64]) -> Result<Option<Bytes>, ArrayError> {
         self.retrieve_encoded_chunk(chunk_indices)
     }
@@ -138,7 +138,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> SyncCachedArray for Arr
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
         self.partial_decoder_with_options(chunk_indices, options, resources)
     }
 
@@ -282,7 +282,7 @@ pub(crate) mod array_cache_sealed {
             chunk_indices: &[u64],
             options: &CodecOptions,
             resources: &Resources,
-        ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+        ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>;
 
         /// Return the decoded chunk at `chunk_indices` through the cache, or [`None`] if it does not exist.
         fn cached_chunk_bytes_if_exists(
@@ -378,7 +378,7 @@ pub(crate) mod array_cache_sealed {
             chunk_indices: &[u64],
             options: &CodecOptions,
             resources: &Resources,
-        ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+        ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
             C::Value::partial_decoder(self, array, chunk_indices, options, resources)
         }
 
@@ -470,7 +470,7 @@ pub(crate) mod array_cache_sealed {
                     chunk_indices: &[u64],
                     options: &CodecOptions,
                     resources: &Resources,
-                ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+                ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
                     (**self).cached_partial_decoder(array, chunk_indices, options, resources)
                 }
 

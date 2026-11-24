@@ -84,7 +84,7 @@ mod tests {
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
-    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, SyncBytesPartialDecoderTraits};
     use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"

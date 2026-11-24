@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use crate::{
-    AtomicRenameStorageTraits, CowBytes, ListableStorageTraits, MaybeBytesIterator,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    CowBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, SyncAtomicRenameStorageTraits, SyncListableStorageTraits, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// A storage adapter that writes complete values to a temporary key before atomically renaming
@@ -43,9 +43,9 @@ impl<TStorage: ?Sized> AtomicWriteStorageAdapter<TStorage> {
 
 impl<
         TStorage: ?Sized
-            + AtomicRenameStorageTraits
-            + ReadableStorageTraits
-            + WritableStorageTraits
+            + SyncAtomicRenameStorageTraits
+            + SyncReadableStorageTraits
+            + SyncWritableStorageTraits
             + 'static,
     > AtomicWriteStorageAdapter<TStorage>
 {
@@ -65,14 +65,14 @@ impl<
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
+impl<TStorage: ?Sized + SyncReadableStorageTraits> SyncReadableStorageTraits
     for AtomicWriteStorageAdapter<TStorage>
 {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: crate::byte_range::ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.storage.get_partial_many(key, byte_ranges)
     }
 
@@ -85,7 +85,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     }
 }
 
-impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
+impl<TStorage: ?Sized + SyncListableStorageTraits> SyncListableStorageTraits
     for AtomicWriteStorageAdapter<TStorage>
 {
     fn list(&self) -> Result<StoreKeys, StorageError> {
@@ -107,11 +107,11 @@ impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
 
 impl<
         TStorage: ?Sized
-            + AtomicRenameStorageTraits
-            + ReadableStorageTraits
-            + WritableStorageTraits
+            + SyncAtomicRenameStorageTraits
+            + SyncReadableStorageTraits
+            + SyncWritableStorageTraits
             + 'static,
-    > WritableStorageTraits for AtomicWriteStorageAdapter<TStorage>
+    > SyncWritableStorageTraits for AtomicWriteStorageAdapter<TStorage>
 {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         let temporary_key = Self::temporary_key(key)?;
@@ -164,12 +164,12 @@ mod tests {
         inner: MemoryStore,
     }
 
-    impl ReadableStorageTraits for RenameStore {
+    impl SyncReadableStorageTraits for RenameStore {
         fn get_partial_many<'a>(
             &'a self,
             key: &StoreKey,
             byte_ranges: ByteRangeIterator<'a>,
-        ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+        ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
             self.inner.get_partial_many(key, byte_ranges)
         }
 
@@ -182,7 +182,7 @@ mod tests {
         }
     }
 
-    impl WritableStorageTraits for RenameStore {
+    impl SyncWritableStorageTraits for RenameStore {
         fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
             self.inner.set(key, value)
         }
@@ -208,7 +208,7 @@ mod tests {
         }
     }
 
-    impl AtomicRenameStorageTraits for RenameStore {
+    impl SyncAtomicRenameStorageTraits for RenameStore {
         fn rename(&self, source: &StoreKey, destination: &StoreKey) -> Result<(), StorageError> {
             let value: MaybeBytes = self.inner.get(source)?;
             let value = value.ok_or_else(|| StorageError::Other(format!("{source} is missing")))?;

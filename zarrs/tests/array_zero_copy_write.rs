@@ -15,9 +15,9 @@ use zarrs::array::codec::BytesCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, CowBytes, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator, SyncReadableStorageTraits,
+    SyncWritableStorageTraits,
 };
 use zarrs_storage::byte_range::ByteRangeIterator;
 
@@ -37,7 +37,7 @@ impl PtrRecordingStore {
     }
 }
 
-impl WritableStorageTraits for PtrRecordingStore {
+impl SyncWritableStorageTraits for PtrRecordingStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.ptrs
             .lock()
@@ -67,7 +67,7 @@ impl WritableStorageTraits for PtrRecordingStore {
     }
 }
 
-impl ReadableStorageTraits for PtrRecordingStore {
+impl SyncReadableStorageTraits for PtrRecordingStore {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         self.inner.get(key)
     }
@@ -76,7 +76,7 @@ impl ReadableStorageTraits for PtrRecordingStore {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.inner.get_partial_many(key, byte_ranges)
     }
 
@@ -89,7 +89,7 @@ impl ReadableStorageTraits for PtrRecordingStore {
     }
 }
 
-impl ListableStorageTraits for PtrRecordingStore {
+impl SyncListableStorageTraits for PtrRecordingStore {
     fn list(&self) -> Result<StoreKeys, StorageError> {
         self.inner.list()
     }
@@ -118,7 +118,7 @@ fn passthrough_array() -> (Array<PtrRecordingStore>, Arc<PtrRecordingStore>) {
 /// Writing from a borrowed slice must reach the store without an intervening copy.
 ///
 /// `MemoryStore` retains its buffers so it must take ownership, but a store that writes and
-/// discards (such as `FilesystemStore`) sees the caller's memory directly. This asserts the
+/// discards (such as `SyncFilesystemStore`) sees the caller's memory directly. This asserts the
 /// value handed to `set` still points at the caller's buffer.
 #[test]
 fn zero_copy_write_from_borrowed_slice() -> TestResult {

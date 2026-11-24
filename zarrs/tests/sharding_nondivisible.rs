@@ -19,7 +19,7 @@ use zarrs::array::{
 };
 use zarrs_chunk_grid::{ArraySubset, ChunkGrid};
 use zarrs_codec::UnboundArrayToBytesCodecTraits;
-use zarrs_filesystem::FilesystemStore;
+use zarrs_filesystem::SyncFilesystemStore;
 use zarrs_metadata_ext::chunk_grid::rectilinear::{ChunkEdgeLengths, RunLengthElement};
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use zarrs_storage::store::MemoryStore;
@@ -482,7 +482,7 @@ fn sharding_nondivisible_nested_in_vlen_and_optional() -> Result<(), Box<dyn std
 fn sharding_nondivisible_zarr_python_compat() -> Result<(), Box<dyn std::error::Error>> {
     for name in ["1d", "2d", "larger_than_shard", "nested", "rectilinear"] {
         let path = format!("tests/data/zarr_python_compat/sharding_nondivisible_{name}.zarr");
-        let array = Array::open(Arc::new(FilesystemStore::new(path)?), "/")?;
+        let array = Array::open(Arc::new(SyncFilesystemStore::new(path)?), "/")?;
         // The elements are the linearised indices, `0..N`
         let subsets = [
             array.subset_all(),

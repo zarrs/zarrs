@@ -11,9 +11,9 @@ use futures::StreamExt;
 use crate::byte_range::ByteRangeIterator;
 use crate::{
     AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits, CowBytes,
-    ListableStorageTraits, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    MaybeSend, MaybeSync, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// Trait for an asynchronous runtime implementing `block_on`.
@@ -58,13 +58,13 @@ impl<TStorage: ?Sized, TBlockOn: AsyncToSyncBlockOn> AsyncToSyncStorageAdapter<T
 }
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
-    ReadableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
+    SyncReadableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         let results = self.block_on(self.storage.get_partial_many(key, byte_ranges))?;
         if let Some(mut results) = results {
             let results = self.block_on(async {
@@ -90,7 +90,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn
 }
 
 impl<TStorage: ?Sized + AsyncListableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
-    ListableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
+    SyncListableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
     fn list(&self) -> Result<StoreKeys, StorageError> {
         self.block_on(self.storage.list())
@@ -110,7 +110,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits, TBlockOn: AsyncToSyncBlockOn
 }
 
 impl<TStorage: ?Sized + AsyncWritableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
-    WritableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
+    SyncWritableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.block_on(self.storage.set(key, value))

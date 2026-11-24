@@ -1,15 +1,15 @@
 //! A cache for partial decoders.
 
 use crate::array::{ArrayBytes, ArraySubset, ChunkGrid, ChunkShape, DataType};
-use zarrs_codec::{
-    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, CodecError, CodecOptions,
-    Resources,
-};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderSubchunkingTraits, AsyncArrayPartialDecoderTraits};
+use zarrs_codec::{
+    CodecError, CodecOptions, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits,
+};
 use zarrs_storage::StorageError;
 
-/// A cache for an [`ArrayPartialDecoderTraits`] partial decoder.
+/// A cache for an [`SyncArrayPartialDecoderTraits`] partial decoder.
 pub(crate) struct ArrayPartialDecoderCache {
     shape: ChunkShape,
     data_type: DataType,
@@ -23,7 +23,7 @@ impl ArrayPartialDecoderCache {
     /// # Errors
     /// Returns a [`CodecError`] if initialisation of the partial decoder fails.
     pub(crate) fn new(
-        input_handle: &dyn ArrayPartialDecoderTraits,
+        input_handle: &dyn SyncArrayPartialDecoderTraits,
         shape: ChunkShape,
         data_type: DataType,
         options: &CodecOptions,
@@ -77,7 +77,7 @@ impl ArrayPartialDecoderCache {
     }
 }
 
-impl ArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
+impl SyncArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
     fn local_subchunk_grids(
         &self,
         _options: &CodecOptions,
@@ -87,7 +87,7 @@ impl ArrayPartialDecoderSubchunkingTraits for ArrayPartialDecoderCache {
     }
 }
 
-impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
+impl SyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
     fn exists(&self) -> Result<bool, StorageError> {
         Ok(true)
     }
@@ -151,7 +151,7 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        ArrayPartialDecoderTraits::partial_decode(self, indexer, options, resources)
+        SyncArrayPartialDecoderTraits::partial_decode(self, indexer, options, resources)
     }
 
     fn supports_partial_decode(&self) -> bool {

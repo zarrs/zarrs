@@ -6,11 +6,11 @@ use zarrs_data_type::{DataType, FillValue};
 
 use crate::codec_partial_default::ArrayToBytesCodecPartialDefault;
 use crate::{
-    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, BytesDecodeInput, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesRepresentation, ChunkGridDecoded, ChunkGridDecodedRef,
-    CodecCreateError, CodecError, CodecOptions, CodecSpecificOptions, CodecTraits,
-    ComputeResources, CowBytes, Resources, decode_into_array_bytes_target,
+    ArrayBytes, ArrayBytesTarget, ArrayCodecTraits, BytesDecodeInput, BytesRepresentation,
+    ChunkGridDecoded, ChunkGridDecodedRef, CodecCreateError, CodecError, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, CowBytes, Resources,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits, decode_into_array_bytes_target,
 };
 
 /// Subchunking traits for an array-to-bytes codec bound to a data type and fill value.
@@ -258,11 +258,11 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Returns a [`CodecError`] if initialisation fails.
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         _ = options;
         _ = resources;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
@@ -280,11 +280,11 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Returns a [`CodecError`] if initialisation fails.
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         _ = options;
         _ = resources;
         Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(

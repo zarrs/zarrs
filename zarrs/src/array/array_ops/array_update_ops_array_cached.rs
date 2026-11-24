@@ -3,14 +3,15 @@ use std::sync::Arc;
 use zarrs_codec::Resources;
 
 use super::{
-    Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ArrayUpdateOps, ChunkGrid,
-    CodecOptions, DataType, IntoArrayBytes, ReadableStorageTraits, ReadableWritableStorageTraits,
+    Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, ChunkGrid, CodecOptions,
+    DataType, IntoArrayBytes, SyncArrayUpdateOps, SyncReadableStorageTraits,
+    SyncReadableWritableStorageTraits,
 };
 use crate::array::cache::SyncArrayCache;
 use crate::array::{ArrayBytes, Indexer};
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, CodecError,
+    ArrayBytesTarget, CodecError, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
 };
 use zarrs_storage::StorageError;
 
@@ -20,12 +21,12 @@ pub(super) struct CachedArrayPartialEncoder<TStorage: ?Sized, C: ?Sized, E: ?Siz
     pub(super) chunk_indices: ArrayIndices,
 }
 
-impl<TStorage, C, E> ArrayPartialDecoderSubchunkingTraits
+impl<TStorage, C, E> SyncArrayPartialDecoderSubchunkingTraits
     for CachedArrayPartialEncoder<TStorage, C, E>
 where
-    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
-    E: ArrayPartialEncoderTraits + ?Sized + 'static,
+    E: SyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn local_subchunk_grids(
         &self,
@@ -36,11 +37,11 @@ where
     }
 }
 
-impl<TStorage, C, E> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
+impl<TStorage, C, E> SyncArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
-    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
-    E: ArrayPartialEncoderTraits + ?Sized + 'static,
+    E: SyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn data_type(&self) -> &DataType {
         self.encoder.data_type()
@@ -79,11 +80,11 @@ where
     }
 }
 
-impl<TStorage, C, E> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
+impl<TStorage, C, E> SyncArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
-    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
-    E: ArrayPartialEncoderTraits + ?Sized + 'static,
+    E: SyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase();
@@ -115,9 +116,9 @@ where
 }
 
 #[inherent]
-impl<TStorage, C> ArrayUpdateOps for ArrayCached<TStorage, C>
+impl<TStorage, C> SyncArrayUpdateOps for ArrayCached<TStorage, C>
 where
-    TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
+    TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
 {
     #[allow(clippy::missing_errors_doc)]
@@ -176,7 +177,7 @@ where
     }
 
     #[allow(clippy::must_use_candidate)]
-    pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
+    pub fn readable(&self) -> Array<dyn SyncReadableStorageTraits> {
         self.array().readable()
     }
 
@@ -185,7 +186,7 @@ where
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, ArrayError> {
         let encoder = self.array().partial_encoder(chunk_indices, resources)?;
         Ok(Arc::new(CachedArrayPartialEncoder {
             cached: self.clone(),
@@ -200,7 +201,8 @@ mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use super::*;
     use crate::array::cache::{
-        ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, SyncChunkCacheTraits,
+        SyncChunkCacheDecoded, SyncChunkCacheEncoded, SyncChunkCachePartialDecoder,
+        SyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use zarrs_storage::store::MemoryStore;
@@ -292,15 +294,15 @@ mod tests {
 
     #[test]
     fn partial_encoder_invalidates_all_cache_value_types() {
-        test_partial_encoder_invalidates(ChunkCacheEncoded::new_chunk_limit(1));
-        test_partial_encoder_invalidates(ChunkCacheDecoded::new_chunk_limit(1));
-        test_partial_encoder_invalidates(ChunkCachePartialDecoder::new_chunk_limit(1));
+        test_partial_encoder_invalidates(SyncChunkCacheEncoded::new_chunk_limit(1));
+        test_partial_encoder_invalidates(SyncChunkCacheDecoded::new_chunk_limit(1));
+        test_partial_encoder_invalidates(SyncChunkCachePartialDecoder::new_chunk_limit(1));
     }
 
     #[test]
     fn failed_partial_encode_invalidates_all_cache_value_types() {
-        test_failed_partial_encode_invalidates(ChunkCacheEncoded::new_chunk_limit(1));
-        test_failed_partial_encode_invalidates(ChunkCacheDecoded::new_chunk_limit(1));
-        test_failed_partial_encode_invalidates(ChunkCachePartialDecoder::new_chunk_limit(1));
+        test_failed_partial_encode_invalidates(SyncChunkCacheEncoded::new_chunk_limit(1));
+        test_failed_partial_encode_invalidates(SyncChunkCacheDecoded::new_chunk_limit(1));
+        test_failed_partial_encode_invalidates(SyncChunkCachePartialDecoder::new_chunk_limit(1));
     }
 }

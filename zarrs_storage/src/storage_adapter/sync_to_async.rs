@@ -9,9 +9,9 @@ use futures::stream;
 use crate::byte_range::ByteRangeIterator;
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits, Bytes, CowBytes, ListableStorageTraits, MaybeSend, MaybeSync,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    AsyncWritableStorageTraits, Bytes, CowBytes, MaybeSend, MaybeSync, OffsetBytesIterator,
+    StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// Trait for spawning synchronous work onto an asynchronous runtime.
@@ -74,7 +74,7 @@ impl<TStorage: ?Sized, TSpawnBlocking: SyncToAsyncSpawnBlocking>
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<
-        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        TStorage: ?Sized + SyncReadableStorageTraits + 'static,
         TSpawnBlocking: SyncToAsyncSpawnBlocking,
     > AsyncReadableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {
@@ -122,7 +122,7 @@ impl<
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<
-        TStorage: ?Sized + ListableStorageTraits + 'static,
+        TStorage: ?Sized + SyncListableStorageTraits + 'static,
         TSpawnBlocking: SyncToAsyncSpawnBlocking,
     > AsyncListableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {
@@ -155,7 +155,7 @@ impl<
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<
-        TStorage: ?Sized + WritableStorageTraits + 'static,
+        TStorage: ?Sized + SyncWritableStorageTraits + 'static,
         TSpawnBlocking: SyncToAsyncSpawnBlocking,
     > AsyncWritableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {

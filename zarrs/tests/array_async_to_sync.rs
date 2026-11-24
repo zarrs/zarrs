@@ -6,7 +6,7 @@ use zarrs::array::Resources;
 
 use serde_json::json;
 use zarrs::array::{ArraySubset, ZARR_NAN_F32, data_type};
-use zarrs::storage::ReadableWritableStorage;
+use zarrs::storage::SyncReadableWritableStorage;
 use zarrs::storage::storage_adapter::async_to_sync::{
     AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
@@ -19,7 +19,7 @@ impl AsyncToSyncBlockOn for TokioBlockOn {
     }
 }
 
-fn readable_writable_store() -> ReadableWritableStorage {
+fn readable_writable_store() -> SyncReadableWritableStorage {
     let block_on = TokioBlockOn(tokio::runtime::Runtime::new().unwrap());
     let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     Arc::new(AsyncToSyncStorageAdapter::new(store, block_on))

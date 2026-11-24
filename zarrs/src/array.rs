@@ -68,15 +68,15 @@ pub use zarrs_codec::{
     ArrayBytesOffsetsIter, ArrayBytesOffsetsOutOfBoundsError, ArrayBytesOffsetsRangesIter,
     ArrayBytesOffsetsSlice, ArrayBytesOptional, ArrayBytesTarget, ArrayBytesTargetOptional,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderNoSubchunkingTraits,
-    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
-    BytesDecodeInput, BytesDecodeSource, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesRepresentation, BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, Codec,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, CodecTraitsV2, CodecTraitsV3, ComputeResources, CowBytes,
-    IncompatibleOptionalMaskError, RecommendedConcurrency, Resources,
-    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, WithOptionalMaskError,
-    copy_fill_value_into, update_array_bytes,
+    BytesDecodeInput, BytesDecodeSource, BytesRepresentation, BytesToBytesCodecTraits,
+    ChunkGridDecoded, ChunkGridDecodedRef, Codec, CodecCreateError, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, CodecTraitsV2,
+    CodecTraitsV3, ComputeResources, CowBytes, IncompatibleOptionalMaskError,
+    RecommendedConcurrency, Resources, SyncArrayPartialDecoderSubchunkingTraits,
+    SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits,
+    SyncBytesPartialEncoderTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    WithOptionalMaskError, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -101,7 +101,9 @@ use zarrs_plugin::{ExtensionAliasesV3, ExtensionName, ZarrVersion};
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
-pub use self::array_ops::{ArrayMutOps, ArrayOps, ArrayReadOps, ArrayUpdateOps, ArrayWriteOps};
+pub use self::array_ops::{
+    ArrayMutOps, ArrayOps, SyncArrayReadOps, SyncArrayUpdateOps, SyncArrayWriteOps,
+};
 #[cfg(feature = "async")]
 pub use self::array_ops::{AsyncArrayReadOps, AsyncArrayUpdateOps, AsyncArrayWriteOps};
 use self::chunk_grid::RegularChunkGrid;
@@ -174,7 +176,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// ## Array Data
 /// Array operations are divided into several categories based on the traits implemented for the backing [storage](crate::storage).
 /// The core array methods are:
-///  - [`[Async]ReadableStorageTraits`](crate::storage::ReadableStorageTraits): read array data and metadata
+///  - [`[Async]SyncReadableStorageTraits`](crate::storage::SyncReadableStorageTraits): read array data and metadata
 ///    - [`retrieve_chunk_if_exists`](Array::retrieve_chunk_if_exists)
 ///    - [`retrieve_chunk`](Array::retrieve_chunk)
 ///    - [`retrieve_chunks`](Array::retrieve_chunks)
@@ -182,7 +184,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`retrieve_array_subset`](Array::retrieve_array_subset)
 ///    - [`retrieve_encoded_chunk`](Array::retrieve_encoded_chunk)
 ///    - [`partial_decoder`](Array::partial_decoder)
-///  - [`[Async]WritableStorageTraits`](crate::storage::WritableStorageTraits): store/erase array data and metadata
+///  - [`[Async]SyncWritableStorageTraits`](crate::storage::SyncWritableStorageTraits): store/erase array data and metadata
 ///    - [`store_metadata`](Array::store_metadata)
 ///    - [`erase_metadata`](Array::erase_metadata)
 ///    - [`store_chunk`](Array::store_chunk)
@@ -190,7 +192,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`store_encoded_chunk`](Array::store_encoded_chunk)
 ///    - [`erase_chunk`](Array::erase_chunk)
 ///    - [`erase_chunks`](Array::erase_chunks)
-///  - [`[Async]ReadableWritableStorageTraits`](crate::storage::ReadableWritableStorageTraits): store operations requiring reading *and* writing
+///  - [`[Async]SyncReadableWritableStorageTraits`](crate::storage::SyncReadableWritableStorageTraits): store operations requiring reading *and* writing
 ///    - [`store_partial_chunk`](Array::store_partial_chunk)
 ///    - [`store_array_subset`](Array::store_array_subset)
 ///    - [`partial_encoder`](Array::partial_encoder)
@@ -261,7 +263,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// A level is a [`ChunkGridDecoded`], which distinguishes a grid resolvable for the whole array
 /// ([`Array`](ChunkGridDecoded::Array)) from one that is only resolvable per chunk
 /// ([`ChunkLocal`](ChunkGridDecoded::ChunkLocal), see
-/// [`local_subchunk_grid`](ArrayReadOps::local_subchunk_grid)) and from an absent grid
+/// [`local_subchunk_grid`](SyncArrayReadOps::local_subchunk_grid)) and from an absent grid
 /// ([`None`](ChunkGridDecoded::None)).
 /// Use [`as_chunk_grid`](ChunkGridDecoded::as_chunk_grid) when only the globally resolvable case
 /// is of interest.
@@ -282,7 +284,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// # use zarrs::array::ArraySubset;
 /// # use zarrs::array::iterators::Indices;
 /// # use rayon::iter::{IntoParallelIterator, ParallelIterator};
-/// # let store = Arc::new(zarrs_filesystem::FilesystemStore::new("tests/data/array_write_read.zarr")?);
+/// # let store = Arc::new(zarrs_filesystem::SyncFilesystemStore::new("tests/data/array_write_read.zarr")?);
 /// # let array = Array::open(store, "/group/array")?;
 /// // Get an iterator over the chunk indices
 /// //   The array shape must have been set (i.e. non-zero), otherwise the
@@ -316,7 +318,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// However, these methods will use a fast path and avoid decoding if the subset covers entire chunks.
 ///
 /// ### Direct IO (Linux)
-/// If using Linux, enabling direct IO with the [`FilesystemStore`](https://docs.rs/zarrs_filesystem/latest/zarrs_filesystem/struct.FilesystemStore.html) may improve write performance.
+/// If using Linux, enabling direct IO with the [`SyncFilesystemStore`](https://docs.rs/zarrs_filesystem/latest/zarrs_filesystem/struct.SyncFilesystemStore.html) may improve write performance.
 ///
 /// Currently, the most performant path for uncompressed writing is to reuse page aligned buffers via [`store_encoded_chunk`](Array::store_encoded_chunk).
 /// See [`zarrs` GitHub issue #58](https://github.com/zarrs/zarrs/pull/58) for a discussion on this method.
@@ -352,7 +354,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// **Standard [`Array`] retrieve methods do not perform any caching**.
 /// For this reason, retrieving multiple subsets in a chunk with [`retrieve_partial_chunk`](Array::retrieve_partial_chunk) is very inefficient and strongly discouraged.
 /// For example, consider that a compressed chunk may need to be retrieved and decoded in its entirety even if only a small part of the data is needed.
-/// In such situations, prefer to initialise a partial decoder for a chunk with [`partial_decoder`](Array::partial_decoder) and then retrieve multiple chunk subsets with [`partial_decode`](zarrs_codec::ArrayPartialDecoderTraits::partial_decode).
+/// In such situations, prefer to initialise a partial decoder for a chunk with [`partial_decoder`](Array::partial_decoder) and then retrieve multiple chunk subsets with [`partial_decode`](zarrs_codec::SyncArrayPartialDecoderTraits::partial_decode).
 /// The underlying codec chain will use a cache where efficient to optimise multiple partial decoding requests (see [`CodecChain`]).
 /// Another alternative is to use [Chunk Caching](#chunk-caching).
 ///
@@ -366,9 +368,9 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// [`Array`] provides methods to query if an array is sharded and retrieve the subchunk shape.
 /// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
-/// [`ArrayReadOps`] adds methods to conveniently access the data in a sharded array:
-///  - [`retrieve_subchunk`](ArrayReadOps::retrieve_subchunk)
-///  - [`retrieve_subchunks`](ArrayReadOps::retrieve_subchunks)
+/// [`SyncArrayReadOps`] adds methods to conveniently access the data in a sharded array:
+///  - [`retrieve_subchunk`](SyncArrayReadOps::retrieve_subchunk)
+///  - [`retrieve_subchunks`](SyncArrayReadOps::retrieve_subchunks)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
 ///
@@ -409,14 +411,14 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`], [`DataTypeTraitsV2`], [`DataTypeTraitsV3`]
 /// - Codecs ([`zarrs_codec`]): [`CodecTraits`], [`CodecTraitsV2`], [`CodecTraitsV3`])
 ///   - Array-to-array codecs: [`UnboundArrayToArrayCodecTraits`] and bound [`ArrayToArrayCodecTraits`]
-///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
-///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
+///     - [`SyncArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
+///     - [`SyncArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
 ///   - Array-to-bytes codecs: [`UnboundArrayToBytesCodecTraits`] and bound [`ArrayToBytesCodecTraits`]
-///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
-///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
+///     - [`SyncBytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
+///     - [`SyncBytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Bytes-to-bytes codecs: [`BytesToBytesCodecTraits`]
-///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
-///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
+///     - [`SyncBytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
+///     - [`SyncBytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Chunk grids ([`zarrs_chunk_grid`]): [`ChunkGridTraits`]
 ///   - Chunk key encodings ([`zarrs_chunk_key_encoding`]): [`ChunkKeyEncodingTraits`]
 ///   - Storage transformers ([`crate::array::storage_transformer`]): [`StorageTransformerTraits`]
@@ -520,7 +522,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     }
 
     /// Create an array in `storage` at `path` with `metadata`.
-    /// This does **not** write to the store, use [`store_metadata`](Array<WritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
+    /// This does **not** write to the store, use [`store_metadata`](Array<SyncWritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
     ///
     /// # Errors
     /// Returns [`ArrayCreateError`] if:
@@ -1235,7 +1237,7 @@ fn create_codec_chain_from_v2(
 mod tests {
     use std::num::NonZeroU64;
 
-    use zarrs_filesystem::FilesystemStore;
+    use zarrs_filesystem::SyncFilesystemStore;
 
     use super::*;
     use crate::config::MetadataConvertVersion;
@@ -1623,7 +1625,7 @@ mod tests {
 
     #[allow(dead_code)]
     fn array_v2_to_v3(path_in: &str, path_out: &str) {
-        let store = Arc::new(FilesystemStore::new(path_in).unwrap());
+        let store = Arc::new(SyncFilesystemStore::new(path_in).unwrap());
         let array_in = Array::open(store, "/").unwrap();
 
         println!("{array_in:?}");
@@ -1649,7 +1651,7 @@ mod tests {
             ],
         );
 
-        let store = Arc::new(FilesystemStore::new(path_out).unwrap());
+        let store = Arc::new(SyncFilesystemStore::new(path_out).unwrap());
         let array_out = Array::new_with_metadata(store, "/", array_in.metadata().clone()).unwrap();
         array_out
             .store_array_subset(&subset_all, &elements, &Resources::default())
@@ -1784,7 +1786,7 @@ mod tests {
 
     #[allow(dead_code)]
     fn array_v3_numcodecs(path_in: &str) {
-        let store = Arc::new(FilesystemStore::new(path_in).unwrap());
+        let store = Arc::new(SyncFilesystemStore::new(path_in).unwrap());
         let array_in = Array::open(store, "/").unwrap();
 
         println!(

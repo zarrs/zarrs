@@ -8,9 +8,10 @@ use crate::array::codec::default_array_to_bytes_codec;
 use crate::array::{ArrayBytesFixedDisjointView, ArraySubset, Element, data_type};
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderNoSubchunkingTraits, ArrayPartialDecoderTraits,
-    CodecCreateError, CodecMetadataOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    PartialDecoderCapability, PartialEncoderCapability, UnboundArrayToBytesCodecTraits,
+    ArrayBytesTarget, ArrayPartialDecoderNoSubchunkingTraits, CodecCreateError,
+    CodecMetadataOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
+    PartialDecoderCapability, PartialEncoderCapability, SyncArrayPartialDecoderTraits,
+    UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -148,11 +149,11 @@ impl ArrayToBytesCodecTraits for CountingCodec<dyn ArrayToBytesCodecTraits> {
     }
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         self.counts.decoders.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::new(CountingDecoder {
             inner: self
@@ -189,7 +190,7 @@ struct CountingDecoder<T: ?Sized> {
 
 impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits for CountingDecoder<T> {}
 
-impl ArrayPartialDecoderTraits for CountingDecoder<dyn ArrayPartialDecoderTraits> {
+impl SyncArrayPartialDecoderTraits for CountingDecoder<dyn SyncArrayPartialDecoderTraits> {
     fn data_type(&self) -> &DataType {
         self.inner.data_type()
     }
@@ -416,7 +417,7 @@ fn sharding_indexer_batches() {
         } = &fixture;
         let options = CodecOptions::default();
         let resources = Resources::default().with_compute_target(concurrency);
-        let input: Arc<dyn BytesPartialDecoderTraits> = if absent {
+        let input: Arc<dyn SyncBytesPartialDecoderTraits> = if absent {
             Arc::new((
                 zarrs_storage::store::MemoryStore::new(),
                 zarrs_storage::StoreKey::new("absent").unwrap(),

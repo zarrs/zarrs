@@ -65,7 +65,7 @@ impl StoreKey {
     /// - a key that contains '//' is invalid.
     ///
     /// The empty string is a valid key: it addresses a store's root resource as a single blob
-    /// (e.g. a [`FilesystemStore`](https://docs.rs/zarrs_filesystem/latest/zarrs_filesystem/struct.FilesystemStore.html)
+    /// (e.g. a [`SyncFilesystemStore`](https://docs.rs/zarrs_filesystem/latest/zarrs_filesystem/struct.SyncFilesystemStore.html)
     /// rooted directly at a file, rather than a directory).
     #[must_use]
     pub fn validate(key: &str) -> bool {
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn empty_key_is_valid() {
         // The empty key addresses a store's root resource as a single blob (e.g. a
-        // `FilesystemStore` rooted directly at a file rather than a directory).
+        // `SyncFilesystemStore` rooted directly at a file rather than a directory).
         let key = StoreKey::new("").unwrap();
         assert_eq!(key, StoreKey::root());
         assert_eq!(key.to_string(), "");

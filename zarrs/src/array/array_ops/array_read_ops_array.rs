@@ -8,21 +8,21 @@ use super::super::array_bytes_internal::{FixedDecodeBuffers, merge_chunks};
 use super::super::concurrency::concurrency_chunks_and_codec;
 use super::array_read_ops_common::retrieve_multi_chunk_fixed_into;
 use super::{
-    Array, ArrayError, ArrayReadOps, ArraySubsetTraits, ChunkGrid, CodecOptions, FromArrayBytes,
-    Indexer, ReadableStorageTraits, recommended_codec_concurrency,
+    Array, ArrayError, ArraySubsetTraits, ChunkGrid, CodecOptions, FromArrayBytes, Indexer,
+    SyncArrayReadOps, SyncReadableStorageTraits, recommended_codec_concurrency,
 };
 use crate::IntoConcurrentLimitIterator;
 use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    InvalidNumberOfElementsError, copy_fill_value_into,
+    ArrayBytesTarget, ArrayToBytesCodecTraits, InvalidNumberOfElementsError,
+    SyncArrayPartialDecoderTraits, copy_fill_value_into,
 };
 use zarrs_storage::Bytes;
 
 #[inherent]
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> SyncArrayReadOps for Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk<T: FromArrayBytes>(
         &self,
@@ -273,12 +273,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
         self.partial_decoder_with_options(chunk_indices, self.codec_options(), resources)
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> Array<TStorage> {
     /// Retrieve `array_subset`, which spans `chunks`, with elements in C order.
     ///
     /// `chunks` are the chunks intersecting `array_subset` (see [`array_subset_chunks`](super::array_subset_chunks)).
@@ -536,7 +536,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError> {
         let chunk_key = self.chunk_key(chunk_indices)?;
         let storage_transformer = self.readable_storage()?;
         let input_handle = Arc::new((storage_transformer, chunk_key));

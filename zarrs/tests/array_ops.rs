@@ -6,8 +6,8 @@ use std::sync::Arc;
 use zarrs::array::Resources;
 
 use zarrs::array::cache::{
-    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, ChunkCacheTypeDecoded,
-    SubchunkCache, SyncChunkCacheTraits,
+    ChunkCacheTypeDecoded, SubchunkCache, SyncChunkCacheDecoded, SyncChunkCacheEncoded,
+    SyncChunkCachePartialDecoder, SyncChunkCacheTraits,
 };
 use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::{
@@ -16,13 +16,13 @@ use zarrs::array::codec::array_to_bytes::sharding::{
 use zarrs::array::codec::{ReshapeCodec, SqueezeCodec, TransposeCodec, TransposeOrder};
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
-    ArrayMetadataOptions, ArrayOps, ArrayReadOps, ArraySubset, ArrayUpdateOps, ArrayWriteOps,
-    ChunkGridDecodedRef, CodecOptions, data_type,
+    ArrayMetadataOptions, ArrayOps, ArraySubset, ChunkGridDecodedRef, CodecOptions,
+    SyncArrayReadOps, SyncArrayUpdateOps, SyncArrayWriteOps, data_type,
 };
 use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
-use zarrs::storage::{ReadableStorageTraits, StorageHandle};
+use zarrs::storage::{StorageHandle, SyncReadableStorageTraits};
 
 type TestStore = PerformanceMetricsStorageAdapter<MemoryStore>;
 type TestResult = Result<(), Box<dyn Error>>;
@@ -46,7 +46,7 @@ fn fixture() -> (Arc<Array<TestStore>>, Arc<TestStore>) {
     (array, store)
 }
 
-fn populate<A: ArrayWriteOps>(array: &A) -> TestResult {
+fn populate<A: SyncArrayWriteOps>(array: &A) -> TestResult {
     array.store_chunk(
         &[0, 0],
         &[1u8, 2, 3, 6, 7, 8, 11, 12, 13],
@@ -146,7 +146,7 @@ fn exercise_array_ops<A: ArrayOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-fn retrieve_into<A: ArrayReadOps>(
+fn retrieve_into<A: SyncArrayReadOps>(
     array: &A,
     subset: &ArraySubset,
     chunk_indices: Option<&[u64]>,
@@ -175,7 +175,7 @@ fn retrieve_into<A: ArrayReadOps>(
     Ok(output)
 }
 
-fn retrieve_chunk_into<A: ArrayReadOps>(
+fn retrieve_chunk_into<A: SyncArrayReadOps>(
     array: &A,
     chunk_indices: &[u64],
 ) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -198,7 +198,7 @@ fn retrieve_chunk_into<A: ArrayReadOps>(
     Ok(output)
 }
 
-fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestResult {
+fn exercise_array_read_ops<A: SyncArrayReadOps + SyncArrayWriteOps>(array: &A) -> TestResult {
     populate(array)?;
     let chunk_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let chunks = ArraySubset::new_with_ranges(&[0..1, 0..2]);
@@ -300,11 +300,11 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
     Ok(())
 }
 
-fn sharding_partial_decoder<A: ArrayReadOps>(
+fn sharding_partial_decoder<A: SyncArrayReadOps>(
     array: &A,
-) -> Result<ShardingPartialDecoder<dyn zarrs::array::BytesPartialDecoderTraits>, Box<dyn Error>>
+) -> Result<ShardingPartialDecoder<dyn zarrs::array::SyncBytesPartialDecoderTraits>, Box<dyn Error>>
 where
-    A::Storage: ReadableStorageTraits + 'static,
+    A::Storage: SyncReadableStorageTraits + 'static,
 {
     let codecs_bound = array.codecs_bound();
     let sharding_codec = codecs_bound
@@ -316,7 +316,7 @@ where
     let storage_transformer = array
         .storage_transformers()
         .create_readable_transformer(storage_handle)?;
-    let input_handle: Arc<dyn zarrs::array::BytesPartialDecoderTraits> =
+    let input_handle: Arc<dyn zarrs::array::SyncBytesPartialDecoderTraits> =
         Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
 
     Ok(ShardingPartialDecoder::new(
@@ -751,7 +751,7 @@ fn array_ops_nested_subchunk_grid_levels() -> TestResult {
         &[4, 4]
     );
 
-    let cached = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(2));
+    let cached = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(2));
     assert_eq!(cached.subchunk_grids().len(), 2);
     assert_eq!(cached.subchunk_codecs().len(), 2);
     assert!(Arc::ptr_eq(
@@ -902,7 +902,7 @@ fn nested_subchunk_grid_levels_map_through_array_codecs() -> TestResult {
     Ok(())
 }
 
-fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
+fn exercise_array_write_update_ops<A: SyncArrayUpdateOps>(array: &A) -> TestResult {
     array.store_metadata()?;
     array
         .with_metadata_options(ArrayMetadataOptions::default())
@@ -1001,13 +1001,13 @@ fn exercise_array_write_update_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-fn exercise_all<A: ArrayUpdateOps>(array: &A) -> TestResult {
+fn exercise_all<A: SyncArrayUpdateOps>(array: &A) -> TestResult {
     exercise_array_ops(array)?;
     exercise_array_read_ops(array)?;
     exercise_array_write_update_ops(array)
 }
 
-fn exercise_variable_length_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
+fn exercise_variable_length_ops<A: SyncArrayUpdateOps>(array: &A) -> TestResult {
     let first_chunk = ["a", "bb", "ccc", "dddd"];
     let second_chunk = ["eeeee", "ffffff", "ggggggg", "hhhhhhhh"];
     array.store_chunk(&[0, 0], &first_chunk, &Resources::default())?;
@@ -1040,7 +1040,7 @@ fn exercise_variable_length_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
     Ok(())
 }
 
-fn exercise_optional_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
+fn exercise_optional_ops<A: SyncArrayUpdateOps>(array: &A) -> TestResult {
     let first_chunk = [Some(1u8), None, Some(3), Some(4)];
     let second_chunk = [None, Some(6u8), None, Some(8)];
     array.store_chunk(&[0, 0], &first_chunk, &Resources::default())?;
@@ -1082,7 +1082,7 @@ fn array_implements_complete_sync_operation_suite() -> TestResult {
 #[test]
 fn array_cached_implements_complete_sync_operation_suite() -> TestResult {
     let (array, _) = fixture();
-    let cached = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(16));
+    let cached = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(16));
     exercise_all(&cached)
 }
 
@@ -1093,8 +1093,8 @@ fn array_subchunk_cached_implements_complete_sync_operation_suite() -> TestResul
         array,
         SubchunkCache::new(
             0,
-            ChunkCacheDecoded::new_chunk_limit(16),
-            ChunkCachePartialDecoder::new_chunk_limit(4),
+            SyncChunkCacheDecoded::new_chunk_limit(16),
+            SyncChunkCachePartialDecoder::new_chunk_limit(4),
         ),
     );
     exercise_all(&cached)
@@ -1110,7 +1110,7 @@ fn array_and_cached_support_variable_length_operation_suite() -> TestResult {
     let store = Arc::new(MemoryStore::default());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::string(), "")
         .build_arc(store, "/array")?;
-    let cached = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(4));
+    let cached = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(4));
     exercise_variable_length_ops(&cached)
 }
 
@@ -1134,7 +1134,7 @@ fn array_and_cached_support_optional_operation_suite() -> TestResult {
         zarrs::array::FillValue::from(None::<u8>),
     )
     .build_arc(store, "/array")?;
-    let cached = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(4));
+    let cached = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(4));
     exercise_optional_ops(&cached)
 }
 
@@ -1184,9 +1184,9 @@ fn cached_partial_chunk_reads_match_uncached() -> TestResult {
             array.store_array_subset(&array.subset_all(), &data, &Resources::default())?;
             array
         };
-        check(&array, ChunkCacheEncoded::new_chunk_limit(16))?;
-        check(&array, ChunkCacheDecoded::new_chunk_limit(16))?;
-        check(&array, ChunkCachePartialDecoder::new_chunk_limit(16))?;
+        check(&array, SyncChunkCacheEncoded::new_chunk_limit(16))?;
+        check(&array, SyncChunkCacheDecoded::new_chunk_limit(16))?;
+        check(&array, SyncChunkCachePartialDecoder::new_chunk_limit(16))?;
     }
     Ok(())
 }
@@ -1248,9 +1248,9 @@ where
 
 #[test]
 fn array_cached_cache_hits_and_invalidation_cover_all_value_types() -> TestResult {
-    assert_cache_hits_and_invalidation(ChunkCacheEncoded::new_chunk_limit(16), true)?;
-    assert_cache_hits_and_invalidation(ChunkCacheDecoded::new_chunk_limit(16), true)?;
-    assert_cache_hits_and_invalidation(ChunkCachePartialDecoder::new_chunk_limit(16), false)
+    assert_cache_hits_and_invalidation(SyncChunkCacheEncoded::new_chunk_limit(16), true)?;
+    assert_cache_hits_and_invalidation(SyncChunkCacheDecoded::new_chunk_limit(16), true)?;
+    assert_cache_hits_and_invalidation(SyncChunkCachePartialDecoder::new_chunk_limit(16), false)
 }
 
 /// Check that the size of a decoded chunk `cache` is the size of its cached chunks.
@@ -1276,8 +1276,8 @@ where
 
 #[test]
 fn array_cached_cache_size_sums_cached_chunks() -> TestResult {
-    assert_decoded_cache_size(ChunkCacheDecoded::new_chunk_limit(16))?;
-    assert_decoded_cache_size(ChunkCacheDecoded::new_size_limit(1024, None))
+    assert_decoded_cache_size(SyncChunkCacheDecoded::new_chunk_limit(16))?;
+    assert_decoded_cache_size(SyncChunkCacheDecoded::new_size_limit(1024, None))
 }
 
 fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
@@ -1307,15 +1307,15 @@ where
 
 #[test]
 fn array_cached_array_subset_into_uses_cache() -> TestResult {
-    assert_cache_hits_for_array_subset_into(ChunkCacheEncoded::new_chunk_limit(16))?;
-    assert_cache_hits_for_array_subset_into(ChunkCacheDecoded::new_chunk_limit(16))
+    assert_cache_hits_for_array_subset_into(SyncChunkCacheEncoded::new_chunk_limit(16))?;
+    assert_cache_hits_for_array_subset_into(SyncChunkCacheDecoded::new_chunk_limit(16))
 }
 
 #[test]
 fn array_cached_with_codec_options_preserves_cache() -> TestResult {
     let (array, store) = fixture();
     populate(array.as_ref())?;
-    let cached = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(16));
+    let cached = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(16));
 
     store.reset();
     let expected = [1u8, 2, 3, 6, 7, 8, 11, 12, 13];
@@ -1345,7 +1345,7 @@ fn array_cached_with_codec_options_preserves_cache() -> TestResult {
 #[test]
 fn erase_metadata_version_all_erases_both_zarr_versions() -> TestResult {
     use zarrs::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-    use zarrs::storage::WritableStorageTraits;
+    use zarrs::storage::SyncWritableStorageTraits;
 
     let path: zarrs::node::NodePath = "/array".try_into()?;
     let (array, store) = fixture();
@@ -1373,12 +1373,12 @@ fn erase_metadata_version_all_erases_both_zarr_versions() -> TestResult {
     Ok(())
 }
 
-// TODO: ChunkCacheType could be adjusted so that ChunkCacheEncoded could handle caching of encoded chunks, but seems low value
+// TODO: ChunkCacheType could be adjusted so that SyncChunkCacheEncoded could handle caching of encoded chunks, but seems low value
 #[test]
 fn array_cached_encoded_reads_bypass_cache() -> TestResult {
     let (array, store) = fixture();
     array.store_chunk(&[0, 0], &[1u8; 9], &Resources::default())?;
-    let cached = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(4));
+    let cached = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(4));
 
     store.reset();
     assert!(cached.retrieve_encoded_chunk(&[0, 0])?.is_some());
@@ -1420,7 +1420,7 @@ fn erase_and_retrieve_encoded_chunks_validate_chunks() -> TestResult {
 #[test]
 fn array_cached_chunk_subset_validated_if_chunk_absent() -> TestResult {
     let (array, _store) = fixture();
-    let cached = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(4));
+    let cached = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(4));
 
     // Chunk [0, 0] is absent, so the fill value is returned
     assert_eq!(
@@ -1870,7 +1870,7 @@ mod async_cached {
 #[test]
 fn chunk_ops_reject_incompatible_chunk_dimensionality() -> TestResult {
     use zarrs::array::ArrayError;
-    use zarrs::storage::ListableStorageTraits;
+    use zarrs::storage::SyncListableStorageTraits;
 
     let store = Arc::new(MemoryStore::default());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)

@@ -4,9 +4,9 @@ use super::{Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3};
 use crate::array::ArrayMetadataV2;
 use crate::config::MetadataRetrieveVersion;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use zarrs_storage::{ReadableStorageTraits, StorageError};
+use zarrs_storage::{StorageError, SyncReadableStorageTraits};
 
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> Array<TStorage> {
     /// Open an existing array in `storage` at `path` with default [`MetadataRetrieveVersion`].
     /// The metadata is read from the store.
     ///

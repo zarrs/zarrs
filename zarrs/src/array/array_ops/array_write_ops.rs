@@ -6,7 +6,7 @@ use zarrs_codec::{CowBytes, Resources};
 /// These operations encode with the array's [`codec_options`](ArrayOps::codec_options) and write
 /// metadata according to its [`metadata_options`](ArrayOps::metadata_options) and
 /// [`metadata_erase_version`](ArrayOps::metadata_erase_version).
-pub trait ArrayWriteOps: ArrayOps {
+pub trait SyncArrayWriteOps: ArrayOps {
     /// Store the array metadata.
     ///
     /// The metadata is created with [`ArrayOps::metadata_opt`] and stored through the storage

@@ -24,7 +24,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs::array::codec::{Crc32cCodec, ShardingCodecBuilder, ZstdCodec};
 use zarrs::array::{ArrayBuilder, ArrayBytes, ArraySubset, Resources, data_type};
-use zarrs::storage::ReadableWritableListableStorageTraits;
+use zarrs::storage::SyncReadableWritableListableStorageTraits;
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayBytesFixedDisjointView, ArrayBytesTarget, CodecOptions};
 
@@ -200,12 +200,12 @@ fn partial_write(c: &mut Criterion) {
     let data = compressible_u16(shape.iter().product::<u64>() as usize);
     #[cfg(feature = "filesystem")]
     let dir = tempfile::TempDir::new().unwrap();
-    let stores: Vec<(&str, Arc<dyn ReadableWritableListableStorageTraits>)> = vec![
+    let stores: Vec<(&str, Arc<dyn SyncReadableWritableListableStorageTraits>)> = vec![
         ("memory", Arc::new(MemoryStore::new())),
         #[cfg(feature = "filesystem")]
         (
             "filesystem",
-            Arc::new(zarrs::filesystem::FilesystemStore::new(dir.path()).unwrap()),
+            Arc::new(zarrs::filesystem::SyncFilesystemStore::new(dir.path()).unwrap()),
         ),
     ];
     for (store_label, store) in stores {
@@ -373,7 +373,8 @@ fn partial_decoder(c: &mut Criterion) {
 fn chunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
     use zarrs::array::cache::{
-        ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, SyncChunkCacheTraits,
+        SyncChunkCacheDecoded, SyncChunkCacheEncoded, SyncChunkCachePartialDecoder,
+        SyncChunkCacheTraits,
     };
 
     fn bench_cache<C: SyncChunkCacheTraits>(
@@ -420,16 +421,16 @@ fn chunk_cache(c: &mut Criterion) {
             .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
             .unwrap();
         bench_cache(&mut group, &array, &format!("encoded/{codecs}"), || {
-            ChunkCacheEncoded::new_chunk_limit(16)
+            SyncChunkCacheEncoded::new_chunk_limit(16)
         });
         bench_cache(&mut group, &array, &format!("decoded/{codecs}"), || {
-            ChunkCacheDecoded::new_chunk_limit(16)
+            SyncChunkCacheDecoded::new_chunk_limit(16)
         });
         bench_cache(
             &mut group,
             &array,
             &format!("partial_decoder/{codecs}"),
-            || ChunkCachePartialDecoder::new_chunk_limit(16),
+            || SyncChunkCachePartialDecoder::new_chunk_limit(16),
         );
     }
     group.finish();
@@ -439,7 +440,7 @@ fn chunk_cache(c: &mut Criterion) {
 /// over a partial decoder chunk cache.
 fn subchunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
-    use zarrs::array::cache::{ChunkCacheDecoded, ChunkCachePartialDecoder, SubchunkCache};
+    use zarrs::array::cache::{SubchunkCache, SyncChunkCacheDecoded, SyncChunkCachePartialDecoder};
 
     let mut group = c.benchmark_group("subchunk_cache");
     let shape = [512u64, 512];
@@ -457,8 +458,8 @@ fn subchunk_cache(c: &mut Criterion) {
     let cache = || {
         SubchunkCache::new(
             0,
-            ChunkCacheDecoded::new_chunk_limit(1024),
-            ChunkCachePartialDecoder::new_chunk_limit(16),
+            SyncChunkCacheDecoded::new_chunk_limit(1024),
+            SyncChunkCachePartialDecoder::new_chunk_limit(16),
         )
     };
     for (region, subset) in [

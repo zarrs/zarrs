@@ -11,11 +11,11 @@ use crate::array::{ArrayBytes, BytesRepresentation, CowBytes, DataType, FillValu
 use std::num::NonZeroU64;
 use std::ops::Range;
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-    BytesDecodeInput, BytesPartialDecoderTraits, CodecCreateError, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits, ComputeResources,
-    InvalidBytesLengthError, InvalidNumberOfElementsError, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesDecodeInput,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, InvalidBytesLengthError, InvalidNumberOfElementsError,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    SyncArrayPartialDecoderTraits, SyncBytesPartialDecoderTraits, UnboundArrayToBytesCodecTraits,
     decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
@@ -507,11 +507,11 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(PackBitsPartialDecoder::new(
             input_handle,
             shape.to_vec(),

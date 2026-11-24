@@ -13,7 +13,7 @@ use crate::{
 /// Subchunking traits for an asynchronous partial array decoder.
 ///
 /// This is the asynchronous equivalent of
-/// [`ArrayPartialDecoderSubchunkingTraits`](crate::ArrayPartialDecoderSubchunkingTraits).
+/// [`SyncArrayPartialDecoderSubchunkingTraits`](crate::SyncArrayPartialDecoderSubchunkingTraits).
 ///
 /// Implement [`ArrayPartialDecoderNoSubchunkingTraits`] instead of this trait for a partial decoder
 /// without subchunks.

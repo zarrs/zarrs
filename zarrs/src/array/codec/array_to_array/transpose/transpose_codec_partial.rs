@@ -7,8 +7,9 @@ use super::{
 use crate::array::{ArrayBytes, ChunkGrid, ChunkShape, DataType};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayPartialDecoderSubchunkingTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecGeometryTraits, CodecError, CodecOptions, Resources,
+    SyncArrayPartialDecoderSubchunkingTraits, SyncArrayPartialDecoderTraits,
+    SyncArrayPartialEncoderTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -78,9 +79,9 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderSubchunkingTraits for TransposeCodecPartial<T>
 where
-    T: ArrayPartialDecoderSubchunkingTraits,
+    T: SyncArrayPartialDecoderSubchunkingTraits,
 {
     fn local_subchunk_grids(
         &self,
@@ -95,9 +96,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialDecoderTraits for TransposeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialDecoderTraits for TransposeCodecPartial<T>
 where
-    T: ArrayPartialDecoderTraits,
+    T: SyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
         &self.data_type
@@ -138,9 +139,9 @@ where
     }
 }
 
-impl<T: ?Sized> ArrayPartialEncoderTraits for TransposeCodecPartial<T>
+impl<T: ?Sized> SyncArrayPartialEncoderTraits for TransposeCodecPartial<T>
 where
-    T: ArrayPartialEncoderTraits,
+    T: SyncArrayPartialEncoderTraits,
 {
     fn erase(&self) -> Result<(), CodecError> {
         self.input_output_handle.erase()

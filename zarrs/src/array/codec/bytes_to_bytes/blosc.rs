@@ -77,7 +77,7 @@ mod tests {
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
     use zarrs_codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions,
+        BytesToBytesCodecTraits, CodecError, CodecOptions, SyncBytesPartialDecoderTraits,
     };
     use zarrs_storage::byte_range::ByteRange;
 

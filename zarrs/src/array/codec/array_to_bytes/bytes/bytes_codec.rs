@@ -3,11 +3,11 @@
 use std::sync::Arc;
 
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToBytesCodecTraits, BytesDecodeInput, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, ComputeResources, InvalidBytesLengthError,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, Resources,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesDecodeInput,
+    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
+    CodecTraits, ComputeResources, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
+    SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
     UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
@@ -292,11 +292,11 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
             shape,
@@ -310,11 +310,11 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         _options: &CodecOptions,
         _resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_output_handle,
             shape,

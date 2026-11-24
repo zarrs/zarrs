@@ -11,14 +11,14 @@ use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkGrid, ChunkShape, CowBytes, DataType, FillValue,
 };
 use zarrs_codec::{
-    ArrayBytesTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits,
-    BytesDecodeInput, BytesDecodeSource, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef, ChunkGridEncoded, Codec,
-    CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecSpecificOptions,
-    CodecTraits, ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, Resources, UnboundArrayToArrayCodecTraits,
-    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
+    ArrayBytesTarget, ArrayCodecTraits, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecSubchunkingTraits, ArrayToBytesCodecTraits, BytesDecodeInput,
+    BytesDecodeSource, BytesToBytesCodecTraits, ChunkGridDecoded, ChunkGridDecodedRef,
+    ChunkGridEncoded, Codec, CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, ComputeResources, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, Resources, SyncArrayPartialDecoderTraits,
+    SyncArrayPartialEncoderTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
+    UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -818,11 +818,11 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn partial_decoder(
         self: Arc<Self>,
-        mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        mut input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
         let mut codec_index = 0;
         for (codec, bytes_representation) in std::iter::zip(
@@ -901,11 +901,11 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
 
     fn partial_encoder(
         self: Arc<Self>,
-        mut input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        mut input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+    ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
         let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
         for (codec, bytes_representation) in std::iter::zip(
@@ -1312,11 +1312,11 @@ mod tests {
 
         fn partial_decoder(
             self: Arc<Self>,
-            input_handle: Arc<dyn BytesPartialDecoderTraits>,
+            input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
             decoded_representation: &BytesRepresentation,
             _options: &CodecOptions,
             _resources: &Resources,
-        ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
+        ) -> Result<Arc<dyn SyncBytesPartialDecoderTraits>, CodecError> {
             if decoded_representation != &self.expected_decoded_representation {
                 return Err(CodecError::Other(format!(
                     "wrong decoded representation: expected {:?}, got {:?}",
@@ -1495,7 +1495,7 @@ mod tests {
         )
         .unwrap();
 
-        let encoded_input: Arc<dyn BytesPartialDecoderTraits> =
+        let encoded_input: Arc<dyn SyncBytesPartialDecoderTraits> =
             Arc::new(CowBytes::from(vec![0; 9]));
         codec
             .partial_decoder(
@@ -1511,7 +1511,7 @@ mod tests {
     #[test]
     fn codec_chain_undefined_fill_value_missing_input() {
         use zarrs_storage::store::MemoryStore;
-        use zarrs_storage::{ListableStorageTraits, StoreKey};
+        use zarrs_storage::{StoreKey, SyncListableStorageTraits};
 
         let shape = vec![NonZeroU64::new(4).unwrap()];
         let options = CodecOptions::default();

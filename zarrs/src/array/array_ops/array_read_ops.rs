@@ -6,13 +6,13 @@ use super::{
 use crate::IntoConcurrentLimitIterator;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
-use zarrs_codec::{ArrayBytesTarget, ArrayPartialDecoderTraits, CodecError, Resources};
+use zarrs_codec::{ArrayBytesTarget, CodecError, Resources, SyncArrayPartialDecoderTraits};
 use zarrs_storage::{Bytes, MaybeSync};
 
 /// Synchronous array read operations.
 ///
 /// These operations decode with the array's [`codec_options`](ArrayOps::codec_options).
-pub trait ArrayReadOps: ArrayOps + MaybeSync {
+pub trait SyncArrayReadOps: ArrayOps + MaybeSync {
     /// Read and decode the chunk at `chunk_indices` into its bytes or the fill value if it does not exist.
     ///
     /// # Errors
@@ -285,7 +285,7 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         &self,
         chunk_indices: &[u64],
         resources: &Resources,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+    ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, ArrayError>;
 
     /// Return the chunk-local subchunk grid for a chunk, if available.
     ///

@@ -6,7 +6,7 @@ use zarrs::array::Resources;
 
 use zarrs::array::codec::Bz2Codec;
 use zarrs::array::{Array, ArrayMetadataOptions};
-use zarrs_filesystem::FilesystemStore;
+use zarrs_filesystem::SyncFilesystemStore;
 use zarrs_plugin::ExtensionAliasesV3;
 
 /// bz2 could stabilise as is, so test supporting that via the codec map.
@@ -22,7 +22,7 @@ fn array_future_stabilisation_bz2() {
         .push("numcodecs.bz2".into());
 
     let path = "tests/data/v3/array_bz2.zarr";
-    let store = Arc::new(FilesystemStore::new(path).unwrap());
+    let store = Arc::new(SyncFilesystemStore::new(path).unwrap());
     let array = Array::open(store, "/").unwrap();
     let elements = array
         .retrieve_array_subset::<Vec<f32>>(&array.subset_all(), &Resources::default())

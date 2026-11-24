@@ -7,7 +7,7 @@
 use ndarray::{Array2, ArrayD, array};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use zarrs::array::Resources;
-use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::SyncReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 #[allow(clippy::too_many_lines)]
@@ -22,12 +22,12 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a store
     // let path = tempfile::TempDir::new()?;
-    // let mut store: ReadableWritableListableStorage =
-    //     Arc::new(zarrs::filesystem::FilesystemStore::new(path.path())?);
-    // let mut store: ReadableWritableListableStorage = Arc::new(
-    //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/array_write_read.zarr")?,
+    // let mut store: SyncReadableWritableListableStorage =
+    //     Arc::new(zarrs::filesystem::SyncFilesystemStore::new(path.path())?);
+    // let mut store: SyncReadableWritableListableStorage = Arc::new(
+    //     zarrs::filesystem::SyncFilesystemStore::new("zarrs/tests/data/array_write_read.zarr")?,
     // );
-    let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
+    let mut store: SyncReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
     {

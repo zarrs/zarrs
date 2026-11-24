@@ -16,8 +16,8 @@ use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{
-    CowBytes, MaybeBytesIterator, OffsetBytesIterator, ReadableStorageTraits, StorageError,
-    StoreKey, StorePrefix, WritableStorageTraits,
+    CowBytes, OffsetBytesIterator, StorageError, StoreKey, StorePrefix, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, CodecSpecificOptions};
 
@@ -208,12 +208,12 @@ impl<T> FailingWritesStorage<T> {
     }
 }
 
-impl<T: ReadableStorageTraits> ReadableStorageTraits for FailingWritesStorage<T> {
+impl<T: SyncReadableStorageTraits> SyncReadableStorageTraits for FailingWritesStorage<T> {
     fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         self.storage.get_partial_many(key, byte_ranges)
     }
 
@@ -226,7 +226,7 @@ impl<T: ReadableStorageTraits> ReadableStorageTraits for FailingWritesStorage<T>
     }
 }
 
-impl<T: WritableStorageTraits> WritableStorageTraits for FailingWritesStorage<T> {
+impl<T: SyncWritableStorageTraits> SyncWritableStorageTraits for FailingWritesStorage<T> {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         self.check_write()?;
         self.storage.set(key, value)

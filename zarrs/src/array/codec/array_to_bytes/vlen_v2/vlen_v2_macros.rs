@@ -51,8 +51,8 @@ macro_rules! vlen_v2_codec {
         #[cfg(feature = "async")]
         use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
         use zarrs_codec::{
-            ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-            ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+            ArrayCodecTraits, SyncArrayPartialDecoderTraits, SyncArrayPartialEncoderTraits,
+            ArrayToBytesCodecTraits, SyncBytesPartialDecoderTraits, SyncBytesPartialEncoderTraits,
             CodecCreateError, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             ComputeResources, PartialDecoderCapability, PartialEncoderCapability,
             RecommendedConcurrency, Resources, UnboundArrayToBytesCodecTraits,
@@ -208,21 +208,21 @@ macro_rules! vlen_v2_codec {
 
             fn partial_decoder(
                 self: Arc<Self>,
-                input_handle: Arc<dyn BytesPartialDecoderTraits>,
+                input_handle: Arc<dyn SyncBytesPartialDecoderTraits>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
                 resources: &Resources,
-            ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+            ) -> Result<Arc<dyn SyncArrayPartialDecoderTraits>, CodecError> {
                 self.inner.clone().partial_decoder(input_handle, shape, options, resources)
             }
 
             fn partial_encoder(
                 self: Arc<Self>,
-                input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+                input_output_handle: Arc<dyn SyncBytesPartialEncoderTraits>,
                 shape: &[std::num::NonZeroU64],
                 options: &CodecOptions,
                 resources: &Resources,
-            ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+            ) -> Result<Arc<dyn SyncArrayPartialEncoderTraits>, CodecError> {
                 self.inner.clone().partial_encoder(input_output_handle, shape, options, resources)
             }
 

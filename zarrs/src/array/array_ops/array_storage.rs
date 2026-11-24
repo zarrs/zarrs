@@ -14,8 +14,9 @@ use zarrs_storage::{
     AsyncReadableWritableStorageTraits, AsyncWritableStorage, AsyncWritableStorageTraits,
 };
 use zarrs_storage::{
-    ReadableStorage, ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
-    StorageError, StorageHandle, WritableStorage, WritableStorageTraits,
+    StorageError, StorageHandle, SyncReadableStorage, SyncReadableStorageTraits,
+    SyncReadableWritableStorage, SyncReadableWritableStorageTraits, SyncWritableStorage,
+    SyncWritableStorageTraits,
 };
 
 use crate::array::Array;
@@ -27,27 +28,27 @@ impl<TStorage: ?Sized> Array<TStorage> {
     }
 }
 
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableStorageTraits + 'static> Array<TStorage> {
     /// The readable storage of the array, transformed by its storage transformers.
-    pub(crate) fn readable_storage(&self) -> Result<ReadableStorage, StorageError> {
+    pub(crate) fn readable_storage(&self) -> Result<SyncReadableStorage, StorageError> {
         self.storage_transformers()
             .create_readable_transformer(self.storage_handle())
     }
 }
 
-impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncWritableStorageTraits + 'static> Array<TStorage> {
     /// The writable storage of the array, transformed by its storage transformers.
-    pub(crate) fn writable_storage(&self) -> Result<WritableStorage, StorageError> {
+    pub(crate) fn writable_storage(&self) -> Result<SyncWritableStorage, StorageError> {
         self.storage_transformers()
             .create_writable_transformer(self.storage_handle())
     }
 }
 
-impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
+impl<TStorage: ?Sized + SyncReadableWritableStorageTraits + 'static> Array<TStorage> {
     /// The readable and writable storage of the array, transformed by its storage transformers.
     pub(crate) fn readable_writable_storage(
         &self,
-    ) -> Result<ReadableWritableStorage, StorageError> {
+    ) -> Result<SyncReadableWritableStorage, StorageError> {
         self.storage_transformers()
             .create_readable_writable_transformer(self.storage_handle())
     }

@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > This release includes many breaking changes, particularly for extension developers.
 > The most impactful breaking changes are summarised below and detailed in the sections that follow.
 
-- **Breaking**: Array operations are defined by the `ArrayOps`, `Array{Read,Write,Update,Mut}Ops` traits and their async variants, implemented by `Array` and the new `ArrayCached`
+- **Breaking**: Prefix synchronous storage and partial codec traits with `Sync`, along with the synchronous array operation traits and chunk cache types
+  - Examples include `SyncReadableStorageTraits`, `SyncArrayPartialDecoderTraits`, `SyncArray{Read,Write,Update}Ops`, and `SyncChunkCache`
+- **Breaking**: Array operations are defined by the `ArrayOps`, `ArrayMutOps`, and `{Sync,Async}Array{Read,Write,Update}Ops` traits, implemented by `Array` and the new `ArrayCached`
   - Explicit-options variants (`_opt`) are removed; derive an array with different options instead
 
   ```diff
@@ -32,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```diff
   - let cache = ChunkCacheDecodedLruChunkLimit::new(array.clone(), 32);
   - let chunk: Vec<f32> = cache.retrieve_chunk(&[0, 0], &CodecOptions::default())?;
-  + let array = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(32));
+  + let array = ArrayCached::new(array, SyncChunkCacheDecoded::new_chunk_limit(32));
   + let chunk: Vec<f32> = array.retrieve_chunk(&[0, 0], &Resources::default())?;
   ```
 
@@ -48,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Arrays
 - **Breaking**: Pass `Resources` per array and chunk-cache operation instead of setting the compute target in `CodecOptions` or `Config`
   - `chunk_concurrent_minimum` is private array state initialized from `Config`; `concurrency_chunks_and_codec` takes the minimum directly instead of `CodecOptions`
-- **Breaking**: Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
+- **Breaking**: Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayMutOps`, `{Sync,Async}ArrayReadOps`, `{Sync,Async}ArrayWriteOps`, and `{Sync,Async}ArrayUpdateOps`
   - These are implemented as inherent traits on `Array` and `ArrayCached`
   - Promote previously private methods to public: `[async_]retrieve_chunk_into` and `[async_]retrieve_partial_chunk_into`
 - **Breaking**: Remove explicit-options variants and parameters from synchronous and asynchronous `Array` operations; configure a derived array with the corresponding `with_*` method, then call the operation
@@ -60,11 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - With `ElementOrder::F`, fixed-length reads decode directly into column-major output (zero-copy through `transpose` chains such as Zarr V2 `"order": "F"`), variable-length reads reorder after decoding, and multi-chunk stores gather each chunk directly
   - `*_into` methods are unaffected, as the output target specifies its own layout
 - **Breaking**: Rename `retrieve_chunk_subset` to `retrieve_partial_chunk` and `store_chunk_subset` to `store_partial_chunk`, including async and `_into` variants, which accept `&dyn Indexer`
-- **Breaking**: Rename `ArrayBytesDecodeIntoTarget` to `ArrayBytesTarget`, and `[Async]ArrayReadOps::[async_]retrieve_{chunk,partial_chunk,array_subset}_into` take `&mut ArrayBytesTarget`
-- **Breaking**: `[Async]ArrayWriteOps::erase_chunks` and `[Async]ArrayReadOps::retrieve_encoded_chunks` accept `&dyn Indexer`, validate the chunks against the chunk grid, and return an `ArrayError` instead of a `StorageError`, as do `erase_chunk` and `retrieve_encoded_chunk`
+- **Breaking**: Rename `ArrayBytesDecodeIntoTarget` to `ArrayBytesTarget`, and `{Sync,Async}ArrayReadOps::[async_]retrieve_{chunk,partial_chunk,array_subset}_into` take `&mut ArrayBytesTarget`
+- **Breaking**: `{Sync,Async}ArrayWriteOps::erase_chunks` and `{Sync,Async}ArrayReadOps::retrieve_encoded_chunks` accept `&dyn Indexer`, validate the chunks against the chunk grid, and return an `ArrayError` instead of a `StorageError`, as do `erase_chunk` and `retrieve_encoded_chunk`
   - *Behavioural change*: out-of-bounds chunks or an incompatible dimensionality are an error rather than a silent no-op
   - `[async_]erase_chunks` limit the number of concurrent erases to the concurrent target of the array, rather than being unbounded
-- **Breaking**: `[Async]ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `[Async]ArrayWriteOps::store_encoded_chunk` takes `CowBytes`
+- **Breaking**: `{Sync,Async}ArrayReadOps::retrieve_encoded_chunk[s]` return `Bytes` instead of `Vec<u8>`, and `{Sync,Async}ArrayWriteOps::store_encoded_chunk` takes `CowBytes`
 - **Breaking**: `ArrayOps::chunk_key` returns `Result<StoreKey, ArrayError>`, and chunk keys from a chunk key encoding are validated rather than trusted
   - Add `ArrayError::{InvalidStoreKey,ChunkKeyEncodingError}`, and return `ArrayError::InvalidChunkGridIndicesError` if the chunk indices do not match the dimensionality of the array
   - `[async_]store_encoded_chunk`, `[async_]erase_chunk`, and `[async_]retrieve_encoded_chunk` no longer store, erase, or retrieve a key that does not belong to the chunk grid
@@ -79,22 +81,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Add `ArrayCached<TStorage, C>`, which pairs an `Array` with a chunk cache, and refactor `ChunkCache` into a pure key/chunk value container
     - Rename the `ChunkCache` trait to `SyncChunkCacheTraits`
     - `ArrayCached` owns its cache, and `SubchunkCache` its subchunk cache, so a cache is never shared between arrays or subchunk levels
-    - Remove the `ChunkCache` `retrieve_*` methods, which are provided by `ArrayCached`, and chunk cache constructors no longer take an array (e.g. `ChunkCacheDecoded::new_chunk_limit(capacity)`)
+    - Remove the `ChunkCache` `retrieve_*` methods, which are provided by `ArrayCached`, and chunk cache constructors no longer take an array (e.g. `SyncChunkCacheDecoded::new_chunk_limit(capacity)`)
     - `ChunkCacheTypeDecoded` is an `Option`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
     - `{Sync,Async}ChunkCacheTraits::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key, and is no longer `#[doc(hidden)]`
     - `SyncChunkCacheTraits` and `AsyncChunkCacheTraits` have a `Value` associated type (and are dyn compatible with `Value` specified), and `ChunkCacheType` is sealed
     - `SyncArrayCache` and `AsyncArrayCache` are dyn compatible, `ArrayCached` and `SubchunkCache` support `?Sized` caches via `new_boxed`
     - Add `invalidate` methods
     - Add `size` methods, which return the size of the cached chunks in bytes
-  - **Breaking**: Replace `ChunkCacheLru{ChunkLimit,SizeLimit}` with `ChunkCache`, created with `new_chunk_limit` or `new_size_limit`, and the `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases with `ChunkCache{Encoded,Decoded,PartialDecoder}`
+  - **Breaking**: Replace `ChunkCacheLru{ChunkLimit,SizeLimit}` with `SyncChunkCache`, created with `new_chunk_limit` or `new_size_limit`, and the `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases with `SyncChunkCache{Encoded,Decoded,PartialDecoder}`
     - `new_size_limit` takes an optional chunk size hint
-    - Add `[Async]ChunkCache::with_{hot,ghost}_allocation`
+    - Add `{Sync,Async}ChunkCache::with_{hot,ghost}_allocation`
   - Back chunk caches with `quick_cache` on all targets, evicting with S3-FIFO rather than LRU, and remove the `moka` and `lru` dependencies
   - **Breaking**: Remove the thread-local chunk caches (`ChunkCacheLru{Chunk,Size}LimitThreadLocal` and `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{Chunk,Size}LimitThreadLocal`)
   - Add support for async caching
     - `ArrayCached` implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`, so that chunk caches can be used with asynchronous stores
     - Add the `AsyncChunkCacheTraits` trait and the `AsyncChunkCache` implementation with `AsyncChunkCache{Encoded,Decoded,PartialDecoder}` aliases
-    - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
+    - Cache partial decoders as `SyncChunkCacheTypePartialDecoder` or `AsyncChunkCacheTypePartialDecoder`, according to the cache mode
     - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
   - `ArrayCached` accepts any `SyncArrayCache` or `AsyncArrayCache`, which every `SyncChunkCacheTraits` and `AsyncChunkCacheTraits` implementation is, and dispatches its retrievals and invalidations through the cache
   - Add `SubchunkCache`, which caches the decoded subchunks of a subchunk grid level in a decoded chunk cache keyed by subchunk indices, over a chunk cache that serves its misses, and `NoCache` to serve misses from the array
@@ -108,7 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fix a possible deadlock of chunk caches when `rayon` tasks retrieve the same uncached chunk, e.g. parallel reads of overlapping regions of a sharded array
   - Fix invalidating a whole chunk cache to discard retrievals in progress, as invalidating a chunk does, so a chunk read before a write is not cached after it
 - Subchunks
-  - **Breaking**: Remove `[Async]ArrayShardedReadableExt[Cache]`, whose methods are now part of `[Async]ArrayReadOps`
+  - **Breaking**: Remove `[Async]ArrayShardedReadableExt[Cache]`, whose methods are now part of `{Sync,Async}ArrayReadOps`
     - `[async_]retrieve_encoded_subchunk` and `[async_]subchunk_byte_range` are removed; use `ShardingPartialDecoder::{[async_]retrieve_subchunk_encoded,subchunk_byte_range}` for low-level encoded subchunk access
   - **Breaking**: Remove `ArrayShardedExt`, whose `subchunk_grid` and `subchunk_shape` are now part of `ArrayOps`
     - `is_sharded` and `is_exclusively_sharded` are removed; query `ArrayOps::subchunk_grid()` instead
@@ -118,11 +120,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Remove `ArrayOps::subchunk_grid_shape()`; query the `subchunk_grid()` directly
   - **Breaking**: Remove `effective_subchunk_shape()`, superseded by `ArrayOps::subchunk_shape()`
     - *Behavioural change*: `ArrayOps::subchunk_shape()` returns the subchunk shape of the subchunk grid (if regular), rather than the `sharding_indexed` codec `chunk_shape`
-  - Add `ArrayReadOps::{retrieve_subchunk,retrieve_subchunks}` and `_at_level` variants, and `ArrayError::MissingSubchunkGrid` for requests on arrays without a subchunk grid
+  - Add `{Sync,Async}ArrayReadOps::{[async_]retrieve_subchunk,[async_]retrieve_subchunks}` and `_at_level` variants, and `ArrayError::MissingSubchunkGrid` for requests on arrays without a subchunk grid
   - Add `ArrayOps::{subchunk_grids,subchunk_grid_at_level,subchunk_shape_at_level}` for querying nested subchunk grid hierarchies, ordered outermost to innermost
   - Add `ArrayOps::{subchunk_codec,subchunk_codecs,subchunk_codec_at_level}` for querying the codec of each subchunk level
     - Codec subchunking is opt-in through `ArrayToBytesCodecTraits::as_subchunking`, returning `ArrayToBytesCodecSubchunkingTraits`; codecs without subchunks require no additional trait implementation
-  - Add `ArrayReadOps::local_subchunk_grid[_at_level]` for chunk-local subchunk grids
+  - Add `{Sync,Async}ArrayReadOps::[async_]local_subchunk_grid[_at_level]` for chunk-local subchunk grids
 - Tensors and bytes
   - **Breaking**: Use `cowbytes::CowBytes` instead of `Cow<'a, [u8]>` or `bytes::Bytes` for encoded and raw bytes throughout the library, removing copies on some array `retrieve_`/`store_` paths with select stores and codecs
   - **Breaking**: `Tensor` has a lifetime parameter and may borrow its bytes, and `Tensor::into_parts` returns `CowBytes`
@@ -144,7 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clarify in the `Array` *Parallel Writing* documentation that a chunk must not be retrieved while it is being written, not just that it must not be written concurrently, and fix a missing negation in the `partial_encoder` rule
 - Fix `ArrayBuilder` to validate a `FillValue` against the data type before binding the codecs, so an invalid fill value returns `ArrayCreateError::InvalidFillValue` rather than a codec error
 - Fix multi-chunk operations to treat a concurrent target of zero as unconstrained, and avoid stalled async encoded-chunk retrieval and suffix stripping
-- Fix `[Async]ArrayReadOps::[async_]retrieve_array_subset_into` failing across multiple chunks if the output target has the same number of elements as the array subset, but a different shape or dimensionality
+- Fix `{Sync,Async}ArrayReadOps::[async_]retrieve_array_subset_into` failing across multiple chunks if the output target has the same number of elements as the array subset, but a different shape or dimensionality
 - Fix variable-length fill-value detection to respect element boundaries, preventing non-fill chunks from being omitted or erased when `store_empty_chunks` is disabled
 - Fix storing an owned `ndarray` array sliced in place, which used every element of its backing vector rather than only its own elements
 - Fix `Array::chunks_subset` and `[async_]store_chunks` to validate the dimensionality and shape of empty chunk selections
@@ -164,7 +166,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Codecs
 
-`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable, strided decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`; `ArrayBytesMask` guarantees optional masks are 0 or 1
+`zarrs_codec` 0.2.1 → 0.3.0 (**Breaking**): `Sync`-prefixed sync partial codec traits and dual `ByteIntervalPartialDecoder<T>`; per-operation resources and deferred decoding; codecs bind to a data type and fill value at array creation; owned, subdividable, strided decode targets; `CowBytes` bytes; subchunk-grid traits replace partial decode granularity; `u32`/`u64` `ArrayBytesOffsets`; `ArrayBytesMask` guarantees optional masks are 0 or 1
 
 #### General
 - **Breaking**: `ArrayBytes` and `ArrayBytesTarget` are non-exhaustive, so downstream matches require a wildcard arm
@@ -332,7 +334,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Storage
 
-`zarrs_storage` 0.4.5 → 0.5.0 (**Breaking**): `MemoryStore` supports both sync and async (removing `AsyncMemoryStore`), `set`/`set_partial` take `CowBytes`; `zarrs_filesystem` 0.3.14 → 0.4.0 (**Breaking**): no per-key serialisation, byte-range fixes
+`zarrs_storage` 0.4.5 → 0.5.0 (**Breaking**): `Sync`-prefixed sync storage traits/aliases, `MemoryStore` supports both sync and async (removing `AsyncMemoryStore`), `set`/`set_partial` take `CowBytes`; `zarrs_filesystem` 0.3.14 → 0.4.0 (**Breaking**): rename `FilesystemStore` to `SyncFilesystemStore` (with `FilesystemStore` alias), no per-key serialisation, byte-range fixes
 
 - Fix partial encoding to check whether the storage transformed by the storage transformers of an array supports partial sets, rather than the underlying store
 - Fix `[async_]erase_metadata` to erase array metadata through the storage transformers of the array, consistent with `[async_]store_metadata`

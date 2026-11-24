@@ -14,9 +14,9 @@ use crate::{
     AsyncWritableStorageTraits,
 };
 use crate::{
-    Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    Bytes, CowBytes, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, SyncListableStorageTraits, SyncMaybeBytesIterator,
+    SyncReadableStorageTraits, SyncWritableStorageTraits,
 };
 
 /// An in-memory store.
@@ -47,7 +47,7 @@ impl MemoryStore {
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<Option<impl Iterator<Item = Result<Bytes, StorageError>> + 'a>, StorageError> {
-        let Some(data) = ReadableStorageTraits::get(self, key)? else {
+        let Some(data) = SyncReadableStorageTraits::get(self, key)? else {
             return Ok(None);
         };
         Ok(Some(byte_ranges.map(move |byte_range| {
@@ -59,7 +59,7 @@ impl MemoryStore {
     }
 }
 
-impl ReadableStorageTraits for MemoryStore {
+impl SyncReadableStorageTraits for MemoryStore {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let data_map = self
             .data_map
@@ -72,7 +72,7 @@ impl ReadableStorageTraits for MemoryStore {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+    ) -> Result<SyncMaybeBytesIterator<'a>, StorageError> {
         Ok(self
             .get_partial_many_iter(key, byte_ranges)?
             .map(|iter| Box::new(iter) as _))
@@ -103,7 +103,7 @@ impl ReadableStorageTraits for MemoryStore {
     }
 }
 
-impl WritableStorageTraits for MemoryStore {
+impl SyncWritableStorageTraits for MemoryStore {
     fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
         // A full set replaces any existing value, so store the handle directly to avoid a copy.
         // The value is converted, and a replaced value dropped, outside of the lock.
@@ -166,7 +166,7 @@ impl WritableStorageTraits for MemoryStore {
     }
 }
 
-impl ListableStorageTraits for MemoryStore {
+impl SyncListableStorageTraits for MemoryStore {
     fn list(&self) -> Result<StoreKeys, StorageError> {
         let data_map = self.data_map.read().unwrap();
         Ok(data_map.keys().cloned().collect())
@@ -226,7 +226,7 @@ impl ListableStorageTraits for MemoryStore {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncReadableStorageTraits for MemoryStore {
     async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        ReadableStorageTraits::get(self, key)
+        SyncReadableStorageTraits::get(self, key)
     }
 
     async fn get_partial_many<'a>(
@@ -246,11 +246,11 @@ impl AsyncReadableStorageTraits for MemoryStore {
         key: &StoreKey,
         byte_range: ByteRange,
     ) -> Result<MaybeBytes, StorageError> {
-        ReadableStorageTraits::get_partial(self, key, byte_range)
+        SyncReadableStorageTraits::get_partial(self, key, byte_range)
     }
 
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
-        ReadableStorageTraits::size_key(self, key)
+        SyncReadableStorageTraits::size_key(self, key)
     }
 
     fn supports_get_partial(&self) -> bool {
@@ -280,15 +280,15 @@ impl AsyncWritableStorageTraits for MemoryStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        WritableStorageTraits::set_partial_many(self, key, offset_values)
+        SyncWritableStorageTraits::set_partial_many(self, key, offset_values)
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
-        WritableStorageTraits::erase(self, key)
+        SyncWritableStorageTraits::erase(self, key)
     }
 
     async fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        WritableStorageTraits::erase_prefix(self, prefix)
+        SyncWritableStorageTraits::erase_prefix(self, prefix)
     }
 
     fn supports_set_partial(&self) -> bool {
@@ -301,19 +301,19 @@ impl AsyncWritableStorageTraits for MemoryStore {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncListableStorageTraits for MemoryStore {
     async fn list(&self) -> Result<StoreKeys, StorageError> {
-        ListableStorageTraits::list(self)
+        SyncListableStorageTraits::list(self)
     }
 
     async fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
-        ListableStorageTraits::list_prefix(self, prefix)
+        SyncListableStorageTraits::list_prefix(self, prefix)
     }
 
     async fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
-        ListableStorageTraits::list_dir(self, prefix)
+        SyncListableStorageTraits::list_dir(self, prefix)
     }
 
     async fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        ListableStorageTraits::size_prefix(self, prefix)
+        SyncListableStorageTraits::size_prefix(self, prefix)
     }
 }
 
@@ -325,8 +325,8 @@ mod tests {
     use super::MemoryStore;
     use crate::byte_range::ByteRange;
     use crate::{
-        ReadableStorageTraits, ReadableWritableListableStorageTraits, StoreKey,
-        WritableStorageTraits,
+        StoreKey, SyncReadableStorageTraits, SyncReadableWritableListableStorageTraits,
+        SyncWritableStorageTraits,
     };
 
     #[test]
@@ -383,7 +383,8 @@ mod tests {
 
     #[test]
     fn memory_upcast1() -> Result<(), Box<dyn Error>> {
-        let store: Arc<dyn ReadableWritableListableStorageTraits> = Arc::new(MemoryStore::new());
+        let store: Arc<dyn SyncReadableWritableListableStorageTraits> =
+            Arc::new(MemoryStore::new());
         crate::store_test::store_write(&store.clone().writable())?;
         crate::store_test::store_read(&store.clone().readable())?;
         crate::store_test::store_list(&store.clone().listable())?;
@@ -393,7 +394,8 @@ mod tests {
 
     #[test]
     fn memory_upcast2() -> Result<(), Box<dyn Error>> {
-        let store: Arc<dyn ReadableWritableListableStorageTraits> = Arc::new(MemoryStore::new());
+        let store: Arc<dyn SyncReadableWritableListableStorageTraits> =
+            Arc::new(MemoryStore::new());
         crate::store_test::store_write(&store.clone().readable_writable().writable())?;
         crate::store_test::store_read(&store.clone().readable_writable().readable())?;
         Ok(())
@@ -401,7 +403,8 @@ mod tests {
 
     #[test]
     fn memory_upcast3() -> Result<(), Box<dyn Error>> {
-        let store: Arc<dyn ReadableWritableListableStorageTraits> = Arc::new(MemoryStore::new());
+        let store: Arc<dyn SyncReadableWritableListableStorageTraits> =
+            Arc::new(MemoryStore::new());
         crate::store_test::store_write(&store.clone().writable())?;
         crate::store_test::store_read(&store.clone().readable_listable().readable())?;
         crate::store_test::store_list(&store.clone().readable_listable().listable())?;

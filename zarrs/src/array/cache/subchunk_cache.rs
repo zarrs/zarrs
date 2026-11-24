@@ -13,7 +13,7 @@ use super::{CachedArrayMeta, SyncCachedArray, SyncChunkCacheTraits};
 use crate::array::{ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayPartialDecoderTraits, Resources};
+use zarrs_codec::{Resources, SyncArrayPartialDecoderTraits};
 
 mod decoded;
 
@@ -25,12 +25,12 @@ mod decoded;
 ///
 /// The two caches are chosen independently:
 /// - The subchunk cache is a decoded chunk cache keyed by subchunk indices rather than chunk indices, e.g. a
-///   [`ChunkCacheDecoded`](super::ChunkCacheDecoded). It sets how many subchunks are held.
+///   [`SyncChunkCacheDecoded`](super::SyncChunkCacheDecoded). It sets how many subchunks are held.
 ///   A subchunk that is missing or entirely the fill value is held as [`None`], which has a size of zero.
 /// - The chunk cache sets what is held per chunk to serve a subchunk miss:
-///   - a [`ChunkCachePartialDecoder`](super::ChunkCachePartialDecoder) caches shard indexes,
+///   - a [`SyncChunkCachePartialDecoder`](super::SyncChunkCachePartialDecoder) caches shard indexes,
 ///     so a miss reads and decodes only the subchunk. This is the recommended chunk cache.
-///   - a [`ChunkCacheEncoded`](super::ChunkCacheEncoded) caches encoded chunks, so misses
+///   - a [`SyncChunkCacheEncoded`](super::SyncChunkCacheEncoded) caches encoded chunks, so misses
 ///     decode subchunks without reading storage after the first read of a chunk. Each read with misses decodes the
 ///     shard index again, and the cached subchunks duplicate data held in the encoded chunks.
 ///   - [`NoCache`] holds nothing and reads through the array, so each read re-reads a shard index for its misses.
@@ -200,7 +200,7 @@ pub struct NoCache;
         types(
             AsyncArrayCacheOps => SyncArrayCacheOps,
             AsyncCachedArray => SyncCachedArray,
-            AsyncArrayPartialDecoderTraits => ArrayPartialDecoderTraits,
+            AsyncArrayPartialDecoderTraits => SyncArrayPartialDecoderTraits,
         )
     ),
     async(

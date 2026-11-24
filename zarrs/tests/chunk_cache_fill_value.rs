@@ -7,7 +7,7 @@ use std::error::Error;
 use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs::array::cache::ChunkCachePartialDecoder;
+use zarrs::array::cache::SyncChunkCachePartialDecoder;
 use zarrs::array::codec::BitroundCodec;
 use zarrs::array::{
     ArrayBuilder, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached, ArraySubset,
@@ -42,7 +42,7 @@ fn output_target<'a>(
 #[test]
 fn missing_cached_chunks_preserve_lossy_fill_value() -> Result<(), Box<dyn Error>> {
     let array = builder().build_arc(Arc::new(MemoryStore::default()), "/array")?;
-    let cached = ArrayCached::new(array, ChunkCachePartialDecoder::new_chunk_limit(4));
+    let cached = ArrayCached::new(array, SyncChunkCachePartialDecoder::new_chunk_limit(4));
     let resources = Resources::default();
     let subset = cached.array().subset_all();
 
