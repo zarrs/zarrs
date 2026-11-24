@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
 - Improve `MemoryStore` performance
   - Use `std::sync::RwLock` to allow concurrent reads
-  - Convert values and drop replaced or erased values outside the lock in `MemoryStore::{set,erase}`, and clone keys only when inserting them
+  - Convert values and drop replaced or erased values outside the lock in `MemoryStore::{set,erase}`
+  - Clone keys only for new entries in sync `set` and use a single lookup in async `set`
   - Acquire the lock and resolve the key once per `set_partial_many` call rather than once per offset
   - Avoid a redundant copy in `set`
 - `MemoryStore` and `StorageHandle` implement `get_partial` directly, rather than through `get_partial_many` (which allocates an iterator of byte ranges and of values)

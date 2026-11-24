@@ -263,7 +263,16 @@ impl AsyncReadableStorageTraits for MemoryStore {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncWritableStorageTraits for MemoryStore {
     async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
-        WritableStorageTraits::set(self, key, value)
+        // Insert directly so new keys require only one lookup under the write lock.
+        let key = key.clone();
+        let value: Bytes = value.into();
+        let replaced = self
+            .data_map
+            .write()
+            .map_err(|_| StorageError::from("memory store lock is poisoned"))?
+            .insert(key, value);
+        drop(replaced);
+        Ok(())
     }
 
     async fn set_partial_many<'a>(
