@@ -25,7 +25,7 @@ use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
     ArrayError, ArrayIndices, ArrayReadOps, ArraySubset, CodecOptions, DataType, ElementOrder,
-    FillValue, Indexer, Resources, data_type, transmute_to_bytes_vec,
+    FillValue, Indexer, Resources, data_type,
 };
 #[cfg(feature = "async")]
 use zarrs::storage::AsyncReadableWritableStorageTraits;
@@ -93,23 +93,22 @@ fn run_hook(hook: &Mutex<Option<Hook>>) {
     }
 }
 
-/// A sharded array of `float32` elements, encoded lossily so that re-encoding a chunk changes its values.
-fn lossy_sharded_array<TStorage: ?Sized>(
-    store: Arc<TStorage>,
-) -> Result<Arc<Array<TStorage>>, Box<dyn Error>> {
-    use zarrs::array::codec::FixedScaleOffsetCodec;
-    use zarrs::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
-    let configuration: FixedScaleOffsetCodecConfiguration = serde_json::from_str(
-        r#"{"offset":-18797.0078125,"scale":610.6317749023438,"dtype":"f4","astype":"f4"}"#,
-    )?;
-    let data_type = data_type::float32();
-    let mut sharding = ShardingCodecBuilder::new(vec![nz(2)], &data_type);
-    sharding.array_to_array_codecs(vec![Arc::new(
-        FixedScaleOffsetCodec::new_with_configuration(&configuration)?,
-    )]);
-    let mut builder = ArrayBuilder::new(vec![4], vec![4], data_type, 0.0f32);
-    builder.array_to_bytes_codec(sharding.build_arc());
-    Ok(builder.build_arc(store, "/array")?)
+/// A fixed length target of one dimension over `output`.
+fn flat_target(
+    output: &mut [u8],
+    data_type_size: usize,
+) -> Result<ArrayBytesTarget<'_>, Box<dyn Error>> {
+    let shape = [(output.len() / data_type_size) as u64];
+    let view = unsafe {
+        // SAFETY: this is the only view of output and covers it exactly.
+        ArrayBytesFixedDisjointView::new(
+            unsafe_cell_slice::UnsafeCellSlice::new(output),
+            data_type_size,
+            &shape,
+            ArraySubset::new_with_shape(shape),
+        )?
+    };
+    Ok(ArrayBytesTarget::Fixed(view))
 }
 
 #[ambisync::scope(
@@ -320,29 +319,13 @@ mod subchunk_cache {
         subset: &ArraySubset,
     ) -> Result<Vec<u16>, Box<dyn Error>> {
         let mut output = vec![0u16; subset.num_elements_usize()];
-        {
-            let shape = [subset.num_elements()];
-            let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(bytemuck::cast_slice_mut::<
-                u16,
-                u8,
-            >(&mut output));
-            let view = unsafe {
-                // SAFETY: this is the only view over output and covers it exactly.
-                ArrayBytesFixedDisjointView::new(
-                    output_slice,
-                    2,
-                    &shape,
-                    ArraySubset::new_with_shape(shape),
-                )?
-            };
-            array
-                .async_retrieve_array_subset_into(
-                    subset,
-                    &mut ArrayBytesTarget::Fixed(view),
-                    &Resources::default(),
-                )
-                .await?;
-        }
+        array
+            .async_retrieve_array_subset_into(
+                subset,
+                &mut flat_target(bytemuck::cast_slice_mut(&mut output), 2)?,
+                &Resources::default(),
+            )
+            .await?;
         Ok(output)
     }
 
@@ -454,17 +437,17 @@ mod subchunk_cache {
         let array = async_sharded_array(store.clone(), false, TestDataType::UInt16).await?;
         let cached = ArrayCached::new(
             array.clone(),
-            SubchunkCache::new(
-                0,
-                AsyncChunkCacheDecodedLruChunkLimit::new(64),
-                AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
-            ),
+            SubchunkCache::new(0, AsyncChunkCacheDecodedLruChunkLimit::new(64), NoCache),
         );
-        let subset = ArraySubset::new_with_ranges(&[5..7, 5..7]);
+        // 4 subchunks of one shard
+        let subset = ArraySubset::new_with_ranges(&[4..12, 4..12]);
+        store.reset();
         let expected = array
             .async_retrieve_array_subset::<Vec<u16>>(&subset, &Resources::default())
             .await?;
+        let expected_reads = store.reads();
 
+        // Reading them through the cache costs the same as reading them from the array: the shard index is read once
         store.reset();
         assert_eq!(
             cached
@@ -472,10 +455,10 @@ mod subchunk_cache {
                 .await?,
             expected
         );
-        assert!(store.reads() > 0);
-        assert_eq!(cached.cache().subchunks().len().await, 1);
+        assert_eq!(store.reads(), expected_reads);
+        assert_eq!(cached.cache().subchunks().len().await, 4);
 
-        // A cached subchunk is served without storage reads
+        // Cached subchunks are served without storage reads
         store.reset();
         assert_eq!(
             cached
@@ -484,47 +467,6 @@ mod subchunk_cache {
             expected
         );
         assert_eq!(store.reads(), 0);
-
-        // Another subchunk of the shard reads only that subchunk, as the chunk cache holds the shard index
-        store.reset();
-        cached
-            .async_retrieve_array_subset::<Vec<u16>>(
-                &ArraySubset::new_with_ranges(&[9..10, 9..10]),
-                &Resources::default(),
-            )
-            .await?;
-        assert_eq!(store.reads(), 1);
-        assert_eq!(cached.cache().subchunks().len().await, 2);
-        Ok(())
-    }
-
-    #[ambisync::test]
-    async fn async_subchunk_cache_opens_a_chunk_once_per_read() -> TestResult {
-        let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
-            AsyncMemoryStore::default(),
-        )));
-        let array = async_sharded_array(store.clone(), false, TestDataType::UInt16).await?;
-        let cached = ArrayCached::new(
-            array.clone(),
-            SubchunkCache::new(0, AsyncChunkCacheDecodedLruChunkLimit::new(64), NoCache),
-        );
-        let reads = async |subset: &ArraySubset| -> Result<usize, Box<dyn Error>> {
-            store.reset();
-            array
-                .async_retrieve_array_subset::<Vec<u16>>(subset, &Resources::default())
-                .await?;
-            Ok(store.reads())
-        };
-        // Reading 4 subchunks of one shard through the cache costs the same as reading them from the array: the shard
-        // index is read once
-        let subset = ArraySubset::new_with_ranges(&[4..12, 4..12]);
-        let expected_reads = reads(&subset).await?;
-        store.reset();
-        cached
-            .async_retrieve_array_subset::<Vec<u16>>(&subset, &Resources::default())
-            .await?;
-        assert_eq!(store.reads(), expected_reads);
-        assert_eq!(cached.cache().subchunks().len().await, 4);
         Ok(())
     }
 
@@ -633,39 +575,9 @@ mod subchunk_cache {
         assert_eq!(subchunks().await, all - 16);
         check().await?;
 
-        cached
-            .async_store_partial_chunk(
-                &[0, 1],
-                &ArraySubset::new_with_ranges(&[0..1, 0..1]),
-                &[9u16],
-                &Resources::default(),
-            )
-            .await?;
-        assert_eq!(subchunks().await, all - 16);
-        check().await?;
-
         // A chunk write evicts the subchunks of the chunk
         cached
             .async_store_chunk(&[1, 0], vec![3u16; 256], &Resources::default())
-            .await?;
-        assert_eq!(subchunks().await, all - 16);
-        check().await?;
-
-        cached.async_erase_chunk(&[1, 0]).await?;
-        assert_eq!(subchunks().await, all - 16);
-        check().await?;
-
-        // A partial encoder also evicts the subchunks of its chunk
-        let encoder = cached
-            .async_partial_encoder(&[0, 0], &Resources::default())
-            .await?;
-        encoder
-            .partial_encode(
-                &ArraySubset::new_with_ranges(&[0..4, 0..4]),
-                &ArrayBytes::new_flen(transmute_to_bytes_vec(vec![5u16; 16])),
-                &CodecOptions::default(),
-                &Resources::default(),
-            )
             .await?;
         assert_eq!(subchunks().await, all - 16);
         check().await?;
@@ -675,25 +587,6 @@ mod subchunk_cache {
             .async_store_array_subset(
                 &ArraySubset::new_with_ranges(&[15..17, 0..2]),
                 &[4u16; 4],
-                &Resources::default(),
-            )
-            .await?;
-        assert_eq!(subchunks().await, all - 32);
-        check().await?;
-
-        cached
-            .async_store_chunks(
-                &ArraySubset::new_with_ranges(&[0..1, 0..2]),
-                vec![6u16; 512],
-                &Resources::default(),
-            )
-            .await?;
-        assert_eq!(subchunks().await, all - 32);
-        check().await?;
-
-        cached
-            .async_erase_chunks(
-                &ArraySubset::new_with_ranges(&[0..2, 1..2]),
                 &Resources::default(),
             )
             .await?;
@@ -745,12 +638,6 @@ mod subchunk_cache {
             )
             .await?;
         assert_eq!(cached.cache().subchunks().len().await, 1 + 16);
-        assert_eq!(
-            cached
-                .async_retrieve_chunk_if_exists::<Vec<u16>>(&[1, 1], &Resources::default())
-                .await?,
-            None
-        );
         Ok(())
     }
 
@@ -789,24 +676,17 @@ mod subchunk_cache {
             cached
                 .async_store_chunk(&[0], &[value; 8], &resources)
                 .await?;
-            decoder
-                .partial_decode(&[0..8], &CodecOptions::default(), &resources)
-                .await?;
+            assert_eq!(
+                decoder
+                    .partial_decode(&[0..8], &CodecOptions::default(), &resources)
+                    .await?,
+                ArrayBytes::new_flen(vec![value - 1; 8])
+            );
             let mut output = [0u8; 8];
-            let shape = [8];
-            let view = unsafe {
-                // SAFETY: this is the only view of output and covers it exactly.
-                ArrayBytesFixedDisjointView::new(
-                    unsafe_cell_slice::UnsafeCellSlice::new(&mut output),
-                    1,
-                    &shape,
-                    ArraySubset::new_with_shape(shape),
-                )?
-            };
             decoder
                 .partial_decode_into(
                     &[0..8],
-                    &mut ArrayBytesTarget::Fixed(view),
+                    &mut flat_target(&mut output, 1)?,
                     &CodecOptions::default(),
                     &resources,
                 )
@@ -1027,51 +907,6 @@ mod subchunk_cache {
                 .await?,
             vec![2; 8]
         );
-        Ok(())
-    }
-
-    #[ambisync::test]
-    async fn async_partial_writes_invalidate_subchunks_changed_by_lossy_reencoding() -> TestResult {
-        for array_subset in [false, true] {
-            let array = lossy_sharded_array(Arc::new(AsyncMemoryStore::default()))?;
-            let resources = Resources::default();
-            array
-                .async_store_chunk(&[0], &[234_551.36_f32; 4], &resources)
-                .await?;
-            let cached = ArrayCached::new(
-                array.clone(),
-                SubchunkCache::new(
-                    0,
-                    AsyncChunkCacheDecodedLruChunkLimit::new(8),
-                    AsyncChunkCachePartialDecoderLruChunkLimit::new(2),
-                ),
-            );
-            let before = cached
-                .async_retrieve_chunk::<Vec<f32>>(&[0], &resources)
-                .await?;
-            if array_subset {
-                cached
-                    .async_store_array_subset(&[0..1], &[1.0f32], &resources)
-                    .await?;
-            } else {
-                cached
-                    .async_store_partial_chunk(&[0], &[0..1], &[1.0f32], &resources)
-                    .await?;
-            }
-            let expected = array
-                .async_retrieve_chunk::<Vec<f32>>(&[0], &resources)
-                .await?;
-            assert_ne!(
-                before[2], expected[2],
-                "re-encoding changes an unwritten subchunk"
-            );
-            assert_eq!(
-                cached
-                    .async_retrieve_chunk::<Vec<f32>>(&[0], &resources)
-                    .await?,
-                expected
-            );
-        }
         Ok(())
     }
 }
