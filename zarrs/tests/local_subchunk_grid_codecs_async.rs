@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use subchunk_grid_cases::{Case, cases, plain_sharding};
 use zarrs::array::cache::{
-    AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-    AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheTraits,
+    AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
+    AsyncChunkCacheTraits,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, AsyncArrayPartialEncoderTraits, CodecOptions, data_type,
@@ -75,7 +75,7 @@ async fn async_local_subchunk_grid_exposed_by_partial_encoders() -> TestResult {
     let array = build(&case).await?;
     let cached = ArrayCached::new(
         array.clone(),
-        AsyncChunkCachePartialDecoderLruChunkLimit::new(1),
+        AsyncChunkCachePartialDecoder::new_chunk_limit(1),
     );
 
     let encoders: [(&str, Arc<dyn AsyncArrayPartialEncoderTraits>); 2] = [
@@ -138,21 +138,21 @@ async fn async_local_subchunk_grid_via_chunk_caches() -> TestResult {
     check_cache(
         &case,
         &array,
-        AsyncChunkCachePartialDecoderLruChunkLimit::new(1),
+        AsyncChunkCachePartialDecoder::new_chunk_limit(1),
         true,
     )
     .await?;
     check_cache(
         &case,
         &array,
-        AsyncChunkCacheEncodedLruChunkLimit::new(1),
+        AsyncChunkCacheEncoded::new_chunk_limit(1),
         true,
     )
     .await?;
     check_cache(
         &case,
         &array,
-        AsyncChunkCacheDecodedLruChunkLimit::new(1),
+        AsyncChunkCacheDecoded::new_chunk_limit(1),
         false,
     )
     .await

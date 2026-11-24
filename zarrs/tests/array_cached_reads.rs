@@ -7,8 +7,8 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use zarrs::array::cache::{
-    ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-    ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheTraits, SyncChunkCacheType,
+    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, SyncChunkCacheTraits,
+    SyncChunkCacheType,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, ArrayError, ArrayIndices, ArraySubset, DataType, Element,
@@ -173,21 +173,21 @@ fn cached_reads_match_uncached() {
             "decoded",
             name,
             &build(&b),
-            ChunkCacheDecodedLruChunkLimit::new(4),
+            ChunkCacheDecoded::new_chunk_limit(4),
             &u16_elements,
         );
         check_cached_reads(
             "encoded",
             name,
             &build(&b),
-            ChunkCacheEncodedLruChunkLimit::new(4),
+            ChunkCacheEncoded::new_chunk_limit(4),
             &u16_elements,
         );
         check_cached_reads(
             "partial_decoder",
             name,
             &build(&b),
-            ChunkCachePartialDecoderLruChunkLimit::new(4),
+            ChunkCachePartialDecoder::new_chunk_limit(4),
             &u16_elements,
         );
     }
@@ -200,21 +200,21 @@ fn cached_reads_match_uncached() {
         "decoded",
         "optional",
         &build(&opt_builder),
-        ChunkCacheDecodedLruChunkLimit::new(4),
+        ChunkCacheDecoded::new_chunk_limit(4),
         &optional_elements,
     );
     check_cached_reads(
         "encoded",
         "optional",
         &build(&opt_builder),
-        ChunkCacheEncodedLruChunkLimit::new(4),
+        ChunkCacheEncoded::new_chunk_limit(4),
         &optional_elements,
     );
     check_cached_reads(
         "partial_decoder",
         "optional",
         &build(&opt_builder),
-        ChunkCachePartialDecoderLruChunkLimit::new(4),
+        ChunkCachePartialDecoder::new_chunk_limit(4),
         &optional_elements,
     );
 
@@ -223,21 +223,21 @@ fn cached_reads_match_uncached() {
         "decoded",
         "string",
         &build(&str_builder),
-        ChunkCacheDecodedLruChunkLimit::new(4),
+        ChunkCacheDecoded::new_chunk_limit(4),
         &string_elements,
     );
     check_cached_reads(
         "encoded",
         "string",
         &build(&str_builder),
-        ChunkCacheEncodedLruChunkLimit::new(4),
+        ChunkCacheEncoded::new_chunk_limit(4),
         &string_elements,
     );
     check_cached_reads(
         "partial_decoder",
         "string",
         &build(&str_builder),
-        ChunkCachePartialDecoderLruChunkLimit::new(4),
+        ChunkCachePartialDecoder::new_chunk_limit(4),
         &string_elements,
     );
 }
@@ -285,7 +285,7 @@ impl Indexer for OpaqueSubset {
 fn opaque_indexer_partial_chunk_roundtrip() {
     let resources = Resources::default();
     let array = build(&builder(data_type::uint16(), 0u16));
-    let cached = ArrayCached::new(array.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(array.clone(), ChunkCacheDecoded::new_chunk_limit(4));
     let subset = ArraySubset::new_with_ranges(&[1..3, 0..3]);
     let indexer = OpaqueSubset(subset.clone());
     assert_eq!(indexer.output_shape(), [2, 3]);
@@ -313,7 +313,7 @@ fn opaque_indexer_partial_chunk_roundtrip() {
 fn retrieve_out_of_bounds_rejected_before_allocation() {
     let resources = Resources::default();
     let array = build(&builder(data_type::uint16(), 0u16));
-    let cached = ArrayCached::new(array.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(array.clone(), ChunkCacheDecoded::new_chunk_limit(4));
 
     // 2^64 elements
     let partial_oob = ArraySubset::new_with_ranges(&[0..1 << 32, 0..1 << 32]);
@@ -342,8 +342,8 @@ fn retrieve_out_of_bounds_rejected_before_allocation() {
 mod async_tests {
     use super::*;
     use zarrs::array::cache::{
-        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheTraits, AsyncChunkCacheType,
+        AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
+        AsyncChunkCacheTraits, AsyncChunkCacheType,
     };
     use zarrs_storage::store::AsyncMemoryStore;
 
@@ -455,7 +455,7 @@ mod async_tests {
                 "decoded",
                 name,
                 &b,
-                AsyncChunkCacheDecodedLruChunkLimit::new(4),
+                AsyncChunkCacheDecoded::new_chunk_limit(4),
                 &u16_elements,
             )
             .await;
@@ -463,7 +463,7 @@ mod async_tests {
                 "encoded",
                 name,
                 &b,
-                AsyncChunkCacheEncodedLruChunkLimit::new(4),
+                AsyncChunkCacheEncoded::new_chunk_limit(4),
                 &u16_elements,
             )
             .await;
@@ -471,7 +471,7 @@ mod async_tests {
                 "partial_decoder",
                 name,
                 &b,
-                AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                AsyncChunkCachePartialDecoder::new_chunk_limit(4),
                 &u16_elements,
             )
             .await;
@@ -485,7 +485,7 @@ mod async_tests {
             "encoded",
             "optional",
             &opt_builder,
-            AsyncChunkCacheEncodedLruChunkLimit::new(4),
+            AsyncChunkCacheEncoded::new_chunk_limit(4),
             &optional_elements,
         )
         .await;
@@ -493,7 +493,7 @@ mod async_tests {
             "partial_decoder",
             "optional",
             &opt_builder,
-            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+            AsyncChunkCachePartialDecoder::new_chunk_limit(4),
             &optional_elements,
         )
         .await;
@@ -503,7 +503,7 @@ mod async_tests {
             "encoded",
             "string",
             &str_builder,
-            AsyncChunkCacheEncodedLruChunkLimit::new(4),
+            AsyncChunkCacheEncoded::new_chunk_limit(4),
             &string_elements,
         )
         .await;
@@ -511,7 +511,7 @@ mod async_tests {
             "partial_decoder",
             "string",
             &str_builder,
-            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+            AsyncChunkCachePartialDecoder::new_chunk_limit(4),
             &string_elements,
         )
         .await;
@@ -523,7 +523,7 @@ mod async_tests {
         let array = builder(data_type::uint16(), 0u16)
             .build(Arc::new(AsyncMemoryStore::new()), "/array")
             .unwrap();
-        let cached = ArrayCached::new(array.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(4));
+        let cached = ArrayCached::new(array.clone(), AsyncChunkCacheDecoded::new_chunk_limit(4));
 
         let partial_oob = ArraySubset::new_with_ranges(&[0..1 << 32, 0..1 << 32]);
         assert!(matches!(

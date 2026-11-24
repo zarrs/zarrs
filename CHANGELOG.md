@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```diff
   - let cache = ChunkCacheDecodedLruChunkLimit::new(array.clone(), 32);
   - let chunk: Vec<f32> = cache.retrieve_chunk(&[0, 0], &CodecOptions::default())?;
-  + let array = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(32));
+  + let array = ArrayCached::new(array, ChunkCacheDecoded::new_chunk_limit(32));
   + let chunk: Vec<f32> = array.retrieve_chunk(&[0, 0], &Resources::default())?;
   ```
 
@@ -79,17 +79,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Add `ArrayCached<TStorage, C>`, which pairs an `Array` with a chunk cache, and refactor `ChunkCache` into a pure key/chunk value container
     - Rename the `ChunkCache` trait to `SyncChunkCacheTraits`
     - `ArrayCached` owns its cache, and `SubchunkCache` its subchunk cache, so a cache is never shared between arrays or subchunk levels
-    - Remove the `ChunkCache` `retrieve_*` methods, which are provided by `ArrayCached`, and chunk cache constructors no longer take an array (e.g. `ChunkCacheDecodedLruChunkLimit::new(capacity)`)
+    - Remove the `ChunkCache` `retrieve_*` methods, which are provided by `ArrayCached`, and chunk cache constructors no longer take an array (e.g. `ChunkCacheDecoded::new_chunk_limit(capacity)`)
     - `ChunkCacheTypeDecoded` is an `Option`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
     - `{Sync,Async}ChunkCacheTraits::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key, and is no longer `#[doc(hidden)]`
     - `SyncChunkCacheTraits` and `AsyncChunkCacheTraits` have a `Value` associated type (and are dyn compatible with `Value` specified), and `ChunkCacheType` is sealed
     - `SyncArrayCache` and `AsyncArrayCache` are dyn compatible, `ArrayCached` and `SubchunkCache` support `?Sized` caches via `new_boxed`
     - Add `invalidate` methods
     - Add `size` methods, which return the size of the cached chunks in bytes
+  - **Breaking**: Replace `ChunkCacheLru{ChunkLimit,SizeLimit}` with `ChunkCache`, created with `new_chunk_limit` or `new_size_limit`, and the `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases with `ChunkCache{Encoded,Decoded,PartialDecoder}`
+    - `new_size_limit` takes an optional chunk size hint
+    - Add `[Async]ChunkCache::with_{hot,ghost}_allocation`
+  - Back chunk caches with `quick_cache` on all targets, evicting with S3-FIFO rather than LRU, and remove the `moka` and `lru` dependencies
   - **Breaking**: Remove the thread-local chunk caches (`ChunkCacheLru{Chunk,Size}LimitThreadLocal` and `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{Chunk,Size}LimitThreadLocal`)
   - Add support for async caching
     - `ArrayCached` implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`, so that chunk caches can be used with asynchronous stores
-    - Add the `AsyncChunkCacheTraits` trait and `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` implementations with `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases
+    - Add the `AsyncChunkCacheTraits` trait and the `AsyncChunkCache` implementation with `AsyncChunkCache{Encoded,Decoded,PartialDecoder}` aliases
     - Add `ChunkCacheTypeAsyncPartialDecoder` for cached asynchronous partial decoding
     - Add the `SyncChunkCacheType` and `AsyncChunkCacheType` subtraits of `ChunkCacheType`
   - `ArrayCached` accepts any `SyncArrayCache` or `AsyncArrayCache`, which every `SyncChunkCacheTraits` and `AsyncChunkCacheTraits` implementation is, and dispatches its retrievals and invalidations through the cache
@@ -101,6 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add the `array_caching` example, which counts the storage reads of repeated reads through each kind of cache
   - Retrieve complete cached chunks without extracting a subset
   - Fix chunk subset retrieval from a chunk cache to validate the chunk subset and chunk indices if a chunk is absent, rather than returning fill values
+  - Fix a possible deadlock of chunk caches when `rayon` tasks retrieve the same uncached chunk, e.g. parallel reads of overlapping regions of a sharded array
+  - Fix invalidating a whole chunk cache to discard retrievals in progress, as invalidating a chunk does, so a chunk read before a write is not cached after it
 - Subchunks
   - **Breaking**: Remove `[Async]ArrayShardedReadableExt[Cache]`, whose methods are now part of `[Async]ArrayReadOps`
     - `[async_]retrieve_encoded_subchunk` and `[async_]subchunk_byte_range` are removed; use `[Async]ShardingPartialDecoder::{retrieve_subchunk_encoded,subchunk_byte_range}` for low-level encoded subchunk access
@@ -356,7 +362,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the `ambisync` dependency, which derives synchronous code from asynchronous code
 - *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
 - Avoid unused asynchronous dependencies and unnecessary native-library builds
-- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.19.0, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4, `pco` 1.1.0, `flate2` 1.1.9, `bzip2` 0.6.1, `zstd` 0.14.4
+- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4, `pco` 1.1.0, `flate2` 1.1.9, `bzip2` 0.6.1, `zstd` 0.14.4
 
 ### Internal
 - Add array-operation, sharding encode/decode, and sync/async I/O latency benchmarks, and allocation regression checks for general array operations

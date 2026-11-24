@@ -373,8 +373,7 @@ fn partial_decoder(c: &mut Criterion) {
 fn chunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
     use zarrs::array::cache::{
-        ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-        ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheTraits,
+        ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, SyncChunkCacheTraits,
     };
 
     fn bench_cache<C: SyncChunkCacheTraits>(
@@ -421,16 +420,16 @@ fn chunk_cache(c: &mut Criterion) {
             .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
             .unwrap();
         bench_cache(&mut group, &array, &format!("encoded/{codecs}"), || {
-            ChunkCacheEncodedLruChunkLimit::new(16)
+            ChunkCacheEncoded::new_chunk_limit(16)
         });
         bench_cache(&mut group, &array, &format!("decoded/{codecs}"), || {
-            ChunkCacheDecodedLruChunkLimit::new(16)
+            ChunkCacheDecoded::new_chunk_limit(16)
         });
         bench_cache(
             &mut group,
             &array,
             &format!("partial_decoder/{codecs}"),
-            || ChunkCachePartialDecoderLruChunkLimit::new(16),
+            || ChunkCachePartialDecoder::new_chunk_limit(16),
         );
     }
     group.finish();
@@ -440,9 +439,7 @@ fn chunk_cache(c: &mut Criterion) {
 /// over a partial decoder chunk cache.
 fn subchunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
-    use zarrs::array::cache::{
-        ChunkCacheDecodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, SubchunkCache,
-    };
+    use zarrs::array::cache::{ChunkCacheDecoded, ChunkCachePartialDecoder, SubchunkCache};
 
     let mut group = c.benchmark_group("subchunk_cache");
     let shape = [512u64, 512];
@@ -460,8 +457,8 @@ fn subchunk_cache(c: &mut Criterion) {
     let cache = || {
         SubchunkCache::new(
             0,
-            ChunkCacheDecodedLruChunkLimit::new(1024),
-            ChunkCachePartialDecoderLruChunkLimit::new(16),
+            ChunkCacheDecoded::new_chunk_limit(1024),
+            ChunkCachePartialDecoder::new_chunk_limit(16),
         )
     };
     for (region, subset) in [
@@ -505,8 +502,8 @@ fn subchunk_cache(c: &mut Criterion) {
 fn async_chunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
     use zarrs::array::cache::{
-        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheTraits,
+        AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
+        AsyncChunkCacheTraits,
     };
     use zarrs::storage::store::AsyncMemoryStore;
 
@@ -570,21 +567,21 @@ fn async_chunk_cache(c: &mut Criterion) {
             &rt,
             &array,
             &format!("encoded/{codecs}"),
-            || AsyncChunkCacheEncodedLruChunkLimit::new(16),
+            || AsyncChunkCacheEncoded::new_chunk_limit(16),
         );
         bench_cache(
             &mut group,
             &rt,
             &array,
             &format!("decoded/{codecs}"),
-            || AsyncChunkCacheDecodedLruChunkLimit::new(16),
+            || AsyncChunkCacheDecoded::new_chunk_limit(16),
         );
         bench_cache(
             &mut group,
             &rt,
             &array,
             &format!("partial_decoder/{codecs}"),
-            || AsyncChunkCachePartialDecoderLruChunkLimit::new(16),
+            || AsyncChunkCachePartialDecoder::new_chunk_limit(16),
         );
     }
     group.finish();
@@ -599,8 +596,7 @@ fn async_chunk_cache(_c: &mut Criterion) {}
 fn async_subchunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
     use zarrs::array::cache::{
-        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
-        SubchunkCache,
+        AsyncChunkCacheDecoded, AsyncChunkCachePartialDecoder, SubchunkCache,
     };
     use zarrs::storage::store::AsyncMemoryStore;
 
@@ -624,8 +620,8 @@ fn async_subchunk_cache(c: &mut Criterion) {
     let cache = || {
         SubchunkCache::new(
             0,
-            AsyncChunkCacheDecodedLruChunkLimit::new(1024),
-            AsyncChunkCachePartialDecoderLruChunkLimit::new(16),
+            AsyncChunkCacheDecoded::new_chunk_limit(1024),
+            AsyncChunkCachePartialDecoder::new_chunk_limit(16),
         )
     };
     for (region, subset) in [

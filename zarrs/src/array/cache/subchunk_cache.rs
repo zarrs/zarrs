@@ -25,12 +25,12 @@ mod decoded;
 ///
 /// The two caches are chosen independently:
 /// - The subchunk cache is a decoded chunk cache keyed by subchunk indices rather than chunk indices, e.g. a
-///   [`ChunkCacheDecodedLruSizeLimit`](super::ChunkCacheDecodedLruSizeLimit). It sets how many subchunks are held.
+///   [`ChunkCacheDecoded`](super::ChunkCacheDecoded). It sets how many subchunks are held.
 ///   A subchunk that is missing or entirely the fill value is held as [`None`], which has a size of zero.
 /// - The chunk cache sets what is held per chunk to serve a subchunk miss:
-///   - a [`ChunkCachePartialDecoderLruChunkLimit`](super::ChunkCachePartialDecoderLruChunkLimit) caches shard indexes,
+///   - a [`ChunkCachePartialDecoder`](super::ChunkCachePartialDecoder) caches shard indexes,
 ///     so a miss reads and decodes only the subchunk. This is the recommended chunk cache.
-///   - a [`ChunkCacheEncodedLruChunkLimit`](super::ChunkCacheEncodedLruChunkLimit) caches encoded chunks, so misses
+///   - a [`ChunkCacheEncoded`](super::ChunkCacheEncoded) caches encoded chunks, so misses
 ///     decode subchunks without reading storage after the first read of a chunk. Each read with misses decodes the
 ///     shard index again, and the cached subchunks duplicate data held in the encoded chunks.
 ///   - [`NoCache`] holds nothing and reads through the array, so each read re-reads a shard index for its misses.
@@ -40,8 +40,8 @@ mod decoded;
 /// cache, so each level has its own and no subchunk cache is shared between arrays.
 ///
 /// For asynchronous operations, use an asynchronous decoded chunk cache as the subchunk cache (e.g.
-/// `AsyncChunkCacheDecodedLruChunkLimit`) over an asynchronous chunk cache (e.g.
-/// `AsyncChunkCachePartialDecoderLruChunkLimit`, or [`NoCache`]).
+/// `AsyncChunkCacheDecoded`) over an asynchronous chunk cache (e.g.
+/// `AsyncChunkCachePartialDecoder`, or [`NoCache`]).
 ///
 /// The array must have a globally resolvable subchunk grid at `level` (see
 /// [`ArrayOps::subchunk_grid_at_level`](crate::array::ArrayOps::subchunk_grid_at_level)), or cached retrievals return

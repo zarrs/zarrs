@@ -32,7 +32,7 @@ zlib = ["dep:flate2"] # Enable the zlib codec
 zstd = ["dep:zstd"] # Enable the zstd codec
 ndarray = ["dep:ndarray"] # Adds ndarray utility functions to Array
 dlpack =["dep:dlpark"] # Adds DLPack interoperability to Tensor
-async = ["dep:async-generic", "dep:async-trait", "dep:futures", "moka/future", "zarrs_storage/async", "zarrs_codec/async"] # Enable experimental async API
+async = ["dep:async-generic", "dep:async-trait", "dep:futures", "zarrs_storage/async", "zarrs_codec/async"] # Enable experimental async API
 jiff = ["dep:jiff"] # Adds support for jiff time array elements
 chrono = ["dep:chrono"] # Adds support for chrono time array elements
 float8 = ["dep:float8"] # Deprecated: Adds support for float8 array elements (use microfloat instead)
@@ -62,11 +62,11 @@ half.workspace = true
 inherent = "1.0.13"
 inventory.workspace = true
 itertools = "0.15.0"
-moka = { version = "0.12.8", features = ["sync"] }
 ndarray = { version = "0.17.1", optional = true }
 num.workspace = true
 paste = "1.0.15"
 pco = { version = "1.1.0", optional = true }
+quick_cache = "0.7.0"
 rayon = "1.10.0"
 rayon_iter_concurrent_limit = "0.3.0"
 serde = { version = "1.0.203", features = ["derive"] }
@@ -102,9 +102,6 @@ zstd = { version = "0.14.4", features = ["zstdmt"], optional = true }
 blosc-src = { version = "0.3.6", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-lru = "0.19.0"
-quick_cache = { version = "0.7.0" }
-uuid = { version = "^1.1.0", features = ["v4", "js"] }
 blusc = { version = "0.0.7", optional = true }
 
 # Reference: https://github.com/kylebarron/parquet-wasm/blob/ad18b841a8e788b0d4b17eb9deaca581d02bf887/Cargo.toml#L100C1-L110C18
@@ -130,6 +127,7 @@ zarrs_filesystem.workspace = true
 # Constrain the transitive dependency to fix minimum-version builds without compiling it directly.
 [target.'cfg(false)'.dependencies]
 libz-sys = "1.1.20" # https://github.com/rust-lang/libz-sys/commit/eb42f72bb4e23ea16b726bc14587d4c5b3d07212
+lock_api = "0.4.7" # quick_cache needs a const RwLock::new on stable. TODO: report upstream
 
 [[example]]
 name = "array_write_read"

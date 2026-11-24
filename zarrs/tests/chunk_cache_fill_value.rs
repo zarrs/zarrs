@@ -7,7 +7,7 @@ use std::error::Error;
 use std::sync::Arc;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs::array::cache::ChunkCachePartialDecoderLruChunkLimit;
+use zarrs::array::cache::ChunkCachePartialDecoder;
 use zarrs::array::codec::BitroundCodec;
 use zarrs::array::{
     ArrayBuilder, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached, ArraySubset,
@@ -42,7 +42,7 @@ fn output_target<'a>(
 #[test]
 fn missing_cached_chunks_preserve_lossy_fill_value() -> Result<(), Box<dyn Error>> {
     let array = builder().build_arc(Arc::new(MemoryStore::default()), "/array")?;
-    let cached = ArrayCached::new(array, ChunkCachePartialDecoderLruChunkLimit::new(4));
+    let cached = ArrayCached::new(array, ChunkCachePartialDecoder::new_chunk_limit(4));
     let resources = Resources::default();
     let subset = cached.array().subset_all();
 
@@ -64,11 +64,11 @@ fn missing_cached_chunks_preserve_lossy_fill_value() -> Result<(), Box<dyn Error
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_missing_cached_chunks_preserve_lossy_fill_value() -> Result<(), Box<dyn Error>> {
-    use zarrs::array::cache::AsyncChunkCachePartialDecoderLruChunkLimit;
+    use zarrs::array::cache::AsyncChunkCachePartialDecoder;
     use zarrs::storage::store::AsyncMemoryStore;
 
     let array = builder().build_arc(Arc::new(AsyncMemoryStore::new()), "/array")?;
-    let cached = ArrayCached::new(array, AsyncChunkCachePartialDecoderLruChunkLimit::new(4));
+    let cached = ArrayCached::new(array, AsyncChunkCachePartialDecoder::new_chunk_limit(4));
     let resources = Resources::default();
     let subset = cached.array().subset_all();
 

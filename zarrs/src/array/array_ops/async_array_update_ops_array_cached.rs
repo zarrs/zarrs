@@ -223,8 +223,8 @@ mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use super::*;
     use crate::array::cache::{
-        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheTraits,
+        AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
+        AsyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use zarrs_storage::store::AsyncMemoryStore;
@@ -312,9 +312,9 @@ mod tests {
 
     #[tokio::test]
     async fn async_partial_encoder_invalidates_all_cache_value_types() {
-        test_async_partial_encoder_invalidates(AsyncChunkCacheEncodedLruChunkLimit::new(1)).await;
-        test_async_partial_encoder_invalidates(AsyncChunkCacheDecodedLruChunkLimit::new(1)).await;
-        test_async_partial_encoder_invalidates(AsyncChunkCachePartialDecoderLruChunkLimit::new(1))
+        test_async_partial_encoder_invalidates(AsyncChunkCacheEncoded::new_chunk_limit(1)).await;
+        test_async_partial_encoder_invalidates(AsyncChunkCacheDecoded::new_chunk_limit(1)).await;
+        test_async_partial_encoder_invalidates(AsyncChunkCachePartialDecoder::new_chunk_limit(1))
             .await;
     }
 }

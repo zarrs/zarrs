@@ -9,7 +9,7 @@
 //! - a [`SubchunkCache`] holds decoded subchunks over one of the above, so a hit skips storage and decoding while
 //!   holding only the subchunks that were read.
 //!
-//! Each chunk cache has `LruChunkLimit` and `LruSizeLimit` (bytes) variants. With the `async` feature, the
+//! Each chunk cache has a limit in chunks (`new_chunk_limit`) or bytes (`new_size_limit`). With the `async` feature, the
 //! `AsyncChunkCache*` caches serve the `async_` operations of an [`ArrayCached`], and a [`SubchunkCache`] composes
 //! them in the same way.
 //!
@@ -24,9 +24,8 @@ use std::fmt::Write;
 use std::sync::Arc;
 
 use zarrs::array::cache::{
-    ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
-    ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache, SyncArrayCache,
-    SyncChunkCacheTraits,
+    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, NoCache, SubchunkCache,
+    SyncArrayCache, SyncChunkCacheTraits,
 };
 use zarrs::array::codec::GzipCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayCached, ArraySubset, Resources, data_type};
@@ -82,22 +81,22 @@ fn main() -> Result<(), Box<dyn Error>> {
             subchunked,
         };
         read.through("NoCache", NoCache, |_| Vec::new())?;
-        read.through("Encoded", ChunkCacheEncodedLruChunkLimit::new(2), |cache| {
+        read.through("Encoded", ChunkCacheEncoded::new_chunk_limit(2), |cache| {
             vec![held(cache, "encoded shards")]
         })?;
-        read.through("Decoded", ChunkCacheDecodedLruChunkLimit::new(2), |cache| {
+        read.through("Decoded", ChunkCacheDecoded::new_chunk_limit(2), |cache| {
             vec![held(cache, "decoded shards")]
         })?;
         read.through(
             "PartialDecoder",
-            ChunkCachePartialDecoderLruChunkLimit::new(2),
+            ChunkCachePartialDecoder::new_chunk_limit(2),
             |cache| vec![held(cache, "shard indexes")],
         )?;
     }
 
     println!(
-        "\nChunks are held in a ChunkCache{{Encoded,Decoded,PartialDecoder}}LruChunkLimit, or none with NoCache.\n\
-         Subchunks are held in a ChunkCacheDecodedLruSizeLimit by a SubchunkCache over the chunk cache."
+        "\nChunks are held in a ChunkCache{{Encoded,Decoded,PartialDecoder}}, or none with NoCache.\n\
+         Subchunks are held in a ChunkCacheDecoded by a SubchunkCache over the chunk cache."
     );
     Ok(())
 }
@@ -136,8 +135,10 @@ impl Read<'_> {
     ) -> Result<(), Box<dyn Error>> {
         if self.subchunked {
             // The subchunks are held in a decoded chunk cache keyed by subchunk indices, here with room for 64
-            // subchunks. Level 0 is the outermost subchunk grid, the subchunks of the shards.
-            let subchunks = ChunkCacheDecodedLruSizeLimit::new(64 * SUBCHUNK_BYTES);
+            // subchunks. Hinting their size splits the cache into shards for concurrent reads. Level 0 is the
+            // outermost subchunk grid, the subchunks of the shards.
+            let subchunks =
+                ChunkCacheDecoded::new_size_limit(64 * SUBCHUNK_BYTES, Some(SUBCHUNK_BYTES));
             let cache = SubchunkCache::new(0, subchunks, chunks);
             self.read_twice([name, "Decoded"], cache, |cache| {
                 let mut held_ = chunks_held(cache.chunks());

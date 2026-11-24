@@ -25,16 +25,16 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// ```compile_fail
 /// # use std::sync::Arc;
 /// # use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
-/// # use zarrs::array::cache::ChunkCacheDecodedLruChunkLimit;
+/// # use zarrs::array::cache::ChunkCacheDecoded;
 /// # use zarrs_storage::store::MemoryStore;
 /// let store = Arc::new(MemoryStore::new());
 /// let builder = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8);
 /// let array_a = builder.build_arc(store.clone(), "/a").unwrap();
 /// let array_b = builder.build_arc(store, "/b").unwrap();
-/// let cache = Arc::new(ChunkCacheDecodedLruChunkLimit::new(2));
+/// let cache = Arc::new(ChunkCacheDecoded::new_chunk_limit(2));
 /// let cached_a = ArrayCached::new(array_a, cache.clone());
 /// let cached_b = ArrayCached::new(array_b, cache);
-/// // error: `retrieve_chunk` requires `Arc<ChunkCacheDecodedLruChunkLimit>: SyncArrayCache`, which is not satisfied
+/// // error: `retrieve_chunk` requires `Arc<ChunkCacheDecoded>: SyncArrayCache`, which is not satisfied
 /// cached_b.retrieve_chunk::<Vec<u8>>(&[0], &Resources::default()).unwrap();
 /// ```
 ///
@@ -88,8 +88,8 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// ## Asynchronous Operations
 ///
 /// With the `async` feature, `ArrayCached` also supports the `async_` prefixed
-/// operations, which require an `AsyncArrayCache`, such as any `AsyncChunkCacheTraits` — one of the
-/// `AsyncChunkCache*Lru*` caches, or a custom implementation.
+/// operations, which require an `AsyncArrayCache`, such as any `AsyncChunkCacheTraits` — an
+/// `AsyncChunkCache`, or a custom implementation.
 /// A chunk cache implements either `SyncChunkCacheTraits` or `AsyncChunkCacheTraits`, so a given `ArrayCached`
 /// supports one flavour of operation; a synchronous cache passed to an `async_` operation
 /// is rejected at compile time:
@@ -97,15 +97,15 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// ```compile_fail
 /// # use std::sync::Arc;
 /// # use zarrs::array::{ArrayBuilder, ArrayCached, data_type};
-/// # use zarrs::array::cache::ChunkCacheEncodedLruChunkLimit;
+/// # use zarrs::array::cache::ChunkCacheEncoded;
 /// # use zarrs_storage::store::AsyncMemoryStore;
 /// # async fn f() {
 /// let store = Arc::new(AsyncMemoryStore::new());
 /// let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
 ///     .build_arc(store, "/")
 ///     .unwrap();
-/// let cached = ArrayCached::new(array, ChunkCacheEncodedLruChunkLimit::new(2));
-/// // error: the trait bound `ChunkCacheEncodedLruChunkLimit: AsyncArrayCache` is not satisfied
+/// let cached = ArrayCached::new(array, ChunkCacheEncoded::new_chunk_limit(2));
+/// // error: the trait bound `ChunkCacheEncoded: AsyncArrayCache` is not satisfied
 /// cached.async_retrieve_chunk::<Vec<u8>>(&[0]).await.unwrap();
 /// # }
 /// ```

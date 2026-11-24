@@ -4,7 +4,7 @@
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
-use zarrs::array::cache::{ChunkCacheDecodedLruChunkLimit, SyncChunkCacheTraits};
+use zarrs::array::cache::{ChunkCacheDecoded, SyncChunkCacheTraits};
 use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
 use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::store::MemoryStore;
@@ -88,7 +88,7 @@ fn failed_writes_invalidate_the_chunks_they_may_have_changed() -> TestResult {
     let store = Arc::new(FailingStore::default());
     let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
         .build_arc(store.clone(), "/array")?;
-    let cached = ArrayCached::new(array.clone(), ChunkCacheDecodedLruChunkLimit::new(2));
+    let cached = ArrayCached::new(array.clone(), ChunkCacheDecoded::new_chunk_limit(2));
     let resources = Resources::default();
     // Each write fails to write chunk 1, after writing any other chunk, and invalidates the chunks it writes
     for write in 0..6 {
@@ -125,7 +125,7 @@ fn failed_writes_invalidate_the_chunks_they_may_have_changed() -> TestResult {
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_failed_writes_invalidate_the_chunks_they_may_have_changed() -> TestResult {
-    use zarrs::array::cache::{AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheTraits};
+    use zarrs::array::cache::{AsyncChunkCacheDecoded, AsyncChunkCacheTraits};
     use zarrs::storage::storage_adapter::sync_to_async::{
         SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
     };
@@ -150,7 +150,7 @@ async fn async_failed_writes_invalidate_the_chunks_they_may_have_changed() -> Te
         )),
         "/array",
     )?;
-    let cached = ArrayCached::new(array.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(2));
+    let cached = ArrayCached::new(array.clone(), AsyncChunkCacheDecoded::new_chunk_limit(2));
     let resources = Resources::default();
     for write in 0..6 {
         cached

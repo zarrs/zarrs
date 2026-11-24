@@ -504,10 +504,8 @@ mod tests {
 
     use super::*;
     use crate::array::cache::{
-        ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
-        ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruSizeLimit,
-        ChunkCacheType, ChunkCacheTypeDecoded, SyncChunkCacheTraits,
+        ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, ChunkCacheType,
+        ChunkCacheTypeDecoded, SyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArrayError, ArrayIndices, ArraySubset, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
@@ -727,39 +725,41 @@ mod tests {
     }
 
     #[test]
-    fn all_lru_policies_support_encoded_values() {
-        test_cache(Box::new(ChunkCacheEncodedLruChunkLimit::new(2)));
-        test_cache(Box::new(ChunkCacheEncodedLruSizeLimit::new(1024)));
-        test_cache_sharded(ChunkCacheEncodedLruChunkLimit::new(4));
-        test_cache_sharded(ChunkCacheEncodedLruSizeLimit::new(4096));
-        test_cache_nested_optional(ChunkCacheEncodedLruChunkLimit::new(4));
-        test_cache_nested_optional(ChunkCacheEncodedLruSizeLimit::new(4096));
-        test_cache_variable(ChunkCacheEncodedLruChunkLimit::new(9));
-        test_cache_variable(ChunkCacheEncodedLruSizeLimit::new(4096));
+    fn chunk_caches_support_encoded_values() {
+        test_cache(Box::new(ChunkCacheEncoded::new_chunk_limit(2)));
+        test_cache(Box::new(ChunkCacheEncoded::new_size_limit(1024, None)));
+        test_cache_sharded(ChunkCacheEncoded::new_chunk_limit(4));
+        test_cache_sharded(ChunkCacheEncoded::new_size_limit(4096, None));
+        test_cache_nested_optional(ChunkCacheEncoded::new_chunk_limit(4));
+        test_cache_nested_optional(ChunkCacheEncoded::new_size_limit(4096, None));
+        test_cache_variable(ChunkCacheEncoded::new_chunk_limit(9));
+        test_cache_variable(ChunkCacheEncoded::new_size_limit(4096, None));
     }
 
     #[test]
-    fn all_lru_policies_support_decoded_values() {
-        test_cache(Box::new(ChunkCacheDecodedLruChunkLimit::new(2)));
-        test_cache(Box::new(ChunkCacheDecodedLruSizeLimit::new(1024)));
-        test_cache_sharded(ChunkCacheDecodedLruChunkLimit::new(4));
-        test_cache_sharded(ChunkCacheDecodedLruSizeLimit::new(4096));
-        test_cache_nested_optional(ChunkCacheDecodedLruChunkLimit::new(4));
-        test_cache_nested_optional(ChunkCacheDecodedLruSizeLimit::new(4096));
-        test_cache_variable(ChunkCacheDecodedLruChunkLimit::new(9));
-        test_cache_variable(ChunkCacheDecodedLruSizeLimit::new(4096));
+    fn chunk_caches_support_decoded_values() {
+        test_cache(Box::new(ChunkCacheDecoded::new_chunk_limit(2)));
+        test_cache(Box::new(ChunkCacheDecoded::new_size_limit(1024, None)));
+        test_cache_sharded(ChunkCacheDecoded::new_chunk_limit(4));
+        test_cache_sharded(ChunkCacheDecoded::new_size_limit(4096, None));
+        test_cache_nested_optional(ChunkCacheDecoded::new_chunk_limit(4));
+        test_cache_nested_optional(ChunkCacheDecoded::new_size_limit(4096, None));
+        test_cache_variable(ChunkCacheDecoded::new_chunk_limit(9));
+        test_cache_variable(ChunkCacheDecoded::new_size_limit(4096, None));
     }
 
     #[test]
-    fn all_lru_policies_support_partial_decoder_values() {
-        test_cache(Box::new(ChunkCachePartialDecoderLruChunkLimit::new(2)));
-        test_cache(Box::new(ChunkCachePartialDecoderLruSizeLimit::new(1024)));
-        test_cache_sharded(ChunkCachePartialDecoderLruChunkLimit::new(4));
-        test_cache_sharded(ChunkCachePartialDecoderLruSizeLimit::new(4096));
-        test_cache_nested_optional(ChunkCachePartialDecoderLruChunkLimit::new(4));
-        test_cache_nested_optional(ChunkCachePartialDecoderLruSizeLimit::new(4096));
-        test_cache_variable(ChunkCachePartialDecoderLruChunkLimit::new(9));
-        test_cache_variable(ChunkCachePartialDecoderLruSizeLimit::new(4096));
+    fn chunk_caches_support_partial_decoder_values() {
+        test_cache(Box::new(ChunkCachePartialDecoder::new_chunk_limit(2)));
+        test_cache(Box::new(ChunkCachePartialDecoder::new_size_limit(
+            1024, None,
+        )));
+        test_cache_sharded(ChunkCachePartialDecoder::new_chunk_limit(4));
+        test_cache_sharded(ChunkCachePartialDecoder::new_size_limit(4096, None));
+        test_cache_nested_optional(ChunkCachePartialDecoder::new_chunk_limit(4));
+        test_cache_nested_optional(ChunkCachePartialDecoder::new_size_limit(4096, None));
+        test_cache_variable(ChunkCachePartialDecoder::new_chunk_limit(9));
+        test_cache_variable(ChunkCachePartialDecoder::new_size_limit(4096, None));
     }
 
     #[derive(Default)]
@@ -835,7 +835,7 @@ mod tests {
             dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>,
         > = ArrayCached::new_boxed(
             array.clone(),
-            Box::new(ChunkCacheDecodedLruChunkLimit::new(4)),
+            Box::new(ChunkCacheDecoded::new_chunk_limit(4)),
         );
         assert_eq!(
             cached
@@ -848,21 +848,21 @@ mod tests {
         assert!(cached.cache().is_empty());
 
         test_cache::<dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>>(Box::new(
-            ChunkCacheDecodedLruChunkLimit::new(4),
+            ChunkCacheDecoded::new_chunk_limit(4),
         ));
 
         // SubchunkCache over dyn SyncChunkCacheTraits and dyn SyncArrayCache
         let dyn_subchunks: Box<dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>> =
-            Box::new(ChunkCacheDecodedLruChunkLimit::new(4));
+            Box::new(ChunkCacheDecoded::new_chunk_limit(4));
         let dyn_chunks: Box<dyn SyncArrayCache> =
-            Box::new(ChunkCachePartialDecoderLruChunkLimit::new(4));
+            Box::new(ChunkCachePartialDecoder::new_chunk_limit(4));
         let subchunk_cache = SubchunkCache::new_boxed(0, dyn_subchunks, dyn_chunks);
 
         // Heterogeneous caches behind ArrayCached<MemoryStore, dyn SyncArrayCache>
         let caches: Vec<Box<dyn SyncArrayCache>> = vec![
-            Box::new(ChunkCacheEncodedLruChunkLimit::new(4)),
-            Box::new(ChunkCacheDecodedLruChunkLimit::new(4)),
-            Box::new(ChunkCachePartialDecoderLruChunkLimit::new(4)),
+            Box::new(ChunkCacheEncoded::new_chunk_limit(4)),
+            Box::new(ChunkCacheDecoded::new_chunk_limit(4)),
+            Box::new(ChunkCachePartialDecoder::new_chunk_limit(4)),
             Box::new(subchunk_cache),
             Box::new(NoCache),
         ];

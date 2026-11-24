@@ -6,9 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use zarrs::array::Resources;
 
-use zarrs::array::cache::{
-    AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit, SubchunkCache,
-};
+use zarrs::array::cache::{AsyncChunkCacheDecoded, AsyncChunkCachePartialDecoder, SubchunkCache};
 use zarrs::array::codec::array_to_bytes::sharding::{
     AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
 };
@@ -755,8 +753,8 @@ async fn array_subchunk_cached_implements_complete_async_operation_suite() -> Te
         fixed_fixture(),
         SubchunkCache::new(
             0,
-            AsyncChunkCacheDecodedLruChunkLimit::new(16),
-            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+            AsyncChunkCacheDecoded::new_chunk_limit(16),
+            AsyncChunkCachePartialDecoder::new_chunk_limit(4),
         ),
     );
     exercise_async_read_ops(&cached).await?;
