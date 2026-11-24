@@ -14,13 +14,13 @@
 //!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
 //!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`](super::Array::codecs)) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
 //!
-//! `zarrs` implements the following chunk caches:
-//!  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity.
-//!  - [`ChunkCacheDecodedLruSizeLimit`]: a decoded chunk cache with a fixed size in bytes.
-//!  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
-//!  - [`ChunkCacheEncodedLruSizeLimit`]: an encoded chunk cache with a fixed size in bytes.
-//!  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity.
-//!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
+//! `zarrs` implements the chunk cache [`ChunkCache`], with an alias per chunk cache type:
+//!  - [`ChunkCacheDecoded`]: a decoded chunk cache.
+//!  - [`ChunkCacheEncoded`]: an encoded chunk cache.
+//!  - [`ChunkCachePartialDecoder`]: a partial decoder chunk cache.
+//!
+//! Each holds a fixed number of chunks ([`ChunkCache::new_chunk_limit`]) or a fixed size in bytes
+//! ([`ChunkCache::new_size_limit`]).
 //!
 //! `zarrs` consumers can create custom cache policies by implementing the [`SyncChunkCacheTraits`] trait.
 //! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
@@ -28,9 +28,8 @@
 //!
 //! With the `async` feature, [`ArrayCached`](super::ArrayCached) also supports asynchronous array
 //! operations, which need an `AsyncChunkCacheTraits` rather than a [`SyncChunkCacheTraits`].
-//! The `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` caches are the asynchronous counterparts of the
-//! caches above, with an `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}`
-//! alias per chunk type.
+//! The `AsyncChunkCache` cache is the asynchronous counterpart of the cache above, with an
+//! `AsyncChunkCache{Encoded,Decoded,PartialDecoder}` alias per chunk type.
 //!
 //! All of the above caches coalesce concurrent retrievals of an uncached chunk, so that a chunk is
 //! fetched once no matter how many callers request it. If that retrieval fails, every waiting caller
@@ -49,8 +48,8 @@
 //!
 //! [`SubchunkCache`] layers a cache of individual subchunks over one of the chunk caches above, which serves the
 //! subchunks it does not hold. The subchunk cache is a decoded chunk cache keyed by subchunk indices (e.g. a
-//! [`ChunkCacheDecodedLruSizeLimit`]), so repeated small reads of large shards decode and hold only the subchunks they
-//! touch. Over a [`ChunkCachePartialDecoderLruChunkLimit`], which caches shard indexes, a subchunk miss reads and
+//! [`ChunkCacheDecoded`]), so repeated small reads of large shards decode and hold only the subchunks they
+//! touch. Over a [`ChunkCachePartialDecoder`], which caches shard indexes, a subchunk miss reads and
 //! decodes just that subchunk. With the `async` feature, [`SubchunkCache`] also supports asynchronous operations when
 //! given an asynchronous decoded subchunk cache and an asynchronous chunk cache (or [`NoCache`]). See
 //! [`SubchunkCache`] for the choice of chunk cache.
@@ -70,7 +69,7 @@ use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions, Resources};
 use zarrs_storage::{Bytes, MaybeSend, MaybeSync};
 
 mod array_cache;
-mod chunk_cache_lru;
+mod chunk_cache;
 mod chunk_cache_type;
 mod subchunk_cache;
 #[cfg(feature = "async")]
@@ -79,14 +78,13 @@ pub use array_cache::AsyncArrayCache;
 pub(crate) use array_cache::AsyncCachedArray;
 pub use array_cache::SyncArrayCache;
 pub(crate) use array_cache::{CachedArrayMeta, SyncCachedArray};
-pub use subchunk_cache::{NoCache, SubchunkCache};
-// pub(crate) mod chunk_cache_lru_macros;
-pub use chunk_cache_lru::*;
+pub use chunk_cache::*;
 #[cfg(feature = "async")]
 pub(crate) use chunk_cache_type::{
     async_retrieve_chunk_overlap_bytes, async_retrieve_chunk_overlap_into,
 };
 pub(crate) use chunk_cache_type::{retrieve_chunk_overlap_bytes, retrieve_chunk_overlap_into};
+pub use subchunk_cache::{NoCache, SubchunkCache};
 
 /// The chunk type of an encoded chunk cache.
 pub type ChunkCacheTypeEncoded = Option<Bytes>;
@@ -299,7 +297,7 @@ pub trait SyncChunkCacheTraits: MaybeSend + MaybeSync {
     ///
     /// The [`SyncChunkCacheType`] bound is what confines this trait to chunk types that support
     /// synchronous retrieval, so an unusable combination such as a
-    /// [`ChunkCacheLruChunkLimit`]`<ChunkCacheTypeAsyncPartialDecoder>` is rejected where it is
+    /// [`ChunkCache`]`<ChunkCacheTypeAsyncPartialDecoder>` is rejected where it is
     /// written rather than at an unrelated retrieval call site.
     type Value: SyncChunkCacheType;
 
@@ -376,7 +374,7 @@ pub trait AsyncChunkCacheTraits: MaybeSend + MaybeSync {
     ///
     /// The [`AsyncChunkCacheType`] bound is what confines this trait to chunk types that support
     /// asynchronous retrieval, so an unusable combination such as an
-    /// [`AsyncChunkCacheLruChunkLimit`]`<`[`ChunkCacheTypePartialDecoder`]`>` is rejected where it
+    /// [`AsyncChunkCache`]`<`[`ChunkCacheTypePartialDecoder`]`>` is rejected where it
     /// is written rather than at an unrelated retrieval call site.
     type Value: AsyncChunkCacheType;
 

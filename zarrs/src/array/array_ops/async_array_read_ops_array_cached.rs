@@ -574,9 +574,7 @@ where
 mod tests {
     use super::*;
     use crate::array::cache::{
-        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
-        AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCacheEncodedLruSizeLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCachePartialDecoderLruSizeLimit,
+        AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
         AsyncChunkCacheTraits,
     };
     use crate::array::{
@@ -888,39 +886,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn async_lru_caches_support_encoded_values() {
-        test_cache_async(Box::new(AsyncChunkCacheEncodedLruChunkLimit::new(2))).await;
-        test_cache_async(Box::new(AsyncChunkCacheEncodedLruSizeLimit::new(1024))).await;
-        test_cache_sharded_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
-        test_cache_into_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
-        test_cache_nested_optional_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
-        test_cache_variable_async(AsyncChunkCacheEncodedLruChunkLimit::new(9)).await;
-        test_cache_variable_async(AsyncChunkCacheEncodedLruSizeLimit::new(4096)).await;
+    async fn async_chunk_caches_support_encoded_values() {
+        test_cache_async(Box::new(AsyncChunkCacheEncoded::new_chunk_limit(2))).await;
+        test_cache_async(Box::new(AsyncChunkCacheEncoded::new_size_limit(1024))).await;
+        test_cache_sharded_async(AsyncChunkCacheEncoded::new_chunk_limit(4)).await;
+        test_cache_into_async(AsyncChunkCacheEncoded::new_chunk_limit(4)).await;
+        test_cache_nested_optional_async(AsyncChunkCacheEncoded::new_chunk_limit(4)).await;
+        test_cache_variable_async(AsyncChunkCacheEncoded::new_chunk_limit(9)).await;
+        test_cache_variable_async(AsyncChunkCacheEncoded::new_size_limit(4096)).await;
     }
 
     #[tokio::test]
-    async fn async_lru_caches_support_decoded_values() {
-        test_cache_async(Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(2))).await;
-        test_cache_async(Box::new(AsyncChunkCacheDecodedLruSizeLimit::new(1024))).await;
-        test_cache_sharded_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
-        test_cache_into_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
-        test_cache_nested_optional_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
-        test_cache_variable_async(AsyncChunkCacheDecodedLruChunkLimit::new(9)).await;
-        test_cache_variable_async(AsyncChunkCacheDecodedLruSizeLimit::new(4096)).await;
+    async fn async_chunk_caches_support_decoded_values() {
+        test_cache_async(Box::new(AsyncChunkCacheDecoded::new_chunk_limit(2))).await;
+        test_cache_async(Box::new(AsyncChunkCacheDecoded::new_size_limit(1024))).await;
+        test_cache_sharded_async(AsyncChunkCacheDecoded::new_chunk_limit(4)).await;
+        test_cache_into_async(AsyncChunkCacheDecoded::new_chunk_limit(4)).await;
+        test_cache_nested_optional_async(AsyncChunkCacheDecoded::new_chunk_limit(4)).await;
+        test_cache_variable_async(AsyncChunkCacheDecoded::new_chunk_limit(9)).await;
+        test_cache_variable_async(AsyncChunkCacheDecoded::new_size_limit(4096)).await;
     }
 
     #[tokio::test]
-    async fn async_lru_caches_support_async_partial_decoder_values() {
-        test_cache_async(Box::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(2))).await;
-        test_cache_async(Box::new(AsyncChunkCachePartialDecoderLruSizeLimit::new(
+    async fn async_chunk_caches_support_async_partial_decoder_values() {
+        test_cache_async(Box::new(AsyncChunkCachePartialDecoder::new_chunk_limit(2))).await;
+        test_cache_async(Box::new(AsyncChunkCachePartialDecoder::new_size_limit(
             1024,
         )))
         .await;
-        test_cache_sharded_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
-        test_cache_into_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
-        test_cache_nested_optional_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)).await;
-        test_cache_variable_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(9)).await;
-        test_cache_variable_async(AsyncChunkCachePartialDecoderLruSizeLimit::new(4096)).await;
+        test_cache_sharded_async(AsyncChunkCachePartialDecoder::new_chunk_limit(4)).await;
+        test_cache_into_async(AsyncChunkCachePartialDecoder::new_chunk_limit(4)).await;
+        test_cache_nested_optional_async(AsyncChunkCachePartialDecoder::new_chunk_limit(4)).await;
+        test_cache_variable_async(AsyncChunkCachePartialDecoder::new_chunk_limit(9)).await;
+        test_cache_variable_async(AsyncChunkCachePartialDecoder::new_size_limit(4096)).await;
     }
 
     /// Cached async retrievals must be `Send` so that they can be used with
@@ -956,10 +954,10 @@ mod tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn async_lru_caches_are_send() {
-        test_cache_spawn_async(AsyncChunkCacheEncodedLruChunkLimit::new(2)).await;
-        test_cache_spawn_async(AsyncChunkCacheDecodedLruChunkLimit::new(2)).await;
-        test_cache_spawn_async(AsyncChunkCachePartialDecoderLruChunkLimit::new(2)).await;
+    async fn async_chunk_caches_are_send() {
+        test_cache_spawn_async(AsyncChunkCacheEncoded::new_chunk_limit(2)).await;
+        test_cache_spawn_async(AsyncChunkCacheDecoded::new_chunk_limit(2)).await;
+        test_cache_spawn_async(AsyncChunkCachePartialDecoder::new_chunk_limit(2)).await;
     }
 
     #[tokio::test]
@@ -982,7 +980,7 @@ mod tests {
             dyn AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>,
         > = ArrayCached::new_boxed(
             array.clone(),
-            Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(16)),
+            Box::new(AsyncChunkCacheDecoded::new_chunk_limit(16)),
         );
         assert_eq!(
             cached
@@ -996,20 +994,20 @@ mod tests {
         assert!(cached.cache().is_empty().await);
 
         test_cache_async::<dyn AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>>(Box::new(
-            AsyncChunkCacheDecodedLruChunkLimit::new(16),
+            AsyncChunkCacheDecoded::new_chunk_limit(16),
         ))
         .await;
 
         let dyn_subchunks: Box<dyn AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>> =
-            Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(16));
+            Box::new(AsyncChunkCacheDecoded::new_chunk_limit(16));
         let dyn_chunks: Box<dyn AsyncArrayCache> =
-            Box::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4));
+            Box::new(AsyncChunkCachePartialDecoder::new_chunk_limit(4));
         let subchunk_cache = SubchunkCache::new_boxed(0, dyn_subchunks, dyn_chunks);
 
         let caches: Vec<Box<dyn AsyncArrayCache>> = vec![
-            Box::new(AsyncChunkCacheEncodedLruChunkLimit::new(4)),
-            Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(4)),
-            Box::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)),
+            Box::new(AsyncChunkCacheEncoded::new_chunk_limit(4)),
+            Box::new(AsyncChunkCacheDecoded::new_chunk_limit(4)),
+            Box::new(AsyncChunkCachePartialDecoder::new_chunk_limit(4)),
             Box::new(subchunk_cache),
             Box::new(NoCache),
         ];

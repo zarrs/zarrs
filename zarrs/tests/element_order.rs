@@ -6,8 +6,8 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use zarrs::array::cache::{
-    ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-    ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheTraits, SyncChunkCacheType,
+    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, SyncChunkCacheTraits,
+    SyncChunkCacheType,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, ArrayError, ArrayIndices, ArrayMetadata, ArraySubset,
@@ -97,8 +97,8 @@ where
     c.store_array_subset(&all, elements.to_vec(), &resources)
         .unwrap();
 
-    let cached = ArrayCached::new(f.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
-    let cached_c = ArrayCached::new(c.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(f.clone(), ChunkCacheDecoded::new_chunk_limit(4));
+    let cached_c = ArrayCached::new(c.clone(), ChunkCacheDecoded::new_chunk_limit(4));
     assert_eq!(cached.element_order(), ElementOrder::F);
     assert_eq!(
         cached_c.with_element_order(ElementOrder::F).element_order(),
@@ -236,7 +236,7 @@ fn element_order_reads_u16() {
         )
         .unwrap();
     let f = array.with_element_order(ElementOrder::F);
-    let cached = ArrayCached::new(f.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(f.clone(), ChunkCacheDecoded::new_chunk_limit(4));
     let tensor: Tensor<'static> = f.retrieve_chunk(&[0, 0], &resources).unwrap();
     assert_eq!(tensor.order(), ElementOrder::F);
     for subset in [
@@ -545,7 +545,7 @@ fn element_order_indexer_is_c_order() {
     let resources = Resources::default();
     let c = build(&builder(data_type::uint16(), 0u16));
     let f = c.with_element_order(ElementOrder::F);
-    let cached = ArrayCached::new(f.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(f.clone(), ChunkCacheDecoded::new_chunk_limit(4));
     let subset = ArraySubset::new_with_ranges(&[1..3, 0..3]);
     let indexer = OpaqueSubset(subset.clone());
     assert_eq!(indexer.output_shape(), [2, 3]);
@@ -572,7 +572,7 @@ fn element_order_indexer_is_c_order() {
 fn element_order_out_of_bounds() {
     let resources = Resources::default();
     let f = build(&builder(data_type::uint16(), 0u16)).with_element_order(ElementOrder::F);
-    let cached = ArrayCached::new(f.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(f.clone(), ChunkCacheDecoded::new_chunk_limit(4));
     // The output of this subset has 2^64 elements
     let subset = ArraySubset::new_with_ranges(&[0..1 << 32, 0..1 << 32]);
     assert!(matches!(
@@ -778,21 +778,21 @@ fn element_order_cached_reads() {
             "decoded",
             name,
             &array,
-            ChunkCacheDecodedLruChunkLimit::new(4),
+            ChunkCacheDecoded::new_chunk_limit(4),
             &u16_elements,
         );
         check_cached_reads(
             "encoded",
             name,
             &array,
-            ChunkCacheEncodedLruChunkLimit::new(4),
+            ChunkCacheEncoded::new_chunk_limit(4),
             &u16_elements,
         );
         check_cached_reads(
             "partial_decoder",
             name,
             &array,
-            ChunkCachePartialDecoderLruChunkLimit::new(4),
+            ChunkCachePartialDecoder::new_chunk_limit(4),
             &u16_elements,
         );
     }
@@ -805,14 +805,14 @@ fn element_order_cached_reads() {
         "encoded",
         "optional",
         &opt_array,
-        ChunkCacheEncodedLruChunkLimit::new(4),
+        ChunkCacheEncoded::new_chunk_limit(4),
         &optional_elements,
     );
     check_cached_reads(
         "partial_decoder",
         "optional",
         &opt_array,
-        ChunkCachePartialDecoderLruChunkLimit::new(4),
+        ChunkCachePartialDecoder::new_chunk_limit(4),
         &optional_elements,
     );
 
@@ -821,14 +821,14 @@ fn element_order_cached_reads() {
         "encoded",
         "string",
         &str_array,
-        ChunkCacheEncodedLruChunkLimit::new(4),
+        ChunkCacheEncoded::new_chunk_limit(4),
         &string_elements,
     );
     check_cached_reads(
         "partial_decoder",
         "string",
         &str_array,
-        ChunkCachePartialDecoderLruChunkLimit::new(4),
+        ChunkCachePartialDecoder::new_chunk_limit(4),
         &string_elements,
     );
 }
@@ -837,8 +837,8 @@ fn element_order_cached_reads() {
 mod async_reads {
     use super::*;
     use zarrs::array::cache::{
-        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheTraits, AsyncChunkCacheType,
+        AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
+        AsyncChunkCacheTraits, AsyncChunkCacheType,
     };
     use zarrs_storage::store::AsyncMemoryStore;
 
@@ -869,7 +869,7 @@ mod async_reads {
         )
         .await
         .unwrap();
-        let cached = ArrayCached::new(f.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(4));
+        let cached = ArrayCached::new(f.clone(), AsyncChunkCacheDecoded::new_chunk_limit(4));
         for subset in [
             all.clone(),
             ArraySubset::new_with_ranges(&[1..6, 2..8]),
@@ -1005,7 +1005,7 @@ mod async_reads {
             .build(Arc::new(AsyncMemoryStore::new()), "/array")
             .unwrap()
             .with_element_order(ElementOrder::F);
-        let cached = ArrayCached::new(f.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(4));
+        let cached = ArrayCached::new(f.clone(), AsyncChunkCacheDecoded::new_chunk_limit(4));
         let subset = ArraySubset::new_with_ranges(&[0..1 << 32, 0..1 << 32]);
         assert!(matches!(
             f.async_retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &subset, &resources)
@@ -1228,7 +1228,7 @@ mod async_reads {
                 "decoded",
                 name,
                 &arr_builder,
-                AsyncChunkCacheDecodedLruChunkLimit::new(4),
+                AsyncChunkCacheDecoded::new_chunk_limit(4),
                 &u16_elements,
             )
             .await;
@@ -1236,7 +1236,7 @@ mod async_reads {
                 "encoded",
                 name,
                 &arr_builder,
-                AsyncChunkCacheEncodedLruChunkLimit::new(4),
+                AsyncChunkCacheEncoded::new_chunk_limit(4),
                 &u16_elements,
             )
             .await;
@@ -1244,7 +1244,7 @@ mod async_reads {
                 "partial_decoder",
                 name,
                 &arr_builder,
-                AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                AsyncChunkCachePartialDecoder::new_chunk_limit(4),
                 &u16_elements,
             )
             .await;
@@ -1258,7 +1258,7 @@ mod async_reads {
             "encoded",
             "optional",
             &opt_builder,
-            AsyncChunkCacheEncodedLruChunkLimit::new(4),
+            AsyncChunkCacheEncoded::new_chunk_limit(4),
             &optional_elements,
         )
         .await;
@@ -1266,7 +1266,7 @@ mod async_reads {
             "partial_decoder",
             "optional",
             &opt_builder,
-            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+            AsyncChunkCachePartialDecoder::new_chunk_limit(4),
             &optional_elements,
         )
         .await;
@@ -1276,7 +1276,7 @@ mod async_reads {
             "encoded",
             "string",
             &str_builder,
-            AsyncChunkCacheEncodedLruChunkLimit::new(4),
+            AsyncChunkCacheEncoded::new_chunk_limit(4),
             &string_elements,
         )
         .await;
@@ -1284,7 +1284,7 @@ mod async_reads {
             "partial_decoder",
             "string",
             &str_builder,
-            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+            AsyncChunkCachePartialDecoder::new_chunk_limit(4),
             &string_elements,
         )
         .await;

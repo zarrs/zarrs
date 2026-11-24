@@ -12,14 +12,12 @@ use std::sync::Arc;
 use zarrs::array::AsyncArrayReadOps;
 #[cfg(feature = "async")]
 use zarrs::array::cache::{
-    AsyncArrayCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
-    AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
+    AsyncArrayCache, AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
     AsyncChunkCacheTraits,
 };
 use zarrs::array::cache::{
-    ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
-    ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache, SyncArrayCache,
-    SyncChunkCacheTraits,
+    ChunkCacheDecoded, ChunkCacheEncoded, ChunkCachePartialDecoder, NoCache, SubchunkCache,
+    SyncArrayCache, SyncChunkCacheTraits,
 };
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
@@ -267,8 +265,8 @@ mod subchunk_cache {
             array.clone(),
             SubchunkCache::new(
                 0,
-                AsyncChunkCacheDecodedLruChunkLimit::new(64),
-                AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                AsyncChunkCacheDecoded::new_chunk_limit(64),
+                AsyncChunkCachePartialDecoder::new_chunk_limit(4),
             ),
         );
         // Part of a chunk, and parts of several chunks
@@ -295,25 +293,25 @@ mod subchunk_cache {
             let array =
                 async_sharded_array(Arc::new(AsyncMemoryStore::default()), nested, data_type)
                     .await?;
-            let subchunks = || AsyncChunkCacheDecodedLruChunkLimit::new(64);
+            let subchunks = || AsyncChunkCacheDecoded::new_chunk_limit(64);
             async_check_reads(
                 &array,
                 SubchunkCache::new(
                     0,
                     subchunks(),
-                    AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                    AsyncChunkCachePartialDecoder::new_chunk_limit(4),
                 ),
             )
             .await?;
             async_check_reads(
                 &array,
-                SubchunkCache::new(0, subchunks(), AsyncChunkCacheEncodedLruChunkLimit::new(4)),
+                SubchunkCache::new(0, subchunks(), AsyncChunkCacheEncoded::new_chunk_limit(4)),
             )
             .await?;
             async_check_reads(&array, SubchunkCache::new(0, subchunks(), NoCache)).await?;
             async_check_reads(
                 &array,
-                SubchunkCache::new(0, subchunks(), AsyncChunkCacheDecodedLruChunkLimit::new(4)),
+                SubchunkCache::new(0, subchunks(), AsyncChunkCacheDecoded::new_chunk_limit(4)),
             )
             .await?;
             // A tiny cache evicts subchunks while reading
@@ -321,8 +319,8 @@ mod subchunk_cache {
                 &array,
                 SubchunkCache::new(
                     0,
-                    AsyncChunkCacheDecodedLruChunkLimit::new(1),
-                    AsyncChunkCachePartialDecoderLruChunkLimit::new(1),
+                    AsyncChunkCacheDecoded::new_chunk_limit(1),
+                    AsyncChunkCachePartialDecoder::new_chunk_limit(1),
                 ),
             )
             .await?;
@@ -332,7 +330,7 @@ mod subchunk_cache {
                     SubchunkCache::new(
                         1,
                         subchunks(),
-                        AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                        AsyncChunkCachePartialDecoder::new_chunk_limit(4),
                     ),
                 )
                 .await?;
@@ -345,7 +343,7 @@ mod subchunk_cache {
                         SubchunkCache::new(
                             0,
                             subchunks(),
-                            AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                            AsyncChunkCachePartialDecoder::new_chunk_limit(4),
                         ),
                     ),
                 )
@@ -363,7 +361,7 @@ mod subchunk_cache {
         let array = async_sharded_array(store.clone(), false, TestDataType::UInt16).await?;
         let cached = ArrayCached::new(
             array.clone(),
-            SubchunkCache::new(0, AsyncChunkCacheDecodedLruChunkLimit::new(64), NoCache),
+            SubchunkCache::new(0, AsyncChunkCacheDecoded::new_chunk_limit(64), NoCache),
         );
         // 4 subchunks of one shard
         let subset = ArraySubset::new_with_ranges(&[4..12, 4..12]);
@@ -414,7 +412,7 @@ mod subchunk_cache {
             .await?;
         let cached = ArrayCached::new(
             array,
-            SubchunkCache::new(0, AsyncChunkCacheDecodedLruChunkLimit::new(64), NoCache),
+            SubchunkCache::new(0, AsyncChunkCacheDecoded::new_chunk_limit(64), NoCache),
         );
         cached
             .async_retrieve_chunk::<Vec<u16>>(&[1, 1], &Resources::default())
@@ -464,8 +462,8 @@ mod subchunk_cache {
             array.clone(),
             SubchunkCache::new(
                 0,
-                AsyncChunkCacheDecodedLruChunkLimit::new(256),
-                AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                AsyncChunkCacheDecoded::new_chunk_limit(256),
+                AsyncChunkCachePartialDecoder::new_chunk_limit(4),
             ),
         );
         let read_all = async || {
@@ -546,8 +544,8 @@ mod subchunk_cache {
             array.clone(),
             SubchunkCache::new(
                 0,
-                AsyncChunkCacheDecodedLruSizeLimit::new(32 + 16),
-                AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
+                AsyncChunkCacheDecoded::new_size_limit(32 + 16),
+                AsyncChunkCachePartialDecoder::new_chunk_limit(4),
             ),
         );
         // Shard [1, 1] is not stored, so its 16 subchunks are fill and all fit alongside a decoded subchunk
@@ -573,7 +571,7 @@ mod subchunk_cache {
             .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
         let cached = ArrayCached::new(
             array,
-            SubchunkCache::new(0, AsyncChunkCacheDecodedLruChunkLimit::new(4), NoCache),
+            SubchunkCache::new(0, AsyncChunkCacheDecoded::new_chunk_limit(4), NoCache),
         );
         let chunk = cached
             .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
@@ -590,7 +588,7 @@ mod subchunk_cache {
             .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
         let cached = ArrayCached::new(
             array,
-            SubchunkCache::new(0, AsyncChunkCacheDecodedLruChunkLimit::new(8), NoCache),
+            SubchunkCache::new(0, AsyncChunkCacheDecoded::new_chunk_limit(8), NoCache),
         );
         let resources = Resources::default();
         cached
@@ -616,8 +614,8 @@ mod subchunk_cache {
             array,
             SubchunkCache::new(
                 0,
-                AsyncChunkCacheDecodedLruChunkLimit::new(8),
-                AsyncChunkCacheEncodedLruChunkLimit::new(2),
+                AsyncChunkCacheDecoded::new_chunk_limit(8),
+                AsyncChunkCacheEncoded::new_chunk_limit(2),
             ),
         );
         let subset = ArraySubset::new_with_start_shape(vec![u64::MAX, 0], vec![0, 2])?;

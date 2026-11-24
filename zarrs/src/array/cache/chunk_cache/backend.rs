@@ -6,12 +6,7 @@
 use quick_cache::sync::GuardResult;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
 
-use super::{
-    Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits, ChunkCacheType,
-    ChunkIndices,
-};
-#[cfg(feature = "async")]
-use super::{AsyncCacheTraits, Future};
+use super::{Arc, ArrayError, ChunkCacheType, ChunkIndices};
 
 /// The smallest typical chunk size in bytes, which sets the number of chunks a cache with a size limit is expected to
 /// hold.
@@ -37,8 +32,8 @@ fn size_limit_estimated_chunks(size_capacity: u64) -> usize {
 /// `quick_cache` requires a resident entry's weight to remain constant until eviction; storing the weight here keeps
 /// accounting sound even if a cached partial decoder retains additional bytes on subsequent reads.
 #[derive(Clone)]
-struct CachedValue<CT> {
-    value: CT,
+pub(super) struct CachedValue<CT> {
+    pub(super) value: CT,
     weight: u64,
 }
 
@@ -100,7 +95,7 @@ impl<K, V> Lifecycle<K, V> for DropOutsideLockLifecycle {
     }
 }
 
-type InnerCache<CT> = quick_cache::sync::Cache<
+pub(super) type InnerCache<CT> = quick_cache::sync::Cache<
     ChunkIndices,
     Value<CT>,
     ChunkWeighter,
@@ -133,21 +128,8 @@ fn new_cache<CT: ChunkCacheType>(
     Cache { cache, by_size }
 }
 
-fn clear<CT: ChunkCacheType>(cache: &Cache<CT>) -> usize {
-    // `drain()` releases each shard write lock before yielding items so values drop outside the lock.
-    cache.cache.drain().count()
-}
-
-fn size<CT: ChunkCacheType>(cache: &Cache<CT>) -> usize {
-    cache
-        .cache
-        .iter()
-        .filter_map(|(_, value)| value.ok().map(|cached| cached.value.size()))
-        .sum()
-}
-
 impl<CT: ChunkCacheType> Cache<CT> {
-    fn wrap(&self, value: CT) -> CachedValue<CT> {
+    pub(super) fn wrap(&self, value: CT) -> CachedValue<CT> {
         let weight = if self.by_size {
             // A zero-weight chunk is never evicted, so weigh each chunk at least one byte.
             u64::try_from(value.size()).unwrap_or(u64::MAX).max(1)
@@ -156,26 +138,33 @@ impl<CT: ChunkCacheType> Cache<CT> {
         };
         CachedValue { value, weight }
     }
-}
 
-impl<CT: ChunkCacheType> CacheTraits<CT> for Cache<CT> {
-    fn len(&self) -> usize {
+    #[cfg(feature = "async")]
+    pub(super) fn inner(&self) -> &InnerCache<CT> {
+        &self.cache
+    }
+
+    pub(super) fn len(&self) -> usize {
         self.cache.len()
     }
 
-    fn size(&self) -> usize {
-        size(self)
+    pub(super) fn size(&self) -> usize {
+        self.cache
+            .iter()
+            .filter_map(|(_, value)| value.ok().map(|cached| cached.value.size()))
+            .sum()
     }
 
-    fn remove(&self, chunk_indices: &[u64]) -> bool {
+    pub(super) fn remove(&self, chunk_indices: &[u64]) -> bool {
         self.cache.remove(chunk_indices).is_some()
     }
 
-    fn clear(&self) -> usize {
-        clear(self)
+    pub(super) fn clear(&self) -> usize {
+        // `drain()` releases each shard write lock before yielding items so values drop outside the lock.
+        self.cache.drain().count()
     }
 
-    fn try_get_or_insert_with<F>(
+    pub(super) fn try_get_or_insert_with<F>(
         &self,
         chunk_indices: ChunkIndices,
         f: F,
@@ -195,48 +184,7 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for Cache<CT> {
             GuardResult::Timeout => f().map_err(Arc::new),
         }
     }
-}
-
-#[cfg(feature = "async")]
-impl<CT: ChunkCacheType> AsyncCacheTraits<CT> for Cache<CT> {
-    async fn len(&self) -> usize {
-        self.cache.len()
-    }
-
-    async fn size(&self) -> usize {
-        size(self)
-    }
-
-    async fn remove(&self, chunk_indices: &[u64]) -> bool {
-        self.cache.remove(chunk_indices).is_some()
-    }
-
-    async fn clear(&self) -> usize {
-        clear(self)
-    }
-
-    async fn try_get_or_insert_with<F>(
-        &self,
-        chunk_indices: ChunkIndices,
-        init: F,
-    ) -> Result<CT, Arc<ArrayError>>
-    where
-        F: Future<Output = Result<CT, ArrayError>>,
-    {
-        match self.cache.get_value_or_guard_async(&chunk_indices).await {
-            Ok(value) => value.map(|cached| cached.value),
-            Err(guard) => {
-                let value = init.await.map(|value| self.wrap(value)).map_err(Arc::new);
-                // An error means that the chunk was invalidated while it was initialised, so it is not cached.
-                let _ = guard.insert(value.clone());
-                value.map(|cached| cached.value)
-            }
-        }
-    }
-}
-
-impl<CT: ChunkCacheType> CacheChunkLimitTraits for Cache<CT> {
-    fn new_with_chunk_capacity(chunk_capacity: u64) -> Self {
+    pub(super) fn new_with_chunk_capacity(chunk_capacity: u64) -> Self {
         // Shards are sized to hold at least 32 chunks each.
         let estimated_chunks = usize::try_from(chunk_capacity).unwrap_or(usize::MAX);
         new_cache(
@@ -245,10 +193,8 @@ impl<CT: ChunkCacheType> CacheChunkLimitTraits for Cache<CT> {
             false,
         )
     }
-}
 
-impl<CT: ChunkCacheType> CacheSizeLimitTraits for Cache<CT> {
-    fn new_with_size_capacity(size_capacity: u64) -> Self {
+    pub(super) fn new_with_size_capacity(size_capacity: u64) -> Self {
         // A single shard, since a chunk larger than the capacity of a shard is never cached and the chunk size is
         // not known in advance.
         new_cache(
