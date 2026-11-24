@@ -17,6 +17,27 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// [`ChunkCache`](super::chunk_cache::ChunkCache). The cache determines how it serves each retrieval and what each
 /// write invalidates; a chunk cache invalidates whole chunks.
 ///
+/// The cache belongs to this array. Clones and rebinds of an `ArrayCached` (e.g.
+/// [`with_codec_specific_options`](ArrayCached::with_codec_specific_options)) share it, but no other array can, as a
+/// cache is keyed by chunk indices alone. An `ArrayCached` takes its cache by value (or boxed), and an `Arc` of a cache
+/// is not a cache:
+///
+/// ```compile_fail
+/// # use std::sync::Arc;
+/// # use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
+/// # use zarrs::array::chunk_cache::ChunkCacheDecodedLruChunkLimit;
+/// # use zarrs_storage::store::MemoryStore;
+/// let store = Arc::new(MemoryStore::new());
+/// let builder = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8);
+/// let array_a = builder.build_arc(store.clone(), "/a").unwrap();
+/// let array_b = builder.build_arc(store, "/b").unwrap();
+/// let cache = Arc::new(ChunkCacheDecodedLruChunkLimit::new(2));
+/// let cached_a = ArrayCached::new(array_a, cache.clone());
+/// let cached_b = ArrayCached::new(array_b, cache);
+/// // error: `retrieve_chunk` requires `Arc<ChunkCacheDecodedLruChunkLimit>: SyncArrayCache`, which is not satisfied
+/// cached_b.retrieve_chunk::<Vec<u8>>(&[0], &Resources::default()).unwrap();
+/// ```
+///
 /// ## Cache Behavior
 ///
 /// ### Read Operations
@@ -113,15 +134,21 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     /// Create a new cached array wrapper.
     #[must_use]
     pub fn new(array: Arc<Array<TStorage>>, cache: C) -> Self {
-        Self::new_arc(array, Arc::new(cache))
+        Self {
+            array,
+            cache: Arc::new(cache),
+        }
     }
 }
 
 impl<TStorage: ?Sized, C: ?Sized> ArrayCached<TStorage, C> {
-    /// Create a new cached array wrapper from a shared cache.
+    /// Create a new cached array wrapper from a boxed cache, such as a `Box<dyn SyncArrayCache>`.
     #[must_use]
-    pub fn new_arc(array: Arc<Array<TStorage>>, cache: Arc<C>) -> Self {
-        Self { array, cache }
+    pub fn new_boxed(array: Arc<Array<TStorage>>, cache: Box<C>) -> Self {
+        Self {
+            array,
+            cache: Arc::from(cache),
+        }
     }
 
     /// Return the inner array.
@@ -159,7 +186,7 @@ impl<TStorage: ?Sized, C: ?Sized> ArrayCached<TStorage, C> {
         array
     }
 
-    /// Split into the inner array and shared cache.
+    /// Split into the inner array and the cache.
     #[must_use]
     pub fn into_inner(self) -> (Arc<Array<TStorage>>, Arc<C>) {
         (self.array, self.cache)

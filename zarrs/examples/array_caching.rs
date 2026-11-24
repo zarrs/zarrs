@@ -13,8 +13,8 @@
 //! `AsyncChunkCache*` caches serve the `async_` operations of an [`ArrayCached`], and a [`SubchunkCache`] composes
 //! them in the same way.
 //!
-//! Caches are dyn compatible, so caches of different types can be held as an `Arc<dyn SyncArrayCache>` (or
-//! `Arc<dyn AsyncArrayCache>`) and passed to [`ArrayCached::new_arc`], as this example does to read through each in turn.
+//! Caches are dyn compatible, so caches of different types can be held as a `Box<dyn SyncArrayCache>` (or
+//! `Box<dyn AsyncArrayCache>`) and passed to [`ArrayCached::new_boxed`]. Each [`ArrayCached`] owns its cache.
 //!
 //! The example prints the shards and subchunks of the array with the regions it reads, then a table of the storage
 //! reads and cache contents of two passes over the regions through each cache.
@@ -75,11 +75,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         PASS_REGIONS[0], PASS_REGIONS[1]
     );
     print_header();
-    for cache in chunk_caches() {
-        read_twice(&array, &store, cache)?;
-    }
-    for cache in chunk_caches() {
-        read_twice(&array, &store, with_subchunk_cache(cache))?;
+    for subchunked in [false, true] {
+        let read = Read {
+            array: &array,
+            store: &store,
+            subchunked,
+        };
+        read.through("NoCache", NoCache, |_| Vec::new())?;
+        read.through("Encoded", ChunkCacheEncodedLruChunkLimit::new(2), |cache| {
+            vec![held(cache, "encoded shards")]
+        })?;
+        read.through("Decoded", ChunkCacheDecodedLruChunkLimit::new(2), |cache| {
+            vec![held(cache, "decoded shards")]
+        })?;
+        read.through(
+            "PartialDecoder",
+            ChunkCachePartialDecoderLruChunkLimit::new(2),
+            |cache| vec![held(cache, "shard indexes")],
+        )?;
     }
 
     println!(
@@ -89,125 +102,93 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// A cache, with the names of its chunk and subchunk caches and a function returning what each holds, as a size in
-/// bytes and a description.
-struct Cache {
-    chunks: &'static str,
-    subchunks: &'static str,
-    cache: Arc<dyn SyncArrayCache>,
-    held: Box<dyn Fn() -> Vec<(usize, String)>>,
+/// What a cache holds, as a size in bytes and a description.
+type Held = Vec<(usize, String)>;
+
+/// What the chunk cache `cache` holds, describing its chunks as `entries`.
+fn held(cache: &impl ChunkCache, entries: &str) -> (usize, String) {
+    (cache.size(), format!("{} {entries}", cache.len()))
 }
 
-/// The chunk caches, which hold whole chunks (here, whole shards).
-///
-/// Without a chunk cache, every read opens the shard: it reads the shard index, then the subchunks. Under a
-/// [`SubchunkCache`], a subchunk miss:
-/// - over [`NoCache`], opens the shard again, but nothing is held per shard,
-/// - over an encoded chunk cache, decodes the subchunk from the cached shard,
-/// - over a decoded chunk cache, copies the subchunk from the cached decoded shard, so the subchunk cache only
-///   duplicates what the chunk cache holds. This is permitted, but redundant,
-/// - over a partial decoder cache, reads only that subchunk, as the shard index is cached.
-fn chunk_caches() -> [Cache; 4] {
-    [
-        Cache {
-            chunks: "NoCache",
-            subchunks: "-",
-            cache: Arc::new(NoCache),
-            held: Box::new(Vec::new),
-        },
-        chunk_cache(
-            "Encoded",
-            ChunkCacheEncodedLruChunkLimit::new(2),
-            "encoded shards",
-        ),
-        chunk_cache(
-            "Decoded",
-            ChunkCacheDecodedLruChunkLimit::new(2),
-            "decoded shards",
-        ),
-        chunk_cache(
-            "PartialDecoder",
-            ChunkCachePartialDecoderLruChunkLimit::new(2),
-            "shard indexes",
-        ),
-    ]
+/// Reads of an array, each through a new cache.
+struct Read<'a> {
+    array: &'a Arc<Array<Store>>,
+    store: &'a Store,
+    /// Whether to read through a [`SubchunkCache`] over each chunk cache, rather than the chunk cache alone.
+    subchunked: bool,
 }
 
-/// A chunk cache named `name`, whose chunks are described as `entries`.
-fn chunk_cache(
-    name: &'static str,
-    cache: impl ChunkCache + 'static,
-    entries: &'static str,
-) -> Cache {
-    let cache = Arc::new(cache);
-    Cache {
-        chunks: name,
-        subchunks: "-",
-        cache: cache.clone(),
-        held: Box::new(move || vec![(cache.size(), format!("{} {entries}", cache.len()))]),
-    }
-}
-
-/// Hold decoded subchunks in a [`SubchunkCache`] over the chunk cache `chunks`.
-///
-/// The subchunks are held in a decoded chunk cache keyed by subchunk indices, here with room for 64 subchunks. Level 0
-/// is the outermost subchunk grid, the subchunks of the shards.
-fn with_subchunk_cache(chunks: Cache) -> Cache {
-    let subchunks = Arc::new(ChunkCacheDecodedLruSizeLimit::new(64 * SUBCHUNK_BYTES));
-    let chunks_held = chunks.held;
-    Cache {
-        chunks: chunks.chunks,
-        subchunks: "Decoded",
-        cache: Arc::new(SubchunkCache::new_arc(0, subchunks.clone(), chunks.cache)),
-        held: Box::new(move || {
-            let mut held = chunks_held();
-            held.push((
-                subchunks.size(),
-                format!("{} decoded subchunks", subchunks.len()),
-            ));
-            held
-        }),
-    }
-}
-
-/// Read the [`regions`] of `array` through `cache` in two passes (see [`PASS_REGIONS`]), and print a row of the
-/// storage reads of each pass and of what the cache holds afterwards.
-fn read_twice(
-    array: &Arc<Array<Store>>,
-    store: &Store,
-    cache: Cache,
-) -> Result<(), Box<dyn Error>> {
-    let cached = ArrayCached::new_arc(array.clone(), cache.cache);
-    let resources = Resources::default();
-    let mut passes = Vec::new();
-    for regions_read in PASS_REGIONS {
-        store.reset();
-        for region in &regions()[..regions_read] {
-            let _: Vec<u16> = cached.retrieve_array_subset(region, &resources)?;
-        }
-        passes.push((store.reads(), store.bytes_read()));
-    }
-    let held = (cache.held)();
-    let bytes_held: usize = held.iter().map(|(bytes, _)| bytes).sum();
-    let contents = held
-        .into_iter()
-        .map(|(_, contents)| contents)
-        .collect::<Vec<_>>();
-    print_row(&[
-        cache.chunks.to_string(),
-        cache.subchunks.to_string(),
-        passes[0].0.to_string(),
-        passes[0].1.to_string(),
-        passes[1].0.to_string(),
-        passes[1].1.to_string(),
-        bytes_held.to_string(),
-        if contents.is_empty() {
-            "nothing".to_string()
+impl Read<'_> {
+    /// Read through the chunk cache `chunks` named `name`, which holds `chunks_held`.
+    ///
+    /// The chunk caches hold whole chunks (here, whole shards). Without a chunk cache, every read opens the shard: it
+    /// reads the shard index, then the subchunks. Under a [`SubchunkCache`], a subchunk miss:
+    /// - over [`NoCache`], opens the shard again, but nothing is held per shard,
+    /// - over an encoded chunk cache, decodes the subchunk from the cached shard,
+    /// - over a decoded chunk cache, copies the subchunk from the cached decoded shard, so the subchunk cache only
+    ///   duplicates what the chunk cache holds. This is permitted, but redundant,
+    /// - over a partial decoder cache, reads only that subchunk, as the shard index is cached.
+    fn through<C: SyncArrayCache>(
+        &self,
+        name: &str,
+        chunks: C,
+        chunks_held: impl Fn(&C) -> Held,
+    ) -> Result<(), Box<dyn Error>> {
+        if self.subchunked {
+            // The subchunks are held in a decoded chunk cache keyed by subchunk indices, here with room for 64
+            // subchunks. Level 0 is the outermost subchunk grid, the subchunks of the shards.
+            let subchunks = ChunkCacheDecodedLruSizeLimit::new(64 * SUBCHUNK_BYTES);
+            let cache = SubchunkCache::new(0, subchunks, chunks);
+            self.read_twice([name, "Decoded"], cache, |cache| {
+                let mut held_ = chunks_held(cache.chunks());
+                held_.push(held(cache.subchunks(), "decoded subchunks"));
+                held_
+            })
         } else {
-            contents.join(" + ")
-        },
-    ]);
-    Ok(())
+            self.read_twice([name, "-"], chunks, chunks_held)
+        }
+    }
+
+    /// Read the [`regions`] through `cache` in two passes (see [`PASS_REGIONS`]), and print a row of the cache
+    /// `names`, the storage reads of each pass, and what the cache holds afterwards.
+    fn read_twice<C: SyncArrayCache>(
+        &self,
+        names: [&str; 2],
+        cache: C,
+        held: impl Fn(&C) -> Held,
+    ) -> Result<(), Box<dyn Error>> {
+        let cached = ArrayCached::new(self.array.clone(), cache);
+        let resources = Resources::default();
+        let mut passes = Vec::new();
+        for regions_read in PASS_REGIONS {
+            self.store.reset();
+            for region in &regions()[..regions_read] {
+                let _: Vec<u16> = cached.retrieve_array_subset(region, &resources)?;
+            }
+            passes.push((self.store.reads(), self.store.bytes_read()));
+        }
+        let held = held(cached.cache());
+        let bytes_held: usize = held.iter().map(|(bytes, _)| bytes).sum();
+        let contents = held
+            .into_iter()
+            .map(|(_, contents)| contents)
+            .collect::<Vec<_>>();
+        print_row(&[
+            names[0].to_string(),
+            names[1].to_string(),
+            passes[0].0.to_string(),
+            passes[0].1.to_string(),
+            passes[1].0.to_string(),
+            passes[1].1.to_string(),
+            bytes_held.to_string(),
+            if contents.is_empty() {
+                "nothing".to_string()
+            } else {
+                contents.join(" + ")
+            },
+        ]);
+        Ok(())
+    }
 }
 
 // The functions below create the array and print the grid and table.

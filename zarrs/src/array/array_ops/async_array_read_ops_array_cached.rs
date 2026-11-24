@@ -584,7 +584,7 @@ mod tests {
     use unsafe_cell_slice::UnsafeCellSlice;
     use zarrs_storage::store::AsyncMemoryStore;
 
-    async fn test_cache_async<C>(cache: Arc<C>)
+    async fn test_cache_async<C>(cache: Box<C>)
     where
         C: AsyncChunkCache + ?Sized + 'static,
     {
@@ -597,7 +597,7 @@ mod tests {
             .await
             .unwrap();
 
-        let cached = ArrayCached::new_arc(array, cache);
+        let cached = ArrayCached::new_boxed(array, cache);
         assert_eq!(
             cached
                 .async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
@@ -888,8 +888,8 @@ mod tests {
 
     #[tokio::test]
     async fn async_lru_caches_support_encoded_values() {
-        test_cache_async(Arc::new(AsyncChunkCacheEncodedLruChunkLimit::new(2))).await;
-        test_cache_async(Arc::new(AsyncChunkCacheEncodedLruSizeLimit::new(1024))).await;
+        test_cache_async(Box::new(AsyncChunkCacheEncodedLruChunkLimit::new(2))).await;
+        test_cache_async(Box::new(AsyncChunkCacheEncodedLruSizeLimit::new(1024))).await;
         test_cache_sharded_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
         test_cache_into_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
         test_cache_nested_optional_async(AsyncChunkCacheEncodedLruChunkLimit::new(4)).await;
@@ -899,8 +899,8 @@ mod tests {
 
     #[tokio::test]
     async fn async_lru_caches_support_decoded_values() {
-        test_cache_async(Arc::new(AsyncChunkCacheDecodedLruChunkLimit::new(2))).await;
-        test_cache_async(Arc::new(AsyncChunkCacheDecodedLruSizeLimit::new(1024))).await;
+        test_cache_async(Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(2))).await;
+        test_cache_async(Box::new(AsyncChunkCacheDecodedLruSizeLimit::new(1024))).await;
         test_cache_sharded_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
         test_cache_into_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
         test_cache_nested_optional_async(AsyncChunkCacheDecodedLruChunkLimit::new(4)).await;
@@ -910,8 +910,8 @@ mod tests {
 
     #[tokio::test]
     async fn async_lru_caches_support_async_partial_decoder_values() {
-        test_cache_async(Arc::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(2))).await;
-        test_cache_async(Arc::new(AsyncChunkCachePartialDecoderLruSizeLimit::new(
+        test_cache_async(Box::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(2))).await;
+        test_cache_async(Box::new(AsyncChunkCachePartialDecoderLruSizeLimit::new(
             1024,
         )))
         .await;
@@ -976,12 +976,13 @@ mod tests {
             .await
             .unwrap();
 
-        let dyn_decoded: Arc<dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>> =
-            Arc::new(AsyncChunkCacheDecodedLruChunkLimit::new(16));
         let cached: ArrayCached<
             AsyncMemoryStore,
             dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>,
-        > = ArrayCached::new_arc(array.clone(), dyn_decoded.clone());
+        > = ArrayCached::new_boxed(
+            array.clone(),
+            Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(16)),
+        );
         assert_eq!(
             cached
                 .async_retrieve_array_subset::<Vec<u8>>(&array.subset_all(), &Resources::default())
@@ -993,22 +994,27 @@ mod tests {
         cached.async_invalidate().await;
         assert!(cached.cache().is_empty().await);
 
-        test_cache_async(dyn_decoded.clone()).await;
+        test_cache_async::<dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>>(Box::new(
+            AsyncChunkCacheDecodedLruChunkLimit::new(16),
+        ))
+        .await;
 
-        let dyn_chunks: Arc<dyn AsyncArrayCache> =
-            Arc::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4));
-        let subchunk_cache = SubchunkCache::new_arc(0, dyn_decoded, dyn_chunks);
+        let dyn_subchunks: Arc<dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>> =
+            Arc::new(AsyncChunkCacheDecodedLruChunkLimit::new(16));
+        let dyn_chunks: Box<dyn AsyncArrayCache> =
+            Box::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4));
+        let subchunk_cache = SubchunkCache::new_arc(0, dyn_subchunks, dyn_chunks);
 
-        let caches: Vec<Arc<dyn AsyncArrayCache>> = vec![
-            Arc::new(AsyncChunkCacheEncodedLruChunkLimit::new(4)),
-            Arc::new(AsyncChunkCacheDecodedLruChunkLimit::new(4)),
-            Arc::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)),
-            Arc::new(subchunk_cache),
-            Arc::new(NoCache),
+        let caches: Vec<Box<dyn AsyncArrayCache>> = vec![
+            Box::new(AsyncChunkCacheEncodedLruChunkLimit::new(4)),
+            Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(4)),
+            Box::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4)),
+            Box::new(subchunk_cache),
+            Box::new(NoCache),
         ];
         for cache in caches {
             let cached: ArrayCached<AsyncMemoryStore, dyn AsyncArrayCache> =
-                ArrayCached::new_arc(array.clone(), cache);
+                ArrayCached::new_boxed(array.clone(), cache);
             assert_eq!(
                 cached
                     .async_retrieve_array_subset::<Vec<u8>>(

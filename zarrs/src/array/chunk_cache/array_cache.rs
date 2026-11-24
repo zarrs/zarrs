@@ -570,7 +570,7 @@ pub(crate) mod array_cache_sealed {
         };
     }
 
-    impl_SyncArrayCacheOps_deref!(Arc<dyn SyncArrayCache>);
+    impl_SyncArrayCacheOps_deref!(Box<dyn SyncArrayCache>);
 
     /// The operations of an [`AsyncArrayCache`](super::AsyncArrayCache).
     ///
@@ -949,5 +949,5 @@ pub(crate) mod array_cache_sealed {
     }
 
     #[cfg(feature = "async")]
-    impl_AsyncArrayCacheOps_deref!(Arc<dyn AsyncArrayCache>);
+    impl_AsyncArrayCacheOps_deref!(Box<dyn AsyncArrayCache>);
 }

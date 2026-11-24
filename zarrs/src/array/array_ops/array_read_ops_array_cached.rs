@@ -512,7 +512,7 @@ mod tests {
     use crate::array::{ArrayBuilder, ArrayError, ArrayIndices, ArraySubset, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
 
-    fn test_cache<C>(cache: Arc<C>)
+    fn test_cache<C>(cache: Box<C>)
     where
         C: ChunkCache + ?Sized,
     {
@@ -524,7 +524,7 @@ mod tests {
             .store_chunk(&[0], &[1u8, 2], &Resources::default())
             .unwrap();
 
-        let cached = ArrayCached::new_arc(array, cache);
+        let cached = ArrayCached::new_boxed(array, cache);
         assert_eq!(
             cached
                 .retrieve_chunk::<Vec<u8>>(&[0], &Resources::default())
@@ -728,8 +728,8 @@ mod tests {
 
     #[test]
     fn all_lru_policies_support_encoded_values() {
-        test_cache(Arc::new(ChunkCacheEncodedLruChunkLimit::new(2)));
-        test_cache(Arc::new(ChunkCacheEncodedLruSizeLimit::new(1024)));
+        test_cache(Box::new(ChunkCacheEncodedLruChunkLimit::new(2)));
+        test_cache(Box::new(ChunkCacheEncodedLruSizeLimit::new(1024)));
         test_cache_sharded(ChunkCacheEncodedLruChunkLimit::new(4));
         test_cache_sharded(ChunkCacheEncodedLruSizeLimit::new(4096));
         test_cache_nested_optional(ChunkCacheEncodedLruChunkLimit::new(4));
@@ -740,8 +740,8 @@ mod tests {
 
     #[test]
     fn all_lru_policies_support_decoded_values() {
-        test_cache(Arc::new(ChunkCacheDecodedLruChunkLimit::new(2)));
-        test_cache(Arc::new(ChunkCacheDecodedLruSizeLimit::new(1024)));
+        test_cache(Box::new(ChunkCacheDecodedLruChunkLimit::new(2)));
+        test_cache(Box::new(ChunkCacheDecodedLruSizeLimit::new(1024)));
         test_cache_sharded(ChunkCacheDecodedLruChunkLimit::new(4));
         test_cache_sharded(ChunkCacheDecodedLruSizeLimit::new(4096));
         test_cache_nested_optional(ChunkCacheDecodedLruChunkLimit::new(4));
@@ -752,8 +752,8 @@ mod tests {
 
     #[test]
     fn all_lru_policies_support_partial_decoder_values() {
-        test_cache(Arc::new(ChunkCachePartialDecoderLruChunkLimit::new(2)));
-        test_cache(Arc::new(ChunkCachePartialDecoderLruSizeLimit::new(1024)));
+        test_cache(Box::new(ChunkCachePartialDecoderLruChunkLimit::new(2)));
+        test_cache(Box::new(ChunkCachePartialDecoderLruSizeLimit::new(1024)));
         test_cache_sharded(ChunkCachePartialDecoderLruChunkLimit::new(4));
         test_cache_sharded(ChunkCachePartialDecoderLruSizeLimit::new(4096));
         test_cache_nested_optional(ChunkCachePartialDecoderLruChunkLimit::new(4));
@@ -811,7 +811,7 @@ mod tests {
 
     #[test]
     fn custom_policy_gets_reads_from_its_value_type() {
-        test_cache(Arc::new(CustomDecodedCache::default()));
+        test_cache(Box::new(CustomDecodedCache::default()));
         test_cache_sharded(CustomDecodedCache::default());
     }
 
@@ -830,10 +830,11 @@ mod tests {
             .unwrap();
 
         // dyn ChunkCache<Value = ChunkCacheTypeDecoded>
-        let dyn_decoded: Arc<dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
-            Arc::new(ChunkCacheDecodedLruChunkLimit::new(4));
         let cached: ArrayCached<MemoryStore, dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
-            ArrayCached::new_arc(array.clone(), dyn_decoded.clone());
+            ArrayCached::new_boxed(
+                array.clone(),
+                Box::new(ChunkCacheDecodedLruChunkLimit::new(4)),
+            );
         assert_eq!(
             cached
                 .retrieve_array_subset::<Vec<u8>>(&array.subset_all(), &Resources::default())
@@ -844,24 +845,28 @@ mod tests {
         cached.invalidate();
         assert!(cached.cache().is_empty());
 
-        test_cache(dyn_decoded.clone());
+        test_cache::<dyn ChunkCache<Value = ChunkCacheTypeDecoded>>(Box::new(
+            ChunkCacheDecodedLruChunkLimit::new(4),
+        ));
 
         // SubchunkCache over dyn ChunkCache and dyn SyncArrayCache
-        let dyn_chunks: Arc<dyn SyncArrayCache> =
-            Arc::new(ChunkCachePartialDecoderLruChunkLimit::new(4));
-        let subchunk_cache = SubchunkCache::new_arc(0, dyn_decoded, dyn_chunks);
+        let dyn_subchunks: Arc<dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
+            Arc::new(ChunkCacheDecodedLruChunkLimit::new(4));
+        let dyn_chunks: Box<dyn SyncArrayCache> =
+            Box::new(ChunkCachePartialDecoderLruChunkLimit::new(4));
+        let subchunk_cache = SubchunkCache::new_arc(0, dyn_subchunks, dyn_chunks);
 
         // Heterogeneous caches behind ArrayCached<MemoryStore, dyn SyncArrayCache>
-        let caches: Vec<Arc<dyn SyncArrayCache>> = vec![
-            Arc::new(ChunkCacheEncodedLruChunkLimit::new(4)),
-            Arc::new(ChunkCacheDecodedLruChunkLimit::new(4)),
-            Arc::new(ChunkCachePartialDecoderLruChunkLimit::new(4)),
-            Arc::new(subchunk_cache),
-            Arc::new(NoCache),
+        let caches: Vec<Box<dyn SyncArrayCache>> = vec![
+            Box::new(ChunkCacheEncodedLruChunkLimit::new(4)),
+            Box::new(ChunkCacheDecodedLruChunkLimit::new(4)),
+            Box::new(ChunkCachePartialDecoderLruChunkLimit::new(4)),
+            Box::new(subchunk_cache),
+            Box::new(NoCache),
         ];
         for cache in caches {
             let cached: ArrayCached<MemoryStore, dyn SyncArrayCache> =
-                ArrayCached::new_arc(array.clone(), cache);
+                ArrayCached::new_boxed(array.clone(), cache);
             assert_eq!(
                 cached
                     .retrieve_array_subset::<Vec<u8>>(&array.subset_all(), &Resources::default())
