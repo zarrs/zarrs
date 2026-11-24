@@ -37,7 +37,8 @@ mod decoded;
 ///   - [`NoCache`] holds nothing and reads through the array, so each read re-reads a shard index for its misses.
 ///   - a decoded chunk cache holds whole decoded chunks, so a decoded subchunk cache over it is redundant.
 ///
-/// `SubchunkCache` is itself a cache, so it can be the chunk cache of another `SubchunkCache`.
+/// `SubchunkCache` is itself a cache, so it can be the chunk cache of another `SubchunkCache`. It owns its subchunk
+/// cache, so each level has its own and no subchunk cache is shared between arrays.
 ///
 /// For asynchronous operations, use an asynchronous decoded chunk cache as the subchunk cache (e.g.
 /// `AsyncChunkCacheDecodedLruChunkLimit`) over an asynchronous chunk cache (e.g.
@@ -70,14 +71,20 @@ impl<S, C> SubchunkCache<S, C> {
     /// Create a cache of the subchunks of the `level` subchunk grid in `subchunks`, over the chunk cache `chunks`.
     #[must_use]
     pub fn new(level: usize, subchunks: S, chunks: C) -> Self {
-        Self::new_arc(level, Arc::new(subchunks), chunks)
+        Self::from_arc(level, Arc::new(subchunks), chunks)
     }
 }
 
 impl<S: ?Sized, C> SubchunkCache<S, C> {
-    /// Create a cache of the subchunks of the `level` subchunk grid in `subchunks`, over the chunk cache `chunks`.
+    /// Create a cache of the subchunks of the `level` subchunk grid in the boxed `subchunks`, such as a
+    /// `Box<dyn ChunkCache<Value = ChunkCacheTypeDecoded>>`, over the chunk cache `chunks`.
     #[must_use]
-    pub fn new_arc(level: usize, subchunks: Arc<S>, chunks: C) -> Self {
+    pub fn new_boxed(level: usize, subchunks: Box<S>, chunks: C) -> Self {
+        Self::from_arc(level, Arc::from(subchunks), chunks)
+    }
+
+    /// Create a cache over `subchunks`, which must not be shared, so that its generations cover every writer.
+    fn from_arc(level: usize, subchunks: Arc<S>, chunks: C) -> Self {
         Self {
             level,
             subchunks,

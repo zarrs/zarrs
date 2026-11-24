@@ -76,12 +76,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove the deprecated `_elements` / `_ndarray` method variants of `Array`, array extension traits, and `ChunkCache`; use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 - Chunk caching
   - **Breaking**: Add `ArrayCached<TStorage, C>`, which pairs an `Array` with a chunk cache, and refactor `ChunkCache` into a pure key/chunk value container
-    - `ArrayCached` owns its cache, so a cache is never shared between arrays
+    - `ArrayCached` owns its cache, and `SubchunkCache` its subchunk cache, so a cache is never shared between arrays or subchunk levels
     - Remove the `ChunkCache` `retrieve_*` methods, which are provided by `ArrayCached`, and chunk cache constructors no longer take an array (e.g. `ChunkCacheDecodedLruChunkLimit::new(capacity)`)
     - `ChunkCacheTypeDecoded` is an `Option`, and `ChunkCacheTypeEncoded` is `Option<Bytes>` instead of `Option<Arc<CowBytes<'static>>>`
     - `[Async]ChunkCache::try_get_or_insert_with` takes the chunk indices as `ArrayIndices` rather than `Vec<u64>`, so a cache access does not allocate a key, and is no longer `#[doc(hidden)]`
     - `ChunkCache` and `AsyncChunkCache` have a `Value` associated type (and are dyn compatible with `Value` specified), and `ChunkCacheType` is sealed
-    - `SyncArrayCache` and `AsyncArrayCache` are dyn compatible, `ArrayCached` supports `?Sized` caches via `new_boxed`, and `SubchunkCache` via `new_arc`
+    - `SyncArrayCache` and `AsyncArrayCache` are dyn compatible, `ArrayCached` and `SubchunkCache` support `?Sized` caches via `new_boxed`
     - Add `invalidate` methods
     - Add `size` methods, which return the size of the cached chunks in bytes
   - **Breaking**: Remove the thread-local chunk caches (`ChunkCacheLru{Chunk,Size}LimitThreadLocal` and `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{Chunk,Size}LimitThreadLocal`)

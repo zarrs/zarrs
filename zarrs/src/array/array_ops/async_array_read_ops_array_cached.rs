@@ -999,11 +999,11 @@ mod tests {
         ))
         .await;
 
-        let dyn_subchunks: Arc<dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>> =
-            Arc::new(AsyncChunkCacheDecodedLruChunkLimit::new(16));
+        let dyn_subchunks: Box<dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>> =
+            Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(16));
         let dyn_chunks: Box<dyn AsyncArrayCache> =
             Box::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4));
-        let subchunk_cache = SubchunkCache::new_arc(0, dyn_subchunks, dyn_chunks);
+        let subchunk_cache = SubchunkCache::new_boxed(0, dyn_subchunks, dyn_chunks);
 
         let caches: Vec<Box<dyn AsyncArrayCache>> = vec![
             Box::new(AsyncChunkCacheEncodedLruChunkLimit::new(4)),

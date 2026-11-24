@@ -850,11 +850,11 @@ mod tests {
         ));
 
         // SubchunkCache over dyn ChunkCache and dyn SyncArrayCache
-        let dyn_subchunks: Arc<dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
-            Arc::new(ChunkCacheDecodedLruChunkLimit::new(4));
+        let dyn_subchunks: Box<dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
+            Box::new(ChunkCacheDecodedLruChunkLimit::new(4));
         let dyn_chunks: Box<dyn SyncArrayCache> =
             Box::new(ChunkCachePartialDecoderLruChunkLimit::new(4));
-        let subchunk_cache = SubchunkCache::new_arc(0, dyn_subchunks, dyn_chunks);
+        let subchunk_cache = SubchunkCache::new_boxed(0, dyn_subchunks, dyn_chunks);
 
         // Heterogeneous caches behind ArrayCached<MemoryStore, dyn SyncArrayCache>
         let caches: Vec<Box<dyn SyncArrayCache>> = vec![
