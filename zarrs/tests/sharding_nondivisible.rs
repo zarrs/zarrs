@@ -334,13 +334,13 @@ fn sharding_nondivisible_subchunk_grid_nested_and_transposed()
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn sharding_nondivisible_array_async() -> Result<(), Box<dyn std::error::Error>> {
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
     for layout in [Layout::Sharded, Layout::Nested, Layout::Transposed] {
         for partial_encoding in [false, true] {
-            let array = sharded_array(Arc::new(AsyncMemoryStore::new()), layout, partial_encoding)?;
+            let array = sharded_array(Arc::new(MemoryStore::new()), layout, partial_encoding)?;
             let reference = reference_array()?;
-            let assert_eq_reference = async |array: &Array<AsyncMemoryStore>| {
+            let assert_eq_reference = async |array: &Array<MemoryStore>| {
                 for subset in read_subsets() {
                     assert_eq!(
                         array

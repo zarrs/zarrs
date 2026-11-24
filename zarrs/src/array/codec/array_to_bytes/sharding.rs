@@ -65,11 +65,11 @@
 //! ### Advanced Usage
 //!
 //! #### Retrieving Encoded Subchunks
-//! Encoded subchunk bytes can be retrieved manually with [`ShardingPartialDecoder`] or [`AsyncShardingPartialDecoder`].
+//! Encoded subchunk bytes can be retrieved manually with [`ShardingPartialDecoder`].
 //! 1. Downcast the bound array-to-bytes codec to [`ShardingCodecBound`],
 //! 2. create a storage partial decoder for the shard object,
-//! 3. construct the sharding partial decoder with the bound codec accessors, and
-//! 4. call [`ShardingPartialDecoder::retrieve_subchunk_encoded`] with subchunk indices local to the shard.
+//! 3. construct the sharding partial decoder with [`ShardingPartialDecoder::new`] (or `async_new`), and
+//! 4. call [`ShardingPartialDecoder::retrieve_subchunk_encoded`] (or `async_retrieve_subchunk_encoded`) with subchunk indices local to the shard.
 //!
 //! See the `sharding_partial_decoder_retrieve_subchunk_encoded` test for an example.
 
@@ -85,8 +85,6 @@ mod sharding_partial_encoder;
 #[cfg(feature = "async")]
 mod sharding_partial_encoder_async;
 
-#[cfg(feature = "async")]
-pub use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -660,7 +658,7 @@ fn get_concurrent_target_and_partial_resources(
 
 /// Returns `None` if there is no shard.
 fn decode_shard_index_partial_decoder(
-    input_handle: &dyn BytesPartialDecoderTraits,
+    input_handle: &(impl BytesPartialDecoderTraits + ?Sized),
     index_codecs: &CodecChainBound,
     index_location: ShardingIndexLocation,
     shard_shape: &[NonZeroU64],
@@ -687,7 +685,7 @@ fn decode_shard_index_partial_decoder(
 #[cfg(feature = "async")]
 /// Returns `None` if there is no shard.
 async fn decode_shard_index_async_partial_decoder(
-    input_handle: &dyn zarrs_codec::AsyncBytesPartialDecoderTraits,
+    input_handle: &(impl zarrs_codec::AsyncBytesPartialDecoderTraits + ?Sized),
     index_codecs: &CodecChainBound,
     index_location: ShardingIndexLocation,
     shard_shape: &[NonZeroU64],

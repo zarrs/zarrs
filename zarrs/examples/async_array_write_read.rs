@@ -22,7 +22,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a store
     let mut store: AsyncReadableWritableListableStorage =
-        Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+        Arc::new(zarrs_storage::store::MemoryStore::new());
     if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
         && arg1 == "--usage-log"
     {

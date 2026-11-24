@@ -2,8 +2,9 @@ use inherent::inherent;
 use std::sync::Arc;
 use zarrs_codec::Resources;
 
+use super::array_update_ops_array_cached::CachedArrayPartialEncoder;
 use super::{
-    Array, ArrayCached, ArrayError, ArrayIndices, ArraySubsetTraits, AsyncArrayUpdateOps,
+    Array, ArrayCached, ArrayError, ArraySubsetTraits, AsyncArrayUpdateOps,
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, ChunkGrid, CodecOptions,
     DataType, IntoArrayBytes, MaybeSend,
 };
@@ -15,19 +16,14 @@ use zarrs_codec::{
 };
 use zarrs_storage::StorageError;
 
-struct CachedAsyncArrayPartialEncoder<TStorage: ?Sized, C: ?Sized> {
-    cached: ArrayCached<TStorage, C>,
-    encoder: Arc<dyn AsyncArrayPartialEncoderTraits>,
-    chunk_indices: ArrayIndices,
-}
-
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<TStorage, C> AsyncArrayPartialDecoderSubchunkingTraits
-    for CachedAsyncArrayPartialEncoder<TStorage, C>
+impl<TStorage, C, E> AsyncArrayPartialDecoderSubchunkingTraits
+    for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static,
     C: AsyncArrayCache + ?Sized + 'static,
+    E: AsyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     async fn local_subchunk_grids(
         &self,
@@ -40,10 +36,11 @@ where
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<TStorage, C> AsyncArrayPartialDecoderTraits for CachedAsyncArrayPartialEncoder<TStorage, C>
+impl<TStorage, C, E> AsyncArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static,
     C: AsyncArrayCache + ?Sized + 'static,
+    E: AsyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn data_type(&self) -> &DataType {
         self.encoder.data_type()
@@ -87,10 +84,11 @@ where
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<TStorage, C> AsyncArrayPartialEncoderTraits for CachedAsyncArrayPartialEncoder<TStorage, C>
+impl<TStorage, C, E> AsyncArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static,
     C: AsyncArrayCache + ?Sized + 'static,
+    E: AsyncArrayPartialEncoderTraits + ?Sized + 'static,
 {
     async fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase().await;
@@ -210,7 +208,7 @@ where
             .array()
             .async_partial_encoder(chunk_indices, resources)
             .await?;
-        Ok(Arc::new(CachedAsyncArrayPartialEncoder {
+        Ok(Arc::new(CachedArrayPartialEncoder {
             cached: self.clone(),
             encoder,
             chunk_indices: chunk_indices.into(),
@@ -227,13 +225,13 @@ mod tests {
         AsyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
     async fn test_async_partial_encoder_invalidates<C>(cache: C)
     where
         C: AsyncChunkCacheTraits + 'static,
     {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();

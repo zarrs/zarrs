@@ -8,7 +8,7 @@ use zarrs::array::Resources;
 
 use zarrs::array::cache::{AsyncChunkCacheDecoded, AsyncChunkCachePartialDecoder, SubchunkCache};
 use zarrs::array::codec::array_to_bytes::sharding::{
-    AsyncShardingPartialDecoder, ShardingCodecBound, ShardingCodecBuilder,
+    ShardingCodecBound, ShardingCodecBuilder, ShardingPartialDecoder,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
@@ -19,7 +19,7 @@ use zarrs::config::MetadataEraseVersion;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::{AsyncReadableStorageTraits, StorageHandle};
 
-type AsyncStore = zarrs_storage::store::AsyncMemoryStore;
+type AsyncStore = zarrs_storage::store::MemoryStore;
 type TestResult = Result<(), Box<dyn Error>>;
 
 const fn nz(value: u64) -> NonZeroU64 {
@@ -27,7 +27,7 @@ const fn nz(value: u64) -> NonZeroU64 {
 }
 
 fn fixed_fixture() -> Array<AsyncStore> {
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let mut builder = ArrayBuilder::new(vec![5, 5], vec![3, 3], data_type::uint8(), 0u8);
     builder.subchunk_shape(vec![1, 1]);
     builder.build(store, "/array").unwrap()
@@ -264,7 +264,7 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
 
 async fn sharding_partial_decoder<A: AsyncArrayReadOps>(
     array: &A,
-) -> Result<AsyncShardingPartialDecoder, Box<dyn Error>>
+) -> Result<ShardingPartialDecoder<dyn zarrs::array::AsyncBytesPartialDecoderTraits>, Box<dyn Error>>
 where
     A::Storage: AsyncReadableStorageTraits + 'static,
 {
@@ -279,9 +279,10 @@ where
         .storage_transformers()
         .create_async_readable_transformer(storage_handle)
         .await?;
-    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
+    let input_handle: Arc<dyn zarrs::array::AsyncBytesPartialDecoderTraits> =
+        Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
 
-    Ok(AsyncShardingPartialDecoder::new(
+    Ok(ShardingPartialDecoder::async_new(
         input_handle,
         &array.chunk_shape(&[0, 0])?,
         sharding_codec.subchunk_shape().clone(),
@@ -305,13 +306,13 @@ async fn sharding_partial_decoder_retrieve_subchunk_encoded() -> TestResult {
 
     assert!(
         decoder
-            .retrieve_subchunk_encoded(&[1, 1], array.codec_options(), &Resources::default())
+            .async_retrieve_subchunk_encoded(&[1, 1], array.codec_options(), &Resources::default())
             .await?
             .is_some()
     );
     assert!(
         decoder
-            .retrieve_subchunk_encoded(&[3, 3], array.codec_options(), &Resources::default())
+            .async_retrieve_subchunk_encoded(&[3, 3], array.codec_options(), &Resources::default())
             .await
             .is_err()
     );
@@ -326,7 +327,7 @@ async fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestRes
     let decoder = sharding_partial_decoder(&array).await?;
     assert_eq!(
         decoder
-            .retrieve_subchunk_encoded(&[0, 0], array.codec_options(), &Resources::default())
+            .async_retrieve_subchunk_encoded(&[0, 0], array.codec_options(), &Resources::default())
             .await?,
         None
     );
@@ -341,7 +342,7 @@ async fn sharding_partial_decoder_retrieve_subchunk_encoded_missing() -> TestRes
     let decoder = sharding_partial_decoder(&array).await?;
     assert_eq!(
         decoder
-            .retrieve_subchunk_encoded(&[0, 1], array.codec_options(), &Resources::default())
+            .async_retrieve_subchunk_encoded(&[0, 1], array.codec_options(), &Resources::default())
             .await?,
         None
     );
@@ -763,7 +764,7 @@ async fn array_subchunk_cached_implements_complete_async_operation_suite() -> Te
 
 #[tokio::test]
 async fn array_supports_async_variable_length_operation_suite() -> TestResult {
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::string(), "")
         .build(store, "/array")?;
     exercise_variable_length_ops(&array).await
@@ -771,7 +772,7 @@ async fn array_supports_async_variable_length_operation_suite() -> TestResult {
 
 #[tokio::test]
 async fn array_supports_async_optional_operation_suite() -> TestResult {
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let array = ArrayBuilder::new(
         vec![4, 4],
         vec![2, 2],
@@ -784,7 +785,7 @@ async fn array_supports_async_optional_operation_suite() -> TestResult {
 
 #[tokio::test]
 async fn array_supports_async_nested_subchunk_grid_levels() -> TestResult {
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let data_type = data_type::uint16();
     let inner = ShardingCodecBuilder::new(vec![nz(2), nz(2)], &data_type).build_arc();
     let mut outer = ShardingCodecBuilder::new(vec![nz(4), nz(4)], &data_type);
@@ -851,7 +852,7 @@ async fn async_chunk_ops_reject_incompatible_chunk_dimensionality() -> TestResul
     use zarrs::array::ArrayError;
     use zarrs::storage::AsyncListableStorageTraits;
 
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
         .build(store.clone(), "/array")?;
     let encoded = zarrs::array::CowBytes::from(vec![0u8; 4]);

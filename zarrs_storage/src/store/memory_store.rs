@@ -1,18 +1,27 @@
-//! A synchronous in-memory store.
+//! An in-memory store.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::RwLock;
 
 use bytes::BytesMut;
+#[cfg(feature = "async")]
+use futures::{stream, StreamExt};
 
 use crate::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError};
+#[cfg(feature = "async")]
+use crate::{
+    AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
+    AsyncWritableStorageTraits,
+};
 use crate::{
     Bytes, CowBytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
 };
 
-/// A synchronous in-memory store.
+/// An in-memory store.
+///
+/// Supports synchronous operations and, with the `async` feature, asynchronous operations.
 #[derive(Debug)]
 pub struct MemoryStore {
     data_map: RwLock<BTreeMap<StoreKey, Bytes>>,
@@ -32,11 +41,30 @@ impl MemoryStore {
             data_map: RwLock::default(),
         }
     }
+
+    fn get_partial_many_iter<'a>(
+        &self,
+        key: &StoreKey,
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<Option<impl Iterator<Item = Result<Bytes, StorageError>> + 'a>, StorageError> {
+        let Some(data) = ReadableStorageTraits::get(self, key)? else {
+            return Ok(None);
+        };
+        Ok(Some(byte_ranges.map(move |byte_range| {
+            let range = byte_range
+                .checked_range_usize(data.len())
+                .ok_or_else(|| InvalidByteRangeError::new(byte_range, data.len() as u64))?;
+            Ok(data.slice(range))
+        })))
+    }
 }
 
 impl ReadableStorageTraits for MemoryStore {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        let data_map = self.data_map.read().unwrap();
+        let data_map = self
+            .data_map
+            .read()
+            .map_err(|_| StorageError::from("memory store lock is poisoned"))?;
         Ok(data_map.get(key).cloned())
     }
 
@@ -45,20 +73,9 @@ impl ReadableStorageTraits for MemoryStore {
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
-        let data_map = self.data_map.read().unwrap();
-        let data = data_map.get(key);
-        if let Some(data) = data {
-            let data = data.clone();
-            let out = Box::new(byte_ranges.map(move |byte_range| {
-                let range = byte_range
-                    .checked_range_usize(data.len())
-                    .ok_or_else(|| InvalidByteRangeError::new(byte_range, data.len() as u64))?;
-                Ok(data.slice(range))
-            }));
-            Ok(Some(out))
-        } else {
-            Ok(None)
-        }
+        Ok(self
+            .get_partial_many_iter(key, byte_ranges)?
+            .map(|iter| Box::new(iter) as _))
     }
 
     fn get_partial(
@@ -136,13 +153,11 @@ impl WritableStorageTraits for MemoryStore {
     }
 
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        let mut data_map = self.data_map.write().unwrap();
-        let keys: Vec<StoreKey> = data_map.keys().cloned().collect();
-        for key in keys {
-            if key.has_prefix(prefix) {
-                data_map.remove(&key);
-            }
-        }
+        let mut data_map = self
+            .data_map
+            .write()
+            .map_err(|_| StorageError::from("memory store lock is poisoned"))?;
+        data_map.retain(|key, _| !key.has_prefix(prefix));
         Ok(())
     }
 
@@ -192,13 +207,104 @@ impl ListableStorageTraits for MemoryStore {
     }
 
     fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        let mut size = 0;
-        for key in self.list_prefix(prefix)? {
-            if let Some(size_key) = self.size_key(&key)? {
-                size += size_key;
-            }
-        }
-        Ok(size)
+        let data_map = self
+            .data_map
+            .read()
+            .map_err(|_| StorageError::from("memory store lock is poisoned"))?;
+        data_map
+            .iter()
+            .filter(|(key, _)| key.has_prefix(prefix))
+            .try_fold(0u64, |size, (_, value)| {
+                size.checked_add(value.len() as u64)
+                    .ok_or_else(|| StorageError::from("memory store size exceeds u64::MAX"))
+            })
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncReadableStorageTraits for MemoryStore {
+    async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
+        ReadableStorageTraits::get(self, key)
+    }
+
+    async fn get_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
+        let Some(iter) = self.get_partial_many_iter(key, byte_ranges)? else {
+            return Ok(None);
+        };
+        let result: Vec<_> = iter.collect();
+        Ok(Some(stream::iter(result).boxed()))
+    }
+
+    async fn get_partial<'a>(
+        &'a self,
+        key: &StoreKey,
+        byte_range: ByteRange,
+    ) -> Result<MaybeBytes, StorageError> {
+        ReadableStorageTraits::get_partial(self, key, byte_range)
+    }
+
+    async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
+        ReadableStorageTraits::size_key(self, key)
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncWritableStorageTraits for MemoryStore {
+    async fn set(&self, key: &StoreKey, value: CowBytes<'_>) -> Result<(), StorageError> {
+        WritableStorageTraits::set(self, key, value)
+    }
+
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
+    ) -> Result<(), StorageError> {
+        WritableStorageTraits::set_partial_many(self, key, offset_values)
+    }
+
+    async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
+        WritableStorageTraits::erase(self, key)
+    }
+
+    async fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
+        WritableStorageTraits::erase_prefix(self, prefix)
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncListableStorageTraits for MemoryStore {
+    async fn list(&self) -> Result<StoreKeys, StorageError> {
+        ListableStorageTraits::list(self)
+    }
+
+    async fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
+        ListableStorageTraits::list_prefix(self, prefix)
+    }
+
+    async fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
+        ListableStorageTraits::list_dir(self, prefix)
+    }
+
+    async fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
+        ListableStorageTraits::size_prefix(self, prefix)
     }
 }
 
@@ -207,9 +313,12 @@ mod tests {
     use std::error::Error;
     use std::sync::Arc;
 
-    use super::*;
+    use super::MemoryStore;
     use crate::byte_range::ByteRange;
-    use crate::ReadableWritableListableStorageTraits;
+    use crate::{
+        ReadableStorageTraits, ReadableWritableListableStorageTraits, StoreKey,
+        WritableStorageTraits,
+    };
 
     #[test]
     fn memory() -> Result<(), Box<dyn Error>> {
@@ -289,5 +398,63 @@ mod tests {
         crate::store_test::store_list(&store.clone().readable_listable().listable())?;
         crate::store_test::store_list_size(&store.clone().readable_listable().listable())?;
         Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    mod async_tests {
+        use std::error::Error;
+        use std::sync::Arc;
+
+        use futures::executor::block_on;
+
+        use super::MemoryStore;
+        use crate::byte_range::ByteRange;
+        use crate::{
+            AsyncReadableStorageTraits, AsyncReadableWritableListableStorageTraits,
+            AsyncWritableStorageTraits, Bytes, StoreKey,
+        };
+
+        #[test]
+        fn async_memory() -> Result<(), Box<dyn Error>> {
+            block_on(async {
+                let store = MemoryStore::new();
+                crate::store_test::async_store_write(&store).await?;
+                crate::store_test::async_store_read(&store).await?;
+                crate::store_test::async_store_list(&store).await?;
+                crate::store_test::async_store_list_size(&store).await?;
+                Ok(())
+            })
+        }
+
+        #[test]
+        fn async_memory_invalid_byte_ranges() {
+            block_on(async {
+                let store = MemoryStore::new();
+                let key = StoreKey::new("key").unwrap();
+                store
+                    .set(&key, Bytes::from_static(b"value").into())
+                    .await
+                    .unwrap();
+
+                assert!(store
+                    .get_partial(&key, ByteRange::FromStart(6, None))
+                    .await
+                    .is_err());
+                assert!(store.get_partial(&key, ByteRange::Suffix(6)).await.is_err());
+            });
+        }
+
+        #[test]
+        fn async_memory_upcast() -> Result<(), Box<dyn Error>> {
+            block_on(async {
+                let store: Arc<dyn AsyncReadableWritableListableStorageTraits> =
+                    Arc::new(MemoryStore::new());
+                crate::store_test::async_store_write(&store.clone().writable()).await?;
+                crate::store_test::async_store_read(&store.clone().readable()).await?;
+                crate::store_test::async_store_list(&store.clone().listable()).await?;
+                crate::store_test::async_store_list_size(&store.clone().listable()).await?;
+                Ok(())
+            })
+        }
     }
 }

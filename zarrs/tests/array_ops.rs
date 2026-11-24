@@ -302,7 +302,7 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
 
 fn sharding_partial_decoder<A: ArrayReadOps>(
     array: &A,
-) -> Result<ShardingPartialDecoder, Box<dyn Error>>
+) -> Result<ShardingPartialDecoder<dyn zarrs::array::BytesPartialDecoderTraits>, Box<dyn Error>>
 where
     A::Storage: ReadableStorageTraits + 'static,
 {
@@ -316,7 +316,8 @@ where
     let storage_transformer = array
         .storage_transformers()
         .create_readable_transformer(storage_handle)?;
-    let input_handle = Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
+    let input_handle: Arc<dyn zarrs::array::BytesPartialDecoderTraits> =
+        Arc::new((storage_transformer, array.chunk_key(&[0, 0]).unwrap()));
 
     Ok(ShardingPartialDecoder::new(
         input_handle,
@@ -1487,7 +1488,7 @@ fn sharding_partial_encoder_erase_resets_shard_index() -> TestResult {
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_sharding_partial_encoder_erase_resets_shard_index() -> TestResult {
-    let store = Arc::new(zarrs::storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs::storage::store::MemoryStore::new());
     let mut builder = ArrayBuilder::new(vec![3, 3], vec![3, 3], data_type::uint8(), 255u8);
     builder.subchunk_shape(vec![1, 1]);
     let array = builder.build_arc(store, "/array")?;
@@ -1534,15 +1535,15 @@ mod async_cached {
         ArraySubset, AsyncArrayReadOps, data_type,
     };
     use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
     use super::TestResult;
 
-    type AsyncTestStore = PerformanceMetricsStorageAdapter<AsyncMemoryStore>;
+    type AsyncTestStore = PerformanceMetricsStorageAdapter<MemoryStore>;
 
     fn fixture() -> (Arc<Array<AsyncTestStore>>, Arc<AsyncTestStore>) {
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
-            AsyncMemoryStore::new(),
+            MemoryStore::new(),
         )));
         let mut builder = ArrayBuilder::new(vec![5, 5], vec![3, 3], data_type::uint8(), 0u8);
         builder.subchunk_shape(vec![1, 1]);

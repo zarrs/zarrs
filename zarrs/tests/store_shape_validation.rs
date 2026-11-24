@@ -269,16 +269,16 @@ fn store_empty_chunks_validates_dimensionality_and_shape() {
 #[cfg(feature = "async")]
 mod async_tests {
     use super::*;
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
-    fn build_async_array() -> Array<AsyncMemoryStore> {
+    fn build_async_array() -> Array<MemoryStore> {
         ArrayBuilder::new(
             SHAPE.to_vec(),
             CHUNK_SHAPE.to_vec(),
             data_type::uint16(),
             0u16,
         )
-        .build(Arc::new(AsyncMemoryStore::new()), "/array")
+        .build(Arc::new(MemoryStore::new()), "/array")
         .unwrap()
     }
 

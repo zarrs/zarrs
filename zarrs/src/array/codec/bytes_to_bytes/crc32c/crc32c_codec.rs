@@ -5,11 +5,7 @@ use zarrs_plugin::ZarrVersion;
 
 use super::{CHECKSUM_SIZE, Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
 use crate::array::codec::bytes_to_bytes::into_owned_with_spare_capacity;
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 use crate::array::{BytesRepresentation, CowBytes};
 #[cfg(feature = "async")]
@@ -180,11 +176,12 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         _resources: &Resources,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
         match self.0 {
-            Crc32cCodecConfigurationLocation::End => Ok(Arc::new(
-                AsyncStripSuffixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
-            )),
+            Crc32cCodecConfigurationLocation::End => Ok(Arc::new(StripSuffixPartialDecoder::new(
+                input_handle,
+                CHECKSUM_SIZE,
+            ))),
             Crc32cCodecConfigurationLocation::Start => Ok(Arc::new(
-                AsyncStripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
+                StripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
             )),
         }
     }

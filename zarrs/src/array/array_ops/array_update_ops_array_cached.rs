@@ -14,16 +14,18 @@ use zarrs_codec::{
 };
 use zarrs_storage::StorageError;
 
-struct CachedArrayPartialEncoder<TStorage: ?Sized, C: ?Sized> {
-    cached: ArrayCached<TStorage, C>,
-    encoder: Arc<dyn ArrayPartialEncoderTraits>,
-    chunk_indices: ArrayIndices,
+pub(super) struct CachedArrayPartialEncoder<TStorage: ?Sized, C: ?Sized, E: ?Sized> {
+    pub(super) cached: ArrayCached<TStorage, C>,
+    pub(super) encoder: Arc<E>,
+    pub(super) chunk_indices: ArrayIndices,
 }
 
-impl<TStorage, C> ArrayPartialDecoderSubchunkingTraits for CachedArrayPartialEncoder<TStorage, C>
+impl<TStorage, C, E> ArrayPartialDecoderSubchunkingTraits
+    for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
+    E: ArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn local_subchunk_grids(
         &self,
@@ -34,10 +36,11 @@ where
     }
 }
 
-impl<TStorage, C> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C>
+impl<TStorage, C, E> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
+    E: ArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn data_type(&self) -> &DataType {
         self.encoder.data_type()
@@ -76,10 +79,11 @@ where
     }
 }
 
-impl<TStorage, C> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C>
+impl<TStorage, C, E> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<TStorage, C, E>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
     C: SyncArrayCache + ?Sized + 'static,
+    E: ArrayPartialEncoderTraits + ?Sized + 'static,
 {
     fn erase(&self) -> Result<(), CodecError> {
         let result = self.encoder.erase();

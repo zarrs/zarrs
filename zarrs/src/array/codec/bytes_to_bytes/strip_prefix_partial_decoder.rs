@@ -8,17 +8,14 @@ use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
 
 /// Partial decoder for stripping a prefix (e.g. checksum).
-pub(crate) struct StripPrefixPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+pub(crate) struct StripPrefixPartialDecoder<T: ?Sized> {
+    input_handle: Arc<T>,
     prefix_size: usize,
 }
 
-impl StripPrefixPartialDecoder {
+impl<T: ?Sized> StripPrefixPartialDecoder<T> {
     /// Create a new "strip prefix" partial decoder.
-    pub(crate) fn new(
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        prefix_size: usize,
-    ) -> Self {
+    pub(crate) fn new(input_handle: Arc<T>, prefix_size: usize) -> Self {
         Self {
             input_handle,
             prefix_size,
@@ -26,7 +23,9 @@ impl StripPrefixPartialDecoder {
     }
 }
 
-impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> BytesPartialDecoderTraits
+    for StripPrefixPartialDecoder<T>
+{
     fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists()
     }
@@ -58,30 +57,11 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
 }
 
 #[cfg(feature = "async")]
-/// Asynchronous partial decoder for stripping a prefix (e.g. checksum).
-pub(crate) struct AsyncStripPrefixPartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    prefix_size: usize,
-}
-
-#[cfg(feature = "async")]
-impl AsyncStripPrefixPartialDecoder {
-    /// Create a new "strip prefix" partial decoder.
-    pub(crate) fn new(
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        prefix_size: usize,
-    ) -> Self {
-        Self {
-            input_handle,
-            prefix_size,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncBytesPartialDecoderTraits
+    for StripPrefixPartialDecoder<T>
+{
     async fn exists(&self) -> Result<bool, StorageError> {
         self.input_handle.exists().await
     }

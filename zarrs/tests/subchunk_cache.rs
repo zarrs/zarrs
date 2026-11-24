@@ -29,8 +29,6 @@ use zarrs::array::{
 use zarrs::storage::AsyncReadableWritableStorageTraits;
 use zarrs::storage::ReadableWritableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
-#[cfg(feature = "async")]
-use zarrs::storage::store::AsyncMemoryStore;
 use zarrs::storage::store::MemoryStore;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -256,7 +254,7 @@ mod subchunk_cache {
     #[ambisync::test]
     async fn async_subchunk_cache_reads_into_a_target_of_another_shape() -> TestResult {
         let array = async_sharded_array(
-            Arc::new(AsyncMemoryStore::default()),
+            Arc::new(MemoryStore::default()),
             false,
             TestDataType::UInt16,
         )
@@ -291,8 +289,7 @@ mod subchunk_cache {
             .flat_map(|nested| DATA_TYPES.map(|data_type| (nested, data_type)))
         {
             let array =
-                async_sharded_array(Arc::new(AsyncMemoryStore::default()), nested, data_type)
-                    .await?;
+                async_sharded_array(Arc::new(MemoryStore::default()), nested, data_type).await?;
             let subchunks = || AsyncChunkCacheDecoded::new_chunk_limit(64);
             async_check_reads(
                 &array,
@@ -356,7 +353,7 @@ mod subchunk_cache {
     #[ambisync::test]
     async fn async_subchunk_cache_serves_repeated_reads_without_storage() -> TestResult {
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
-            AsyncMemoryStore::default(),
+            MemoryStore::default(),
         )));
         let array = async_sharded_array(store.clone(), false, TestDataType::UInt16).await?;
         let cached = ArrayCached::new(
@@ -397,7 +394,7 @@ mod subchunk_cache {
     #[ambisync::test]
     async fn async_subchunk_cache_reads_a_cached_fill_chunk_without_storage() -> TestResult {
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(Arc::new(
-            AsyncMemoryStore::default(),
+            MemoryStore::default(),
         )));
         // A 32x32 array of 16x16 shards with 4x4 subchunks, so no shard extends beyond the array, with only shard
         // [0, 0] stored
@@ -453,7 +450,7 @@ mod subchunk_cache {
     #[ambisync::test]
     async fn async_subchunk_cache_invalidates_subchunks_of_written_chunks() -> TestResult {
         let array = async_sharded_array(
-            Arc::new(AsyncMemoryStore::default()),
+            Arc::new(MemoryStore::default()),
             false,
             TestDataType::UInt16,
         )
@@ -534,7 +531,7 @@ mod subchunk_cache {
     #[ambisync::test]
     async fn async_subchunk_cache_size_limit_holds_no_fill_subchunk_bytes() -> TestResult {
         let array = async_sharded_array(
-            Arc::new(AsyncMemoryStore::default()),
+            Arc::new(MemoryStore::default()),
             false,
             TestDataType::UInt16,
         )
@@ -568,7 +565,7 @@ mod subchunk_cache {
     #[ambisync::test]
     async fn async_subchunk_cache_requires_a_global_subchunk_grid() -> TestResult {
         let array = ArrayBuilder::new(vec![8], vec![4], data_type::uint8(), 0u8)
-            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
+            .build_arc(Arc::new(MemoryStore::default()), "/array")?;
         let cached = ArrayCached::new(
             array,
             SubchunkCache::new(0, AsyncChunkCacheDecoded::new_chunk_limit(4), NoCache),
@@ -585,7 +582,7 @@ mod subchunk_cache {
     -> TestResult {
         let array = ArrayBuilder::new(vec![16], vec![8], data_type::uint8(), 0u8)
             .subchunk_shape(vec![2])
-            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
+            .build_arc(Arc::new(MemoryStore::default()), "/array")?;
         let cached = ArrayCached::new(
             array,
             SubchunkCache::new(0, AsyncChunkCacheDecoded::new_chunk_limit(8), NoCache),
@@ -609,7 +606,7 @@ mod subchunk_cache {
     async fn async_subchunk_cache_accepts_empty_selections_with_arbitrary_origins() -> TestResult {
         let array = ArrayBuilder::new(vec![32, 32], vec![16, 16], data_type::uint16(), 0u16)
             .subchunk_shape(vec![4, 4])
-            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
+            .build_arc(Arc::new(MemoryStore::default()), "/array")?;
         let cached = ArrayCached::new(
             array,
             SubchunkCache::new(

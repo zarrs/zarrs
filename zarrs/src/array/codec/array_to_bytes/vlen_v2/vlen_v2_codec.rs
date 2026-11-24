@@ -186,7 +186,7 @@ impl ArrayToBytesCodecTraits for VlenV2CodecBound {
         _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
-            super::vlen_v2_partial_decoder::AsyncVlenV2PartialDecoder::new(
+            super::vlen_v2_partial_decoder::VlenV2PartialDecoder::new(
                 input_handle,
                 shape.to_vec(),
                 self.data_type.clone(),

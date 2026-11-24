@@ -12,11 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `FromStr` for `StoreKey` and `StorePrefix`, preserving `TryFrom<&str>` support
 
 ### Changed
+- **Breaking**: Unify `MemoryStore` and `AsyncMemoryStore`: `MemoryStore` now implements `Async{Readable,Writable,Listable}StorageTraits` behind the `async` feature, and `AsyncMemoryStore` is removed
 - **Breaking**: `[Async]WritableStorageTraits::{set,set_partial}` and `OffsetBytesIterator` take `CowBytes` instead of `Bytes`, so stores can write borrowed data
   - Add the `cowbytes` dependency, re-exported as `zarrs_storage::CowBytes`
   - `[Async]WritableStorageTraits::set_partial_many` names the iterator lifetime, `fn set_partial_many<'a>(&'a self, ..., offset_values: OffsetBytesIterator<'a>)`
 - **Breaking**: Bump MSRV to 1.92 (11 December, 2025)
-- Improve `[Async]MemoryStore` performance
+- Improve `MemoryStore` performance
   - Use `std::sync::RwLock` to allow concurrent reads
   - Convert values and drop replaced or erased values outside the lock in `MemoryStore::{set,erase}`, and clone keys only when inserting them
   - Acquire the lock and resolve the key once per `set_partial_many` call rather than once per offset

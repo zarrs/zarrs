@@ -21,7 +21,7 @@ impl AsyncToSyncBlockOn for TokioBlockOn {
 
 fn readable_writable_store() -> ReadableWritableStorage {
     let block_on = TokioBlockOn(tokio::runtime::Runtime::new().unwrap());
-    let store = Arc::new(zarrs_storage::store::AsyncMemoryStore::new());
+    let store = Arc::new(zarrs_storage::store::MemoryStore::new());
     Arc::new(AsyncToSyncStorageAdapter::new(store, block_on))
 }
 

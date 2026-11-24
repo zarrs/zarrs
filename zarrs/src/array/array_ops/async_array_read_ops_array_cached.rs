@@ -581,13 +581,13 @@ mod tests {
         ArrayBuilder, ArrayBytesFixedDisjointView, ArraySubset, FillValue, data_type,
     };
     use unsafe_cell_slice::UnsafeCellSlice;
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
     async fn test_cache_async<C>(cache: Box<C>)
     where
         C: AsyncChunkCacheTraits + ?Sized + 'static,
     {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();
@@ -687,7 +687,7 @@ mod tests {
     where
         C: AsyncChunkCacheTraits + 'static,
     {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
         builder.subchunk_shape(vec![2, 2]);
         let array = builder.build_arc(store, "/").unwrap();
@@ -749,7 +749,7 @@ mod tests {
     where
         C: AsyncChunkCacheTraits + 'static,
     {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();
@@ -795,7 +795,7 @@ mod tests {
     where
         C: AsyncChunkCacheTraits + 'static,
     {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(vec![6, 6], vec![2, 2], data_type::string(), "")
             .build_arc(store, "/")
             .unwrap();
@@ -841,7 +841,7 @@ mod tests {
     where
         C: AsyncChunkCacheTraits + 'static,
     {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(
             vec![6],
             vec![2],
@@ -928,7 +928,7 @@ mod tests {
     where
         C: AsyncChunkCacheTraits + 'static,
     {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
             .build_arc(store, "/")
             .unwrap();
@@ -964,7 +964,7 @@ mod tests {
     async fn dyn_async_array_cache() {
         use crate::array::cache::{ChunkCacheTypeDecoded, NoCache, SubchunkCache};
 
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
             .subchunk_shape(vec![1, 1])
             .build_arc(store, "/")
@@ -976,7 +976,7 @@ mod tests {
             .unwrap();
 
         let cached: ArrayCached<
-            AsyncMemoryStore,
+            MemoryStore,
             dyn AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>,
         > = ArrayCached::new_boxed(
             array.clone(),
@@ -1012,7 +1012,7 @@ mod tests {
             Box::new(NoCache),
         ];
         for cache in caches {
-            let cached: ArrayCached<AsyncMemoryStore, dyn AsyncArrayCache> =
+            let cached: ArrayCached<MemoryStore, dyn AsyncArrayCache> =
                 ArrayCached::new_boxed(array.clone(), cache);
             assert_eq!(
                 cached

@@ -346,17 +346,15 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         _options: &CodecOptions,
         _resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            vlen_partial_decoder::AsyncVlenPartialDecoder::new(
-                input_handle,
-                shape.to_vec(),
-                self.data_type.clone(),
-                self.fill_value.clone(),
-                self.index_codecs.clone(),
-                self.data_codecs.clone(),
-                self.index_location,
-            ),
-        ))
+        Ok(Arc::new(vlen_partial_decoder::VlenPartialDecoder::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type.clone(),
+            self.fill_value.clone(),
+            self.index_codecs.clone(),
+            self.data_codecs.clone(),
+            self.index_location,
+        )))
     }
 
     fn encoded_representation(

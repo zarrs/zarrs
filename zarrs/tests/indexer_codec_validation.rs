@@ -90,9 +90,9 @@ fn transpose_partial_codec_reports_decoded_shape() -> Result<(), Box<dyn std::er
 #[tokio::test]
 async fn async_squeeze_partial_codec_rejects_discarded_index()
 -> Result<(), Box<dyn std::error::Error>> {
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
-    let store = Arc::new(AsyncMemoryStore::new());
+    let store = Arc::new(MemoryStore::new());
     let array = ArrayBuilder::new(vec![4, 1, 4], vec![4, 1, 4], data_type::uint16(), 0u16)
         .array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())])
         .build(store, "/array")?;

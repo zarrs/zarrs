@@ -505,14 +505,14 @@ fn async_chunk_cache(c: &mut Criterion) {
         AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
         AsyncChunkCacheTraits,
     };
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     fn bench_cache<C: AsyncChunkCacheTraits>(
         group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
         rt: &tokio::runtime::Runtime,
-        array: &Arc<zarrs::array::Array<AsyncMemoryStore>>,
+        array: &Arc<zarrs::array::Array<MemoryStore>>,
         label: &str,
         cache: impl Fn() -> C,
     ) {
@@ -551,11 +551,7 @@ fn async_chunk_cache(c: &mut Criterion) {
         if sharded {
             builder.subchunk_shape(vec![32, 32]);
         }
-        let array = Arc::new(
-            builder
-                .build(Arc::new(AsyncMemoryStore::new()), "/")
-                .unwrap(),
-        );
+        let array = Arc::new(builder.build(Arc::new(MemoryStore::new()), "/").unwrap());
         rt.block_on(array.async_store_array_subset(
             &array.subset_all(),
             data.as_slice(),
@@ -598,7 +594,7 @@ fn async_subchunk_cache(c: &mut Criterion) {
     use zarrs::array::cache::{
         AsyncChunkCacheDecoded, AsyncChunkCachePartialDecoder, SubchunkCache,
     };
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let mut group = c.benchmark_group("async_subchunk_cache");
@@ -608,7 +604,7 @@ fn async_subchunk_cache(c: &mut Criterion) {
         ArrayBuilder::new(shape.to_vec(), vec![256, 256], data_type::uint16(), 0u16)
             .subchunk_shape(vec![32, 32])
             .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(1, false))])
-            .build(Arc::new(AsyncMemoryStore::new()), "/")
+            .build(Arc::new(MemoryStore::new()), "/")
             .unwrap(),
     );
     rt.block_on(array.async_store_array_subset(

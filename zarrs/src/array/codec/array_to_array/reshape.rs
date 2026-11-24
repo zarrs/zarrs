@@ -1483,7 +1483,7 @@ mod tests {
         ])));
         let array = ArrayBuilder::new(vec![8, 6], vec![8, 6], data_type::uint16(), 0u16)
             .array_to_array_codecs(vec![codec])
-            .build(Arc::new(zarrs_storage::store::AsyncMemoryStore::new()), "/")
+            .build(Arc::new(zarrs_storage::store::MemoryStore::new()), "/")
             .unwrap()
             .with_codec_options(CodecOptions::default().with_experimental_partial_encoding(true));
         let elements: Vec<u16> = (0..48).collect();

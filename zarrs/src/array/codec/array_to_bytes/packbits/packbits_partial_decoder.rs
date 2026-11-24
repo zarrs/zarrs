@@ -26,14 +26,14 @@ use zarrs_storage::byte_range::ByteRange;
 /// Returns an error if the bytes cannot be retrieved, or a byte range has an unexpected length.
 #[cfg_attr(feature = "async", async_generic(
     async_signature(
-    input_handle: &'a Arc<dyn AsyncBytesPartialDecoderTraits>,
+    input_handle: &'a (impl AsyncBytesPartialDecoderTraits + ?Sized),
     bit_ranges: &'a [Range<u64>],
     packed_start: u64,
     options: &CodecOptions,
     resources: &Resources,
 )))]
 fn retrieve_packed<'a>(
-    input_handle: &'a Arc<dyn BytesPartialDecoderTraits>,
+    input_handle: &'a (impl BytesPartialDecoderTraits + ?Sized),
     bit_ranges: &'a [Range<u64>],
     packed_start: u64,
     options: &CodecOptions,
@@ -79,7 +79,7 @@ fn retrieve_packed<'a>(
 
 #[cfg_attr(feature = "async", async_generic(
     async_signature(
-    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
+    input_handle: &(impl AsyncBytesPartialDecoderTraits + ?Sized),
     shape: &[NonZeroU64],
     codec: &PackBitsCodecBound,
     indexer: &dyn crate::array::Indexer,
@@ -87,7 +87,7 @@ fn retrieve_packed<'a>(
     resources: &Resources,
 )))]
 fn partial_decode<'a>(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
+    input_handle: &(impl BytesPartialDecoderTraits + ?Sized),
     shape: &[NonZeroU64],
     codec: &PackBitsCodecBound,
     indexer: &dyn crate::array::Indexer,
@@ -162,16 +162,16 @@ fn partial_decode<'a>(
 }
 
 /// Partial decoder for the `packbits` codec.
-pub(crate) struct PackBitsPartialDecoder {
-    input_handle: Arc<dyn BytesPartialDecoderTraits>,
+pub(crate) struct PackBitsPartialDecoder<T: ?Sized> {
+    input_handle: Arc<T>,
     shape: ChunkShape,
     codec: Arc<PackBitsCodecBound>,
 }
 
-impl PackBitsPartialDecoder {
+impl<T: ?Sized> PackBitsPartialDecoder<T> {
     /// Create a new partial decoder for the `packbits` codec.
     pub(crate) fn new(
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<T>,
         shape: ChunkShape,
         codec: Arc<PackBitsCodecBound>,
     ) -> Self {
@@ -184,9 +184,11 @@ impl PackBitsPartialDecoder {
 }
 
 /// The `packbits` codec encodes a chunk as a whole, so it has no subchunks.
-impl ArrayPartialDecoderNoSubchunkingTraits for PackBitsPartialDecoder {}
+impl<T: ?Sized> ArrayPartialDecoderNoSubchunkingTraits for PackBitsPartialDecoder<T> {}
 
-impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
+impl<T: BytesPartialDecoderTraits + ?Sized + 'static> ArrayPartialDecoderTraits
+    for PackBitsPartialDecoder<T>
+{
     fn data_type(&self) -> &DataType {
         &self.codec.data_type
     }
@@ -206,7 +208,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
         resources: &Resources,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode(
-            &self.input_handle,
+            &*self.input_handle,
             &self.shape,
             &self.codec,
             indexer,
@@ -221,36 +223,11 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
 }
 
 #[cfg(feature = "async")]
-/// Asynchronous partial decoder for the `packbits` codec.
-pub(crate) struct AsyncPackBitsPartialDecoder {
-    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    shape: ChunkShape,
-    codec: Arc<PackBitsCodecBound>,
-}
-
-#[cfg(feature = "async")]
-impl AsyncPackBitsPartialDecoder {
-    /// Create a new partial decoder for the `packbits` codec.
-    pub(crate) fn new(
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: ChunkShape,
-        codec: Arc<PackBitsCodecBound>,
-    ) -> Self {
-        Self {
-            input_handle,
-            shape,
-            codec,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-impl ArrayPartialDecoderNoSubchunkingTraits for AsyncPackBitsPartialDecoder {}
-
-#[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
+impl<T: AsyncBytesPartialDecoderTraits + ?Sized + 'static> AsyncArrayPartialDecoderTraits
+    for PackBitsPartialDecoder<T>
+{
     fn data_type(&self) -> &DataType {
         &self.codec.data_type
     }
@@ -270,7 +247,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
         resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         partial_decode_async(
-            &self.input_handle,
+            &*self.input_handle,
             &self.shape,
             &self.codec,
             indexer,

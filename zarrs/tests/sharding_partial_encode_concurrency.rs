@@ -228,10 +228,7 @@ fn async_partial_encode_limits_subchunk_concurrency() {
             let array = ArrayBuilder::new(vec![16, 16], vec![16, 16], data_type::uint8(), 0u8)
                 .subchunk_shape(vec![4, 4])
                 .bytes_to_bytes_codecs(vec![codec.clone()])
-                .build(
-                    Arc::new(zarrs::storage::store::AsyncMemoryStore::new()),
-                    "/",
-                )
+                .build(Arc::new(zarrs::storage::store::MemoryStore::new()), "/")
                 .unwrap()
                 .with_codec_options(
                     CodecOptions::default().with_experimental_partial_encoding(true),

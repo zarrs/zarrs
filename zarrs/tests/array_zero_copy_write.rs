@@ -361,7 +361,7 @@ mod r#async {
 
     use bytes::Bytes;
     use zarrs::array::{ArrayBuilder, CowBytes, Resources, data_type};
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
     use zarrs::storage::{
         AsyncWritableStorageTraits, OffsetBytesIterator, StorageError, StoreKey, StorePrefix,
     };
@@ -370,7 +370,7 @@ mod r#async {
 
     #[derive(Debug, Default)]
     struct AsyncPtrRecordingStore {
-        inner: AsyncMemoryStore,
+        inner: MemoryStore,
         ptrs: Mutex<BTreeMap<StoreKey, (usize, usize)>>,
     }
 

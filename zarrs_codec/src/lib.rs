@@ -74,8 +74,6 @@ pub use array_bytes::{
 };
 
 mod byte_interval_partial_decoder;
-#[cfg(feature = "async")]
-pub use byte_interval_partial_decoder::AsyncByteIntervalPartialDecoder;
 pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
 
 use derive_more::derive::Display;

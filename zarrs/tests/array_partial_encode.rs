@@ -191,11 +191,11 @@ fn array_partial_encode_sharding_index_end() {
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn array_partial_encode_sharding_async() {
-    use zarrs::storage::store::AsyncMemoryStore;
+    use zarrs::storage::store::MemoryStore;
 
     let options = CodecOptions::default().with_experimental_partial_encoding(true);
     for index_location in [ShardingIndexLocation::Start, ShardingIndexLocation::End] {
-        let store = Arc::new(AsyncMemoryStore::new());
+        let store = Arc::new(MemoryStore::new());
         let mut builder = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint16(), 0u16);
         builder.array_to_bytes_codec(Arc::new(
             ShardingCodecBuilder::new(vec![NonZeroU64::new(1).unwrap(); 2], &data_type::uint16())

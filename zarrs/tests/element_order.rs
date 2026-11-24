@@ -840,7 +840,7 @@ mod async_reads {
         AsyncChunkCacheDecoded, AsyncChunkCacheEncoded, AsyncChunkCachePartialDecoder,
         AsyncChunkCacheTraits, AsyncChunkCacheType,
     };
-    use zarrs_storage::store::AsyncMemoryStore;
+    use zarrs_storage::store::MemoryStore;
 
     async fn check_async_reads<T>(name: &str, builder: &ArrayBuilder, elements: &[T])
     where
@@ -848,7 +848,7 @@ mod async_reads {
     {
         let resources = Resources::default();
         let c = builder
-            .build(Arc::new(AsyncMemoryStore::new()), "/array")
+            .build(Arc::new(MemoryStore::new()), "/array")
             .unwrap();
         let f = c.with_element_order(ElementOrder::F);
         let all = ArraySubset::new_with_shape(SHAPE);
@@ -946,7 +946,7 @@ mod async_reads {
     {
         let resources = Resources::default();
         let c = builder
-            .build(Arc::new(AsyncMemoryStore::new()), "/array")
+            .build(Arc::new(MemoryStore::new()), "/array")
             .unwrap();
         let f = c.with_element_order(ElementOrder::F);
         let all = ArraySubset::new_with_shape(SHAPE);
@@ -1002,7 +1002,7 @@ mod async_reads {
     async fn element_order_async_out_of_bounds() {
         let resources = Resources::default();
         let f = builder(data_type::uint16(), 0u16)
-            .build(Arc::new(AsyncMemoryStore::new()), "/array")
+            .build(Arc::new(MemoryStore::new()), "/array")
             .unwrap()
             .with_element_order(ElementOrder::F);
         let cached = ArrayCached::new(f.clone(), AsyncChunkCacheDecoded::new_chunk_limit(4));
@@ -1084,7 +1084,7 @@ mod async_reads {
     {
         let resources = Resources::default();
         let c = builder
-            .build(Arc::new(AsyncMemoryStore::new()), "/array")
+            .build(Arc::new(MemoryStore::new()), "/array")
             .unwrap();
         let f = c.with_element_order(ElementOrder::F);
         let all = ArraySubset::new_with_shape(SHAPE);
@@ -1155,8 +1155,8 @@ mod async_reads {
     async fn check_async_cached_missing<T, C>(
         cache_name: &str,
         name: &str,
-        c: &Array<AsyncMemoryStore>,
-        cached: &ArrayCached<AsyncMemoryStore, C>,
+        c: &Array<MemoryStore>,
+        cached: &ArrayCached<MemoryStore, C>,
         all: &ArraySubset,
         resources: &Resources,
     ) where
@@ -1294,7 +1294,7 @@ mod async_reads {
     async fn element_order_async_empty_store_chunks() {
         let resources = Resources::default();
         let f = builder(data_type::uint16(), 0u16)
-            .build(Arc::new(AsyncMemoryStore::new()), "/array")
+            .build(Arc::new(MemoryStore::new()), "/array")
             .unwrap()
             .with_element_order(ElementOrder::F);
 
