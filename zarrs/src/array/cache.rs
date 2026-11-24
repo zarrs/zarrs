@@ -33,7 +33,9 @@
 //!
 //! All of the above caches coalesce concurrent retrievals of an uncached chunk, so that a chunk is
 //! fetched once no matter how many callers request it. If that retrieval fails, every waiting caller
-//! gets its error, and a later retrieval retries it.
+//! gets its error, and a later retrieval retries it. A caller on a `rayon` worker thread instead retrieves the chunk
+//! uncached if its thread is already retrieving a chunk of the same cache, or after waiting 1 s, as waiting on
+//! another retrieval from inside the thread pool can deadlock it.
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.

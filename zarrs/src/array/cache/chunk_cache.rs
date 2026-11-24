@@ -363,6 +363,127 @@ mod tests {
         assert!(misses[3] < 150, "{misses:?}");
     }
 
+    /// Run `f` on another thread, and panic if it does not complete within 30 s.
+    fn complete_within_30s(f: impl FnOnce() + Send + 'static) {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            f();
+            sender.send(()).unwrap();
+        });
+        receiver
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("deadlock");
+    }
+
+    #[test]
+    fn chunk_cache_rayon_worker_does_not_wait_on_its_own_retrieval() {
+        use rayon::prelude::*;
+        complete_within_30s(|| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(1)
+                .build()
+                .unwrap();
+            let cache = ChunkCacheEncoded::new_chunk_limit(4);
+            pool.install(|| {
+                (0..64).into_par_iter().for_each(|_| {
+                    SyncChunkCacheTraits::try_get_or_insert_with(
+                        &cache,
+                        ArrayIndices::from([0].as_slice()),
+                        &mut || {
+                            // Runs other tasks retrieving the same chunk on this thread
+                            rayon::yield_now();
+                            Ok(None)
+                        },
+                    )
+                    .unwrap();
+                });
+            });
+        });
+    }
+
+    #[test]
+    fn chunk_cache_rayon_worker_initialising_a_chunk_waits_for_another_chunk() {
+        complete_within_30s(|| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(2)
+                .build()
+                .unwrap();
+            let cache = ChunkCacheEncoded::new_chunk_limit(4);
+            let calls = AtomicUsize::new(0);
+            let (started, wait_started) = std::sync::mpsc::channel();
+            let retrieve = |chunk: u64, f: &mut dyn FnMut() -> Result<_, ArrayError>| {
+                SyncChunkCacheTraits::try_get_or_insert_with(
+                    &cache,
+                    ArrayIndices::from([chunk].as_slice()),
+                    f,
+                )
+                .unwrap()
+            };
+            let (retrieve, calls) = (&retrieve, &calls);
+            pool.scope(|scope| {
+                scope.spawn(move |_| {
+                    retrieve(1, &mut || {
+                        calls.fetch_add(1, Ordering::Relaxed);
+                        started.send(()).unwrap();
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        Ok(Some(Bytes::from_static(b"first")))
+                    });
+                });
+                scope.spawn(move |_| {
+                    // While initialising chunk 0, wait for the other retrieval of chunk 1
+                    retrieve(0, &mut || {
+                        wait_started.recv().unwrap();
+                        let value = retrieve(1, &mut || {
+                            calls.fetch_add(1, Ordering::Relaxed);
+                            Ok(Some(Bytes::from_static(b"second")))
+                        });
+                        assert_eq!(value, Some(Bytes::from_static(b"first")));
+                        Ok(None)
+                    });
+                });
+            });
+            assert_eq!(calls.load(Ordering::Relaxed), 1);
+        });
+    }
+
+    #[test]
+    fn chunk_cache_rayon_worker_stops_waiting_on_another_retrieval() {
+        complete_within_30s(|| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(2)
+                .build()
+                .unwrap();
+            let cache = ChunkCacheEncoded::new_chunk_limit(4);
+            let (started, wait_started) = std::sync::mpsc::channel();
+            let (retrieved, wait_retrieved) = std::sync::mpsc::channel();
+            let retrieve = |f: &mut dyn FnMut() -> Result<_, ArrayError>| {
+                SyncChunkCacheTraits::try_get_or_insert_with(
+                    &cache,
+                    ArrayIndices::from([0].as_slice()),
+                    f,
+                )
+                .unwrap()
+            };
+            pool.scope(|scope| {
+                // A retrieval that completes only after another retrieval of the same chunk
+                scope.spawn(move |_| {
+                    retrieve(&mut || {
+                        started.send(()).unwrap();
+                        wait_retrieved.recv().unwrap();
+                        Ok(Some(Bytes::from_static(b"first")))
+                    });
+                });
+                scope.spawn(move |_| {
+                    wait_started.recv().unwrap();
+                    let value = retrieve(&mut || Ok(Some(Bytes::from_static(b"second"))));
+                    assert_eq!(value, Some(Bytes::from_static(b"second")));
+                    retrieved.send(()).unwrap();
+                });
+            });
+            assert_eq!(cache.len(), 1);
+        });
+    }
+
     #[test]
     fn chunk_cache_chunk_size_hint() {
         // Chunks of about the hinted size are cached
@@ -680,5 +801,40 @@ mod tests {
         receiver
             .recv_timeout(std::time::Duration::from_secs(30))
             .expect("deadlock");
+    }
+
+    #[test]
+    fn chunk_cache_sync_miss_during_thread_local_teardown() {
+        struct DropReadsCache(ChunkCacheEncoded);
+
+        impl Drop for DropReadsCache {
+            fn drop(&mut self) {
+                let _ = SyncChunkCacheTraits::try_get_or_insert_with(
+                    &self.0,
+                    ArrayIndices::from([0].as_slice()),
+                    &mut || Ok(None),
+                );
+            }
+        }
+
+        thread_local! {
+            static EARLY_TLS: std::cell::RefCell<Option<DropReadsCache>> = const { std::cell::RefCell::new(None) };
+        }
+
+        std::thread::spawn(|| {
+            // Register EARLY_TLS before any cache access so it is destroyed after `INITIALISING`.
+            EARLY_TLS.with_borrow_mut(|slot| {
+                *slot = Some(DropReadsCache(ChunkCacheEncoded::new_chunk_limit(2)));
+            });
+            let cache = ChunkCacheEncoded::new_chunk_limit(2);
+            SyncChunkCacheTraits::try_get_or_insert_with(
+                &cache,
+                ArrayIndices::from([0].as_slice()),
+                &mut || Ok(None),
+            )
+            .unwrap();
+        })
+        .join()
+        .unwrap();
     }
 }

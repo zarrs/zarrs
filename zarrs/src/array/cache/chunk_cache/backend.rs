@@ -2,6 +2,17 @@
 //!
 //! Concurrent retrievals of an uncached chunk are coalesced: one caller initialises the chunk while the others wait.
 //! If initialisation fails, the error is returned to that caller and every waiting caller, and is not cached.
+//!
+//! A rayon worker thread must not block indefinitely on another caller's initialisation: the initialisation may be
+//! lower on its own stack (a worker waiting on a `join` inside an initialisation runs other tasks, which may request
+//! the same chunk), or wait on a task held by a worker that is itself blocked. So a rayon worker does not wait for
+//! a chunk it is already initialising, and waits at most [`RAYON_WAIT_TIMEOUT`] (1 s) for another caller's
+//! initialisation, then initialises the chunk uncached. A wait cycle between workers initialising different chunks
+//! thus stalls for at most 1 s, and rayon workers do not share an initialisation that takes longer than 1 s.
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::cell::RefCell;
+use std::time::Duration;
 
 use quick_cache::sync::GuardResult;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
@@ -239,6 +250,80 @@ impl Config {
     }
 }
 
+/// How long a rayon worker waits for another caller's initialisation of a chunk before initialising it uncached.
+#[cfg(not(target_arch = "wasm32"))]
+const RAYON_WAIT_TIMEOUT: Duration = Duration::from_secs(1);
+
+#[cfg(not(target_arch = "wasm32"))]
+thread_local! {
+    /// The cache addresses and chunk indices of the chunks this thread is initialising, innermost last.
+    static INITIALISING: RefCell<Vec<(usize, ChunkIndices)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Records that this thread is initialising a chunk while it lives.
+#[cfg(not(target_arch = "wasm32"))]
+struct Initialising(bool);
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Initialising {
+    fn new(cache: usize, chunk_indices: &ChunkIndices) -> Self {
+        let pushed = INITIALISING
+            .try_with(|chunks| chunks.borrow_mut().push((cache, chunk_indices.clone())))
+            .is_ok();
+        Self(pushed)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Drop for Initialising {
+    fn drop(&mut self) {
+        if self.0 {
+            let _ = INITIALISING.try_with(|chunks| {
+                chunks.borrow_mut().pop();
+            });
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+struct Initialising;
+
+#[cfg(target_arch = "wasm32")]
+impl Initialising {
+    fn new(_cache: usize, _chunk_indices: &ChunkIndices) -> Self {
+        Self
+    }
+}
+
+/// Return how long to wait for another caller's initialisation of the chunk at `chunk_indices` of the cache at address
+/// `cache`, or [`None`] to wait until it completes.
+#[cfg(not(target_arch = "wasm32"))]
+fn wait_timeout(cache: usize, chunk_indices: &ChunkIndices) -> Option<Duration> {
+    if rayon::current_thread_index().is_none() {
+        None
+    } else if INITIALISING
+        .try_with(|chunks| {
+            chunks
+                .borrow()
+                .iter()
+                .any(|(initialising_cache, initialising_chunk)| {
+                    *initialising_cache == cache && initialising_chunk == chunk_indices
+                })
+        })
+        .unwrap_or(false)
+    {
+        Some(Duration::ZERO)
+    } else {
+        Some(RAYON_WAIT_TIMEOUT)
+    }
+}
+
+/// `Instant` is unsupported on `wasm32-unknown-unknown`, and rayon does not run a thread pool there.
+#[cfg(target_arch = "wasm32")]
+fn wait_timeout(_cache: usize, _chunk_indices: &ChunkIndices) -> Option<Duration> {
+    None
+}
+
 impl<CT: ChunkCacheType> Cache<CT> {
     pub(super) fn wrap(&self, value: CT) -> CachedValue<CT> {
         let weight = if self.by_size {
@@ -283,16 +368,30 @@ impl<CT: ChunkCacheType> Cache<CT> {
     where
         F: FnOnce() -> Result<CT, ArrayError>,
     {
-        match self.cache.get_value_or_guard(&chunk_indices, None) {
+        if let Some(value) = self.cache.get(&chunk_indices) {
+            return value.map(|cached| cached.value);
+        }
+        let address = std::ptr::from_ref(self) as usize;
+        let timeout = wait_timeout(address, &chunk_indices);
+        match self.cache.get_value_or_guard(&chunk_indices, timeout) {
             GuardResult::Value(value) => value.map(|cached| cached.value),
             GuardResult::Guard(guard) => {
-                let value = f().map(|value| self.wrap(value)).map_err(Arc::new);
+                let value = {
+                    let _initialising = timeout
+                        .is_some()
+                        .then(|| Initialising::new(address, &chunk_indices));
+                    f().map(|value| self.wrap(value)).map_err(Arc::new)
+                };
                 // An error means that the chunk was invalidated while it was initialised, so it is not cached.
                 let _ = guard.insert(value.clone());
                 value.map(|cached| cached.value)
             }
-            // Waiting without a timeout does not time out, but initialise the chunk uncached if it does
-            GuardResult::Timeout => f().map_err(Arc::new),
+            GuardResult::Timeout => {
+                let _initialising = timeout
+                    .is_some()
+                    .then(|| Initialising::new(address, &chunk_indices));
+                f().map_err(Arc::new)
+            }
         }
     }
 }
