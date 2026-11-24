@@ -14,12 +14,12 @@
 //!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
 //!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`](super::Array::codecs)) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
 //!
-//! `zarrs` implements the following Least Recently Used (LRU) chunk caches:
-//!  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
+//! `zarrs` implements the following chunk caches:
+//!  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity.
 //!  - [`ChunkCacheDecodedLruSizeLimit`]: a decoded chunk cache with a fixed size in bytes.
 //!  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
 //!  - [`ChunkCacheEncodedLruSizeLimit`]: an encoded chunk cache with a fixed size in bytes.
-//!  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
+//!  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity.
 //!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 //!
 //! `zarrs` consumers can create custom cache policies by implementing the [`SyncChunkCacheTraits`] trait.
@@ -32,10 +32,9 @@
 //! caches above, with an `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}`
 //! alias per chunk type.
 //!
-//! All of the above caches coalesce concurrent retrievals of an uncached chunk where the backing
-//! cache implementation supports it, so that a chunk is usually fetched once no matter how many
-//! callers request it. This is best effort: the `wasm32` asynchronous caches do not coalesce, and
-//! each caller awaits its own retrieval.
+//! All of the above caches coalesce concurrent retrievals of an uncached chunk, so that a chunk is
+//! fetched once no matter how many callers request it. If that retrieval fails, every waiting caller
+//! gets its error, and a later retrieval retries it.
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.

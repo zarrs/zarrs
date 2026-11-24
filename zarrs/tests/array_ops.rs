@@ -1784,8 +1784,7 @@ mod async_cached {
 
     /// Concurrent retrievals of the same uncached chunk must fetch it once.
     ///
-    /// The asynchronous caches are backed by a `moka::future::Cache`, whose `try_get_with`
-    /// coalesces: the first caller fetches and the rest await its value. Without coalescing every
+    /// The asynchronous caches coalesce: the first caller fetches and the rest await its value. Without coalescing every
     /// task would issue its own store reads, which is what this counts.
     async fn assert_concurrent_retrievals_are_coalesced<C>(cache: C) -> TestResult
     where
@@ -1800,8 +1799,7 @@ mod async_cached {
             .await?;
         let cached = ArrayCached::new(array, cache);
 
-        // Establish the read count of a single uncontended miss on an equivalent chunk. A second
-        // chunk is used rather than invalidating this one, since `moka` invalidation is lazy.
+        // Establish the read count of a single uncontended miss on an equivalent chunk.
         store.reset();
         assert_eq!(
             cached

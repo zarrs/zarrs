@@ -541,12 +541,12 @@ mod subchunk_cache {
             TestDataType::UInt16,
         )
         .await?;
-        // Room for one decoded 4x4 subchunk of u16
+        // Room for one decoded 4x4 subchunk of u16, and 16 fill subchunks weighing one byte each
         let cached = ArrayCached::new(
             array.clone(),
             SubchunkCache::new(
                 0,
-                AsyncChunkCacheDecodedLruSizeLimit::new(32),
+                AsyncChunkCacheDecodedLruSizeLimit::new(32 + 16),
                 AsyncChunkCachePartialDecoderLruChunkLimit::new(4),
             ),
         );

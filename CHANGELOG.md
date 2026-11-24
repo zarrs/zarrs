@@ -86,6 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `SyncArrayCache` and `AsyncArrayCache` are dyn compatible, `ArrayCached` and `SubchunkCache` support `?Sized` caches via `new_boxed`
     - Add `invalidate` methods
     - Add `size` methods, which return the size of the cached chunks in bytes
+  - Back chunk caches with `quick_cache` on all targets instead of `moka` (`lru` on `wasm32`), and remove the `moka` dependency
+    - Caches evict with S3-FIFO rather than LRU, which retains frequently retrieved chunks through scans
+    - `wasm32` caches coalesce concurrent retrievals and no longer hold a lock while retrieving a chunk
+    - Size-limited caches count each chunk as at least one byte, so fill value chunks are evicted
   - **Breaking**: Remove the thread-local chunk caches (`ChunkCacheLru{Chunk,Size}LimitThreadLocal` and `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{Chunk,Size}LimitThreadLocal`)
   - Add support for async caching
     - `ArrayCached` implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`, so that chunk caches can be used with asynchronous stores
@@ -356,7 +360,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the `ambisync` dependency, which derives synchronous code from asynchronous code
 - *Deprecated*: Soft deprecate the `sharding` feature flag, as the sharding codec and associated utilities are always available
 - Avoid unused asynchronous dependencies and unnecessary native-library builds
-- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `lru` 0.19.0, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4, `pco` 1.1.0, `flate2` 1.1.9, `bzip2` 0.6.1, `zstd` 0.14.4
+- Bump internal dependencies: `rayon_iter_concurrent_limit` 0.3.0, `base64` 0.23.1, `getrandom` 0.4.3, `itertools` 0.15.0, `quick_cache` 0.7.0, `blusc` 0.0.7, `serial_test` 3.5.0, `unsafe_cell_slice` 0.2.4, `pco` 1.1.0, `flate2` 1.1.9, `bzip2` 0.6.1, `zstd` 0.14.4
 
 ### Internal
 - Add array-operation, sharding encode/decode, and sync/async I/O latency benchmarks, and allocation regression checks for general array operations
