@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clone keys only for new entries in sync `set` and use a single lookup in async `set`
   - Acquire the lock and resolve the key once per `set_partial_many` call rather than once per offset
   - Avoid a redundant copy in `set`
+  - Move child prefixes into the `list_dir` result without cloning them
 - `MemoryStore` and `StorageHandle` implement `get_partial` directly, rather than through `get_partial_many` (which allocates an iterator of byte ranges and of values)
 - Avoid copying partially written values in `UsageLogStorageAdapter::set_partial_many`
 - Reserve capacity for byte-range extraction, concatenation, and sync/async adapter result collections

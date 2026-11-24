@@ -202,8 +202,8 @@ impl ListableStorageTraits for MemoryStore {
                 }
             }
         }
-        let prefixes: Vec<StorePrefix> = prefixes.iter().cloned().collect();
-        Ok(StoreKeysPrefixes { keys, prefixes })
+        drop(data_map);
+        Ok(StoreKeysPrefixes::new(keys, prefixes.into_iter().collect()))
     }
 
     fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
