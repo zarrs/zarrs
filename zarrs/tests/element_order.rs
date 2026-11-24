@@ -97,8 +97,8 @@ where
     c.store_array_subset(&all, elements.to_vec(), &resources)
         .unwrap();
 
-    let cached = ArrayCached::new(Arc::new(f.clone()), ChunkCacheDecodedLruChunkLimit::new(4));
-    let cached_c = ArrayCached::new(Arc::new(c.clone()), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(f.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached_c = ArrayCached::new(c.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
     assert_eq!(cached.element_order(), ElementOrder::F);
     assert_eq!(
         cached_c.with_element_order(ElementOrder::F).element_order(),
@@ -236,7 +236,7 @@ fn element_order_reads_u16() {
         )
         .unwrap();
     let f = array.with_element_order(ElementOrder::F);
-    let cached = ArrayCached::new(Arc::new(f.clone()), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(f.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
     let tensor: Tensor<'static> = f.retrieve_chunk(&[0, 0], &resources).unwrap();
     assert_eq!(tensor.order(), ElementOrder::F);
     for subset in [
@@ -545,7 +545,7 @@ fn element_order_indexer_is_c_order() {
     let resources = Resources::default();
     let c = build(&builder(data_type::uint16(), 0u16));
     let f = c.with_element_order(ElementOrder::F);
-    let cached = ArrayCached::new(Arc::new(f.clone()), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(f.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
     let subset = ArraySubset::new_with_ranges(&[1..3, 0..3]);
     let indexer = OpaqueSubset(subset.clone());
     assert_eq!(indexer.output_shape(), [2, 3]);
@@ -572,7 +572,7 @@ fn element_order_indexer_is_c_order() {
 fn element_order_out_of_bounds() {
     let resources = Resources::default();
     let f = build(&builder(data_type::uint16(), 0u16)).with_element_order(ElementOrder::F);
-    let cached = ArrayCached::new(Arc::new(f.clone()), ChunkCacheDecodedLruChunkLimit::new(4));
+    let cached = ArrayCached::new(f.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
     // The output of this subset has 2^64 elements
     let subset = ArraySubset::new_with_ranges(&[0..1 << 32, 0..1 << 32]);
     assert!(matches!(
@@ -612,7 +612,7 @@ fn check_cached_reads<T, C>(
     let all = ArraySubset::new_with_shape(SHAPE);
     c.store_array_subset(&all, elements.to_vec(), &resources)
         .unwrap();
-    let cached = ArrayCached::new(Arc::new(f), cache);
+    let cached = ArrayCached::new(f, cache);
 
     for subset in [
         all.clone(),
@@ -869,10 +869,7 @@ mod async_reads {
         )
         .await
         .unwrap();
-        let cached = ArrayCached::new(
-            Arc::new(f.clone()),
-            AsyncChunkCacheDecodedLruChunkLimit::new(4),
-        );
+        let cached = ArrayCached::new(f.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(4));
         for subset in [
             all.clone(),
             ArraySubset::new_with_ranges(&[1..6, 2..8]),
@@ -1008,10 +1005,7 @@ mod async_reads {
             .build(Arc::new(AsyncMemoryStore::new()), "/array")
             .unwrap()
             .with_element_order(ElementOrder::F);
-        let cached = ArrayCached::new(
-            Arc::new(f.clone()),
-            AsyncChunkCacheDecodedLruChunkLimit::new(4),
-        );
+        let cached = ArrayCached::new(f.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(4));
         let subset = ArraySubset::new_with_ranges(&[0..1 << 32, 0..1 << 32]);
         assert!(matches!(
             f.async_retrieve_partial_chunk::<Vec<u16>>(&[0, 0], &subset, &resources)
@@ -1097,7 +1091,7 @@ mod async_reads {
         c.async_store_array_subset(&all, elements.to_vec(), &resources)
             .await
             .unwrap();
-        let cached = ArrayCached::new(Arc::new(f), cache);
+        let cached = ArrayCached::new(f, cache);
 
         for subset in [
             all.clone(),

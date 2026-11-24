@@ -84,7 +84,7 @@ fn check_cached_reads<T, C>(
     array
         .store_array_subset(&all, elements.to_vec(), &resources)
         .unwrap();
-    let cached = ArrayCached::new(Arc::new(array.clone()), cache);
+    let cached = ArrayCached::new(array.clone(), cache);
 
     for subset in [
         all.clone(),
@@ -285,10 +285,7 @@ impl Indexer for OpaqueSubset {
 fn opaque_indexer_partial_chunk_roundtrip() {
     let resources = Resources::default();
     let array = build(&builder(data_type::uint16(), 0u16));
-    let cached = ArrayCached::new(
-        Arc::new(array.clone()),
-        ChunkCacheDecodedLruChunkLimit::new(4),
-    );
+    let cached = ArrayCached::new(array.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
     let subset = ArraySubset::new_with_ranges(&[1..3, 0..3]);
     let indexer = OpaqueSubset(subset.clone());
     assert_eq!(indexer.output_shape(), [2, 3]);
@@ -316,10 +313,7 @@ fn opaque_indexer_partial_chunk_roundtrip() {
 fn retrieve_out_of_bounds_rejected_before_allocation() {
     let resources = Resources::default();
     let array = build(&builder(data_type::uint16(), 0u16));
-    let cached = ArrayCached::new(
-        Arc::new(array.clone()),
-        ChunkCacheDecodedLruChunkLimit::new(4),
-    );
+    let cached = ArrayCached::new(array.clone(), ChunkCacheDecodedLruChunkLimit::new(4));
 
     // 2^64 elements
     let partial_oob = ArraySubset::new_with_ranges(&[0..1 << 32, 0..1 << 32]);
@@ -373,7 +367,7 @@ mod async_tests {
             .async_store_array_subset(&all, elements.to_vec(), &resources)
             .await
             .unwrap();
-        let cached = ArrayCached::new(Arc::new(array.clone()), cache);
+        let cached = ArrayCached::new(array.clone(), cache);
 
         for subset in [
             all.clone(),
@@ -529,10 +523,7 @@ mod async_tests {
         let array = builder(data_type::uint16(), 0u16)
             .build(Arc::new(AsyncMemoryStore::new()), "/array")
             .unwrap();
-        let cached = ArrayCached::new(
-            Arc::new(array.clone()),
-            AsyncChunkCacheDecodedLruChunkLimit::new(4),
-        );
+        let cached = ArrayCached::new(array.clone(), AsyncChunkCacheDecodedLruChunkLimit::new(4));
 
         let partial_oob = ArraySubset::new_with_ranges(&[0..1 << 32, 0..1 << 32]);
         assert!(matches!(

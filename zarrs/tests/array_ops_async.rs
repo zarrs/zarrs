@@ -752,7 +752,7 @@ async fn array_implements_complete_async_operation_suite() -> TestResult {
 #[tokio::test]
 async fn array_subchunk_cached_implements_complete_async_operation_suite() -> TestResult {
     let cached = ArrayCached::new(
-        Arc::new(fixed_fixture()),
+        fixed_fixture(),
         SubchunkCache::new(
             0,
             AsyncChunkCacheDecodedLruChunkLimit::new(16),
