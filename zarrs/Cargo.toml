@@ -127,6 +127,7 @@ zarrs_filesystem.workspace = true
 # Constrain the transitive dependency to fix minimum-version builds without compiling it directly.
 [target.'cfg(false)'.dependencies]
 libz-sys = "1.1.20" # https://github.com/rust-lang/libz-sys/commit/eb42f72bb4e23ea16b726bc14587d4c5b3d07212
+lock_api = "0.4.7" # quick_cache needs a const RwLock::new on stable. TODO: report upstream
 
 [[example]]
 name = "array_write_read"
