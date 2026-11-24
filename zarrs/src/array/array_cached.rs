@@ -132,10 +132,12 @@ impl<TStorage: ?Sized, C: ?Sized> Clone for ArrayCached<TStorage, C> {
 
 impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     /// Create a new cached array wrapper.
+    ///
+    /// `array` may be an [`Array`] or an `Arc<Array>`.
     #[must_use]
-    pub fn new(array: Arc<Array<TStorage>>, cache: C) -> Self {
+    pub fn new(array: impl Into<Arc<Array<TStorage>>>, cache: C) -> Self {
         Self {
-            array,
+            array: array.into(),
             cache: Arc::new(cache),
         }
     }
@@ -144,9 +146,9 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
 impl<TStorage: ?Sized, C: ?Sized> ArrayCached<TStorage, C> {
     /// Create a new cached array wrapper from a boxed cache, such as a `Box<dyn SyncArrayCache>`.
     #[must_use]
-    pub fn new_boxed(array: Arc<Array<TStorage>>, cache: Box<C>) -> Self {
+    pub fn new_boxed(array: impl Into<Arc<Array<TStorage>>>, cache: Box<C>) -> Self {
         Self {
-            array,
+            array: array.into(),
             cache: Arc::from(cache),
         }
     }
