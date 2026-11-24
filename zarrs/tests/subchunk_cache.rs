@@ -544,7 +544,7 @@ mod subchunk_cache {
             array.clone(),
             SubchunkCache::new(
                 0,
-                AsyncChunkCacheDecoded::new_size_limit(32 + 16),
+                AsyncChunkCacheDecoded::new_size_limit(32 + 16, None),
                 AsyncChunkCachePartialDecoder::new_chunk_limit(4),
             ),
         );

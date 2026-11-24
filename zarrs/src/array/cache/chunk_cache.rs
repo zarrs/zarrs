@@ -20,34 +20,83 @@ mod backend;
 /// The constructors of a chunk cache.
 macro_rules! impl_chunk_cache_constructors {
     () => {
+        fn from_config(config: backend::Config) -> Self {
+            Self {
+                cache: config.build(),
+                config,
+            }
+        }
+
         /// Create a cache that holds at most `chunk_capacity` chunks.
         ///
         /// The cache is split into shards for concurrency, each holding a share of the chunk capacity, so it may evict
         /// a chunk before it holds `chunk_capacity` chunks, or hold slightly more.
         #[must_use]
         pub fn new_chunk_limit(chunk_capacity: u64) -> Self {
-            let cache = backend::Cache::new_with_chunk_capacity(chunk_capacity);
-            Self { cache }
+            Self::from_config(backend::Config::chunk_limit(chunk_capacity))
         }
 
         /// Create a cache that holds chunks up to a total of `size_capacity` bytes.
         ///
         /// Each chunk counts as at least one byte, so chunks that hold no bytes (e.g. fill value chunks) are evicted
-        /// too. A chunk taking up nearly all of `size_capacity` on its own is not cached.
+        /// too. A chunk larger than the hot allocation of `size_capacity` (97% by default) is not cached; see
+        /// [`with_hot_allocation`](Self::with_hot_allocation).
+        ///
+        /// `chunk_size_hint` is the expected size of a chunk in bytes. It sizes the record of recently evicted chunks
+        /// (see [`with_ghost_allocation`](Self::with_ghost_allocation)), and splits the cache into shards for
+        /// concurrency, each holding a share of `size_capacity` of at least 32 chunks of the hinted size. A chunk
+        /// larger than the hot allocation of a shard is then not cached. Without a hint, the cache is a single shard,
+        /// which is slower under concurrent retrievals but caches any chunk up to its hot allocation, and the record
+        /// expects 4 KiB chunks.
         #[must_use]
-        pub fn new_size_limit(size_capacity: u64) -> Self {
-            let cache = backend::Cache::new_with_size_capacity(size_capacity);
-            Self { cache }
+        pub fn new_size_limit(size_capacity: u64, chunk_size_hint: Option<u64>) -> Self {
+            Self::from_config(backend::Config::size_limit(size_capacity, chunk_size_hint))
+        }
+
+        /// Return an empty cache that reserves the fraction `hot_allocation` of its capacity for frequently retrieved
+        /// chunks.
+        ///
+        /// The default is 0.97. Lower values favour recently retrieved chunks, as an LRU cache does; useful values
+        /// are between 0.5 and 0.99. Values are clamped to `[0, 1]`, and NaN keeps the current value.
+        ///
+        /// A cache with a size limit does not cache a chunk larger than `hot_allocation` of its capacity (or of the
+        /// capacity of a shard, see [`new_size_limit`](Self::new_size_limit)), so lower values also shrink the largest
+        /// chunk it caches, and at 0 it caches nothing.
+        #[must_use]
+        pub fn with_hot_allocation(self, hot_allocation: f64) -> Self {
+            Self::from_config(self.config.with_hot_allocation(hot_allocation))
+        }
+
+        /// Return an empty cache that remembers recently evicted chunks, up to the fraction `ghost_allocation` of the
+        /// number of chunks it is expected to hold, and admits them as frequently retrieved if they are retrieved again.
+        ///
+        /// A cache with a chunk limit is expected to hold its chunk capacity. A cache with a size limit is expected to
+        /// hold chunks of its chunk size hint (see [`new_size_limit`](Self::new_size_limit)), or else 4 KiB chunks
+        /// (at least 1024), so that it remembers the evicted chunks of a working set of small chunks.
+        ///
+        /// The default is 0.5. Values are clamped to `[0, 1]`, and NaN keeps the current value. Each shard of the cache
+        /// remembers at least one evicted chunk, even with an allocation of 0.
+        #[must_use]
+        pub fn with_ghost_allocation(self, ghost_allocation: f64) -> Self {
+            Self::from_config(self.config.with_ghost_allocation(ghost_allocation))
         }
     };
 }
 
 /// A chunk cache with a capacity in chunks or bytes.
 ///
-/// The eviction policy is an implementation detail. It is currently [S3-FIFO](https://s3fifo.com/), which retains
-/// frequently retrieved chunks through scans of the array.
+/// The eviction policy is [S3-FIFO](https://s3fifo.com/), which retains frequently retrieved chunks through scans of
+/// the array. It can be tuned with [`with_hot_allocation`](Self::with_hot_allocation) and
+/// [`with_ghost_allocation`](Self::with_ghost_allocation). Unlike an LRU cache:
+/// - Once its hot allocation is full, the cache admits a newly retrieved chunk on probation and evicts it first. If no
+///   other chunk is on probation, as in a cache that holds one chunk, the new chunk is evicted at once and cached only
+///   when it is retrieved again, so the cache retrieves each new chunk twice.
+/// - A cache with a size limit does not cache a chunk larger than its hot allocation (97% by default) of the capacity of
+///   a shard. A cache sized to hold exactly `n` chunks holds fewer, and one sized to hold one chunk caches nothing, so
+///   leave headroom.
 pub struct ChunkCache<CT: SyncChunkCacheType> {
     cache: backend::Cache<CT>,
+    config: backend::Config,
 }
 
 impl<CT: SyncChunkCacheType> ChunkCache<CT> {
@@ -88,6 +137,7 @@ impl<CT: SyncChunkCacheType> SyncChunkCacheTraits for ChunkCache<CT> {
 #[cfg(feature = "async")]
 pub struct AsyncChunkCache<CT: AsyncChunkCacheType> {
     cache: backend::Cache<CT>,
+    config: backend::Config,
 }
 
 #[cfg(feature = "async")]
@@ -205,16 +255,75 @@ mod tests {
     }
 
     #[test]
+    fn chunk_cache_one_slot_replaces_first_chunk() {
+        for (cache, chunk_size) in [
+            (ChunkCacheEncoded::new_chunk_limit(1), 10),
+            (ChunkCacheEncoded::new_size_limit(100, Some(90)), 90),
+            // A ghost allocation of 0 still keeps one ghost slot
+            (
+                ChunkCacheEncoded::new_chunk_limit(1).with_ghost_allocation(0.0),
+                10,
+            ),
+            (
+                ChunkCacheEncoded::new_size_limit(100, Some(90)).with_ghost_allocation(0.0),
+                90,
+            ),
+            (
+                ChunkCacheEncoded::new_size_limit(100, None).with_ghost_allocation(0.0),
+                90,
+            ),
+        ] {
+            assert_eq!(retrieve_counting(&cache, 0..1, chunk_size), 1);
+            // First access to B evicts B to the ghost list; second promotes B and evicts A; third hits.
+            assert_eq!(retrieve_counting(&cache, 1..2, chunk_size), 1);
+            assert_eq!(retrieve_counting(&cache, 1..2, chunk_size), 1);
+            assert_eq!(retrieve_counting(&cache, 1..2, chunk_size), 0);
+            assert_eq!(cache.len(), 1);
+        }
+    }
+
+    #[test]
     fn chunk_cache_size_limit() {
-        let cache = ChunkCacheEncoded::new_size_limit(100);
+        let cache = ChunkCacheEncoded::new_size_limit(100, None);
         retrieve(&cache, 20, 10);
         assert!(cache.len() > 0);
         assert!(cache.size() <= 100);
 
         // A chunk larger than the size limit is not cached
-        let cache = ChunkCacheEncoded::new_size_limit(100);
+        let cache = ChunkCacheEncoded::new_size_limit(100, None);
         retrieve(&cache, 1, 200);
         assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn chunk_cache_allocations() {
+        // Out of range and NaN allocations do not panic
+        for allocation in [f64::NAN, f64::NEG_INFINITY, -1.0, 0.0, 0.5, 1.0, 2.0] {
+            let cache = ChunkCacheEncoded::new_chunk_limit(4)
+                .with_hot_allocation(allocation)
+                .with_ghost_allocation(allocation);
+            retrieve(&cache, 10, 10);
+            assert!((1..=4).contains(&cache.len()));
+
+            let cache = ChunkCacheEncoded::new_size_limit(100, None)
+                .with_hot_allocation(allocation)
+                .with_ghost_allocation(allocation);
+            retrieve(&cache, 20, 10);
+            assert!(cache.size() <= 100);
+            // A hot allocation of 0 (or clamped to 0) caches no chunk with a size limit
+            if allocation > 0.0 || allocation.is_nan() {
+                assert!(cache.len() > 0);
+            } else {
+                assert_eq!(cache.len(), 0);
+            }
+        }
+
+        // A size-limited cache does not cache chunks larger than its hot allocation
+        let cache = ChunkCacheEncoded::new_size_limit(100, None).with_hot_allocation(0.5);
+        retrieve(&cache, 1, 60);
+        assert_eq!(cache.len(), 0);
+        retrieve(&cache, 1, 40);
+        assert_eq!(cache.len(), 1);
     }
 
     /// Retrieve the chunks `indices` of `size` bytes through `cache`, returning the number retrieved uncached.
@@ -243,7 +352,7 @@ mod tests {
         // A cache of 4096 chunks of 4 KiB, whose record of evicted chunks must hold more than the 1500 chunks of
         // region B for them to be admitted as frequently retrieved
         const SIZE: usize = 4096;
-        let cache = ChunkCacheEncoded::new_size_limit(4096 * SIZE as u64);
+        let cache = ChunkCacheEncoded::new_size_limit(4096 * SIZE as u64, None);
         let a = 0..4096;
         let b = 10_000..11_500;
         retrieve_counting(&cache, a.clone(), SIZE);
@@ -255,12 +364,43 @@ mod tests {
     }
 
     #[test]
+    fn chunk_cache_chunk_size_hint() {
+        // Chunks of about the hinted size are cached
+        let cache = ChunkCacheEncoded::new_size_limit(1 << 20, Some(1024));
+        retrieve(&cache, 2048, 1024);
+        assert!(cache.len() > 512);
+        assert!(cache.size() <= 1 << 20);
+
+        // Without a hint the cache is one shard, so a chunk up to its hot allocation is cached. With a hint it is split
+        // into shards of at most half the capacity, so a chunk larger than a shard is not cached.
+        let cache = ChunkCacheEncoded::new_size_limit(1 << 20, None);
+        retrieve(&cache, 1, 600 << 10);
+        assert_eq!(cache.len(), 1);
+        let cache = ChunkCacheEncoded::new_size_limit(1 << 20, Some(1024));
+        retrieve(&cache, 1, 600 << 10);
+        assert_eq!(cache.len(), 0);
+
+        // Hinted caches stay within their documented byte ceiling even when capacity is odd
+        let cache = ChunkCacheEncoded::new_size_limit(63, Some(1));
+        retrieve(&cache, 100, 1);
+        assert!(cache.size() <= 63);
+        let cache = ChunkCacheEncoded::new_size_limit(65, Some(1));
+        retrieve(&cache, 100, 1);
+        assert!(cache.size() <= 65);
+
+        // A zero hint does not panic
+        let cache = ChunkCacheEncoded::new_size_limit(100, Some(0));
+        retrieve(&cache, 20, 10);
+        assert!(cache.size() <= 100);
+    }
+
+    #[test]
     fn chunk_cache_shares_retrieval_error() {
         const WAITERS: usize = 7;
         let chunk_indices = ArrayIndices::from([0].as_slice());
         for cache in [
             ChunkCacheEncoded::new_chunk_limit(4),
-            ChunkCacheEncoded::new_size_limit(100),
+            ChunkCacheEncoded::new_size_limit(100, None),
         ] {
             let calls = AtomicUsize::new(0);
             let (loader_started_tx, loader_started_rx) = std::sync::mpsc::channel();
@@ -417,7 +557,7 @@ mod tests {
 
     #[test]
     fn chunk_cache_partial_decoder_weight_growth_does_not_panic() {
-        let cache = ChunkCachePartialDecoder::new_size_limit(100);
+        let cache = ChunkCachePartialDecoder::new_size_limit(100, None);
         let decoder = Arc::new(GrowingPartialDecoder {
             held: AtomicUsize::new(10),
         });
@@ -505,7 +645,7 @@ mod tests {
     fn chunk_cache_drops_values_outside_shard_locks() {
         let (sender, receiver) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let cache = Arc::new(ChunkCachePartialDecoder::new_size_limit(100));
+            let cache = Arc::new(ChunkCachePartialDecoder::new_size_limit(100, None));
             // Insert 5 small entries, then a single large entry that evicts >= 3 of them at once.
             for i in 0..5u64 {
                 SyncChunkCacheTraits::try_get_or_insert_with(

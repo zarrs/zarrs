@@ -15,6 +15,9 @@ const SIZE_LIMIT_MIN_CHUNK_SIZE: u64 = 4096;
 /// The minimum number of chunks a cache with a size limit is expected to hold.
 const SIZE_LIMIT_MIN_ESTIMATED_CHUNKS: usize = 1024;
 
+/// Matches `quick_cache`'s default ghost allocation.
+const DEFAULT_GHOST_ALLOCATION: f64 = 0.5;
+
 /// Return the number of chunks a cache with a size limit of `size_capacity` bytes is expected to hold, which sizes its
 /// record of recently evicted chunks.
 ///
@@ -25,6 +28,14 @@ fn size_limit_estimated_chunks(size_capacity: u64) -> usize {
     usize::try_from(size_capacity / SIZE_LIMIT_MIN_CHUNK_SIZE)
         .unwrap_or(usize::MAX)
         .max(SIZE_LIMIT_MIN_ESTIMATED_CHUNKS)
+}
+
+/// Return the default shard count before shrinking for small caches, matching `quick_cache`.
+fn default_shards() -> usize {
+    let parallelism = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZeroUsize::get)
+        .min(1 << 16);
+    (parallelism * 4).next_power_of_two()
 }
 
 /// A cached chunk paired with its weight at insertion.
@@ -108,24 +119,124 @@ pub(super) struct Cache<CT> {
     by_size: bool,
 }
 
-fn new_cache<CT: ChunkCacheType>(
-    options: &mut OptionsBuilder,
+/// The configuration of a cache, kept so that it can be rebuilt with other eviction options.
+#[derive(Clone, Copy)]
+pub(super) struct Config {
     weight_capacity: u64,
     by_size: bool,
-) -> Cache<CT> {
-    // Reserve `u64::MAX` as strictly overweight so failed initialisations are never admitted.
-    let weight_capacity = weight_capacity.min(u64::MAX - 1);
-    let options = options
-        .weight_capacity(weight_capacity)
-        .build()
-        .expect("the weight capacity and estimated items capacity are set");
-    let cache = InnerCache::with_options(
-        options,
-        ChunkWeighter,
-        DefaultHashBuilder::default(),
-        DropOutsideLockLifecycle,
-    );
-    Cache { cache, by_size }
+    hot_allocation: Option<f64>,
+    ghost_allocation: Option<f64>,
+    chunk_size_hint: Option<u64>,
+}
+
+/// Clamp an allocation to `[0, 1]`, or return `None` for NaN, since `quick_cache` panics on either.
+fn clamp_allocation(allocation: f64) -> Option<f64> {
+    (!allocation.is_nan()).then(|| allocation.clamp(0.0, 1.0))
+}
+
+impl Config {
+    pub(super) fn chunk_limit(chunk_capacity: u64) -> Self {
+        Self {
+            weight_capacity: chunk_capacity,
+            by_size: false,
+            hot_allocation: None,
+            ghost_allocation: None,
+            chunk_size_hint: None,
+        }
+    }
+
+    pub(super) fn size_limit(size_capacity: u64, chunk_size_hint: Option<u64>) -> Self {
+        Self {
+            weight_capacity: size_capacity,
+            by_size: true,
+            hot_allocation: None,
+            ghost_allocation: None,
+            chunk_size_hint: chunk_size_hint.map(|chunk_size| chunk_size.max(1)),
+        }
+    }
+
+    pub(super) fn with_hot_allocation(mut self, hot_allocation: f64) -> Self {
+        self.hot_allocation = clamp_allocation(hot_allocation).or(self.hot_allocation);
+        self
+    }
+
+    pub(super) fn with_ghost_allocation(mut self, ghost_allocation: f64) -> Self {
+        self.ghost_allocation = clamp_allocation(ghost_allocation).or(self.ghost_allocation);
+        self
+    }
+
+    pub(super) fn build<CT: ChunkCacheType>(&self) -> Cache<CT> {
+        // Reserve `u64::MAX` as strictly overweight so failed initialisations are never admitted.
+        let max_weight_capacity = self.weight_capacity.min(u64::MAX - 1);
+        let mut ghost_allocation = self.ghost_allocation.unwrap_or(DEFAULT_GHOST_ALLOCATION);
+
+        let (num_shards, weight_capacity, estimated_items_capacity) =
+            if let (true, Some(chunk_size)) = (self.by_size, self.chunk_size_hint) {
+                // Shards hold at least 32 chunks of the hinted size each.
+                let items = usize::try_from(max_weight_capacity / chunk_size)
+                    .unwrap_or(usize::MAX)
+                    .max(1);
+                let mut num_shards = default_shards();
+                while num_shards > 1 && items / num_shards < 32 {
+                    num_shards /= 2;
+                }
+                // Round down to a multiple of `num_shards` so per-shard ceiling division in `quick_cache`
+                // cannot exceed `self.weight_capacity`.
+                let weight_capacity =
+                    max_weight_capacity - (max_weight_capacity % num_shards as u64);
+                (num_shards, weight_capacity, items)
+            } else if self.by_size {
+                // A single shard, since a chunk larger than the capacity of a shard is never cached and the chunk size
+                // is not known in advance.
+                (
+                    1,
+                    max_weight_capacity,
+                    size_limit_estimated_chunks(max_weight_capacity),
+                )
+            } else {
+                // Shards are sized to hold at least 32 chunks each.
+                let items = usize::try_from(max_weight_capacity).unwrap_or(usize::MAX);
+                let mut num_shards = default_shards();
+                while num_shards > 1 && items / num_shards < 32 {
+                    num_shards /= 2;
+                }
+                (num_shards, max_weight_capacity, items)
+            };
+
+        // Keep at least one ghost slot per shard of a non-empty cache, even with a ghost allocation of 0. Otherwise a
+        // shard whose hot share is full (e.g. `new_chunk_limit(1)`) evicts each new chunk without a record that could
+        // promote it, so it never caches another chunk. `quick_cache` holds `floor(shard_items * ghost_allocation)`
+        // ghosts per shard; the 1.5 keeps that at least 1 despite rounding.
+        if weight_capacity > 0 {
+            let shard_items = estimated_items_capacity.div_ceil(num_shards).max(1);
+            if (shard_items as f64 * ghost_allocation) as usize == 0 {
+                ghost_allocation = (1.5 / shard_items as f64).min(1.0);
+            }
+        }
+
+        let mut options = OptionsBuilder::new();
+        options
+            .shards(num_shards)
+            .weight_capacity(weight_capacity)
+            .estimated_items_capacity(estimated_items_capacity);
+        if let Some(hot_allocation) = self.hot_allocation {
+            options.hot_allocation(hot_allocation);
+        }
+        options.ghost_allocation(ghost_allocation);
+        let options = options
+            .build()
+            .expect("the weight capacity and estimated items capacity are set");
+        let cache = InnerCache::with_options(
+            options,
+            ChunkWeighter,
+            DefaultHashBuilder::default(),
+            DropOutsideLockLifecycle,
+        );
+        Cache {
+            cache,
+            by_size: self.by_size,
+        }
+    }
 }
 
 impl<CT: ChunkCacheType> Cache<CT> {
@@ -183,26 +294,5 @@ impl<CT: ChunkCacheType> Cache<CT> {
             // Waiting without a timeout does not time out, but initialise the chunk uncached if it does
             GuardResult::Timeout => f().map_err(Arc::new),
         }
-    }
-    pub(super) fn new_with_chunk_capacity(chunk_capacity: u64) -> Self {
-        // Shards are sized to hold at least 32 chunks each.
-        let estimated_chunks = usize::try_from(chunk_capacity).unwrap_or(usize::MAX);
-        new_cache(
-            OptionsBuilder::new().estimated_items_capacity(estimated_chunks),
-            chunk_capacity,
-            false,
-        )
-    }
-
-    pub(super) fn new_with_size_capacity(size_capacity: u64) -> Self {
-        // A single shard, since a chunk larger than the capacity of a shard is never cached and the chunk size is
-        // not known in advance.
-        new_cache(
-            OptionsBuilder::new()
-                .estimated_items_capacity(size_limit_estimated_chunks(size_capacity))
-                .shards(1),
-            size_capacity,
-            true,
-        )
     }
 }

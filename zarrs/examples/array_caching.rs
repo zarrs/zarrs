@@ -135,8 +135,10 @@ impl Read<'_> {
     ) -> Result<(), Box<dyn Error>> {
         if self.subchunked {
             // The subchunks are held in a decoded chunk cache keyed by subchunk indices, here with room for 64
-            // subchunks. Level 0 is the outermost subchunk grid, the subchunks of the shards.
-            let subchunks = ChunkCacheDecoded::new_size_limit(64 * SUBCHUNK_BYTES);
+            // subchunks. Hinting their size splits the cache into shards for concurrent reads. Level 0 is the
+            // outermost subchunk grid, the subchunks of the shards.
+            let subchunks =
+                ChunkCacheDecoded::new_size_limit(64 * SUBCHUNK_BYTES, Some(SUBCHUNK_BYTES));
             let cache = SubchunkCache::new(0, subchunks, chunks);
             self.read_twice([name, "Decoded"], cache, |cache| {
                 let mut held_ = chunks_held(cache.chunks());

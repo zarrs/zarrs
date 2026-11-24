@@ -87,10 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Add `invalidate` methods
     - Add `size` methods, which return the size of the cached chunks in bytes
   - **Breaking**: Replace `ChunkCacheLru{ChunkLimit,SizeLimit}` with `ChunkCache`, created with `new_chunk_limit` or `new_size_limit`, and the `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}` aliases with `ChunkCache{Encoded,Decoded,PartialDecoder}`
-  - Back chunk caches with `quick_cache` on all targets instead of `moka` (`lru` on `wasm32`), and remove the `moka` dependency
-    - Caches evict with S3-FIFO rather than LRU, which retains frequently retrieved chunks through scans
-    - `wasm32` caches coalesce concurrent retrievals and no longer hold a lock while retrieving a chunk
-    - Size-limited caches count each chunk as at least one byte, so fill value chunks are evicted
+    - `new_size_limit` takes an optional chunk size hint
+    - Add `[Async]ChunkCache::with_{hot,ghost}_allocation`
+  - Back chunk caches with `quick_cache` on all targets, evicting with S3-FIFO rather than LRU, and remove the `moka` and `lru` dependencies
   - **Breaking**: Remove the thread-local chunk caches (`ChunkCacheLru{Chunk,Size}LimitThreadLocal` and `ChunkCache{Encoded,Decoded,PartialDecoder}Lru{Chunk,Size}LimitThreadLocal`)
   - Add support for async caching
     - `ArrayCached` implements `AsyncArrayReadOps`, `AsyncArrayWriteOps`, and `AsyncArrayUpdateOps`, so that chunk caches can be used with asynchronous stores

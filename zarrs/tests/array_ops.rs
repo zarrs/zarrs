@@ -1276,7 +1276,7 @@ where
 #[test]
 fn array_cached_cache_size_sums_cached_chunks() -> TestResult {
     assert_decoded_cache_size(ChunkCacheDecoded::new_chunk_limit(16))?;
-    assert_decoded_cache_size(ChunkCacheDecoded::new_size_limit(1024))
+    assert_decoded_cache_size(ChunkCacheDecoded::new_size_limit(1024, None))
 }
 
 fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
@@ -1770,7 +1770,7 @@ mod async_cached {
     #[tokio::test]
     async fn array_cached_async_cache_size_sums_cached_chunks() -> TestResult {
         assert_decoded_cache_size(AsyncChunkCacheDecoded::new_chunk_limit(16)).await?;
-        assert_decoded_cache_size(AsyncChunkCacheDecoded::new_size_limit(1024)).await
+        assert_decoded_cache_size(AsyncChunkCacheDecoded::new_size_limit(1024, None)).await
     }
 
     #[tokio::test]

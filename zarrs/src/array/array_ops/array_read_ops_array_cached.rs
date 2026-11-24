@@ -727,37 +727,39 @@ mod tests {
     #[test]
     fn chunk_caches_support_encoded_values() {
         test_cache(Box::new(ChunkCacheEncoded::new_chunk_limit(2)));
-        test_cache(Box::new(ChunkCacheEncoded::new_size_limit(1024)));
+        test_cache(Box::new(ChunkCacheEncoded::new_size_limit(1024, None)));
         test_cache_sharded(ChunkCacheEncoded::new_chunk_limit(4));
-        test_cache_sharded(ChunkCacheEncoded::new_size_limit(4096));
+        test_cache_sharded(ChunkCacheEncoded::new_size_limit(4096, None));
         test_cache_nested_optional(ChunkCacheEncoded::new_chunk_limit(4));
-        test_cache_nested_optional(ChunkCacheEncoded::new_size_limit(4096));
+        test_cache_nested_optional(ChunkCacheEncoded::new_size_limit(4096, None));
         test_cache_variable(ChunkCacheEncoded::new_chunk_limit(9));
-        test_cache_variable(ChunkCacheEncoded::new_size_limit(4096));
+        test_cache_variable(ChunkCacheEncoded::new_size_limit(4096, None));
     }
 
     #[test]
     fn chunk_caches_support_decoded_values() {
         test_cache(Box::new(ChunkCacheDecoded::new_chunk_limit(2)));
-        test_cache(Box::new(ChunkCacheDecoded::new_size_limit(1024)));
+        test_cache(Box::new(ChunkCacheDecoded::new_size_limit(1024, None)));
         test_cache_sharded(ChunkCacheDecoded::new_chunk_limit(4));
-        test_cache_sharded(ChunkCacheDecoded::new_size_limit(4096));
+        test_cache_sharded(ChunkCacheDecoded::new_size_limit(4096, None));
         test_cache_nested_optional(ChunkCacheDecoded::new_chunk_limit(4));
-        test_cache_nested_optional(ChunkCacheDecoded::new_size_limit(4096));
+        test_cache_nested_optional(ChunkCacheDecoded::new_size_limit(4096, None));
         test_cache_variable(ChunkCacheDecoded::new_chunk_limit(9));
-        test_cache_variable(ChunkCacheDecoded::new_size_limit(4096));
+        test_cache_variable(ChunkCacheDecoded::new_size_limit(4096, None));
     }
 
     #[test]
     fn chunk_caches_support_partial_decoder_values() {
         test_cache(Box::new(ChunkCachePartialDecoder::new_chunk_limit(2)));
-        test_cache(Box::new(ChunkCachePartialDecoder::new_size_limit(1024)));
+        test_cache(Box::new(ChunkCachePartialDecoder::new_size_limit(
+            1024, None,
+        )));
         test_cache_sharded(ChunkCachePartialDecoder::new_chunk_limit(4));
-        test_cache_sharded(ChunkCachePartialDecoder::new_size_limit(4096));
+        test_cache_sharded(ChunkCachePartialDecoder::new_size_limit(4096, None));
         test_cache_nested_optional(ChunkCachePartialDecoder::new_chunk_limit(4));
-        test_cache_nested_optional(ChunkCachePartialDecoder::new_size_limit(4096));
+        test_cache_nested_optional(ChunkCachePartialDecoder::new_size_limit(4096, None));
         test_cache_variable(ChunkCachePartialDecoder::new_chunk_limit(9));
-        test_cache_variable(ChunkCachePartialDecoder::new_size_limit(4096));
+        test_cache_variable(ChunkCachePartialDecoder::new_size_limit(4096, None));
     }
 
     #[derive(Default)]

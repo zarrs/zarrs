@@ -888,37 +888,37 @@ mod tests {
     #[tokio::test]
     async fn async_chunk_caches_support_encoded_values() {
         test_cache_async(Box::new(AsyncChunkCacheEncoded::new_chunk_limit(2))).await;
-        test_cache_async(Box::new(AsyncChunkCacheEncoded::new_size_limit(1024))).await;
+        test_cache_async(Box::new(AsyncChunkCacheEncoded::new_size_limit(1024, None))).await;
         test_cache_sharded_async(AsyncChunkCacheEncoded::new_chunk_limit(4)).await;
         test_cache_into_async(AsyncChunkCacheEncoded::new_chunk_limit(4)).await;
         test_cache_nested_optional_async(AsyncChunkCacheEncoded::new_chunk_limit(4)).await;
         test_cache_variable_async(AsyncChunkCacheEncoded::new_chunk_limit(9)).await;
-        test_cache_variable_async(AsyncChunkCacheEncoded::new_size_limit(4096)).await;
+        test_cache_variable_async(AsyncChunkCacheEncoded::new_size_limit(4096, None)).await;
     }
 
     #[tokio::test]
     async fn async_chunk_caches_support_decoded_values() {
         test_cache_async(Box::new(AsyncChunkCacheDecoded::new_chunk_limit(2))).await;
-        test_cache_async(Box::new(AsyncChunkCacheDecoded::new_size_limit(1024))).await;
+        test_cache_async(Box::new(AsyncChunkCacheDecoded::new_size_limit(1024, None))).await;
         test_cache_sharded_async(AsyncChunkCacheDecoded::new_chunk_limit(4)).await;
         test_cache_into_async(AsyncChunkCacheDecoded::new_chunk_limit(4)).await;
         test_cache_nested_optional_async(AsyncChunkCacheDecoded::new_chunk_limit(4)).await;
         test_cache_variable_async(AsyncChunkCacheDecoded::new_chunk_limit(9)).await;
-        test_cache_variable_async(AsyncChunkCacheDecoded::new_size_limit(4096)).await;
+        test_cache_variable_async(AsyncChunkCacheDecoded::new_size_limit(4096, None)).await;
     }
 
     #[tokio::test]
     async fn async_chunk_caches_support_async_partial_decoder_values() {
         test_cache_async(Box::new(AsyncChunkCachePartialDecoder::new_chunk_limit(2))).await;
         test_cache_async(Box::new(AsyncChunkCachePartialDecoder::new_size_limit(
-            1024,
+            1024, None,
         )))
         .await;
         test_cache_sharded_async(AsyncChunkCachePartialDecoder::new_chunk_limit(4)).await;
         test_cache_into_async(AsyncChunkCachePartialDecoder::new_chunk_limit(4)).await;
         test_cache_nested_optional_async(AsyncChunkCachePartialDecoder::new_chunk_limit(4)).await;
         test_cache_variable_async(AsyncChunkCachePartialDecoder::new_chunk_limit(9)).await;
-        test_cache_variable_async(AsyncChunkCachePartialDecoder::new_size_limit(4096)).await;
+        test_cache_variable_async(AsyncChunkCachePartialDecoder::new_size_limit(4096, None)).await;
     }
 
     /// Cached async retrievals must be `Send` so that they can be used with
