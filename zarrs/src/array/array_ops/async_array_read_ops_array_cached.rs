@@ -574,9 +574,10 @@ where
 mod tests {
     use super::*;
     use crate::array::cache::{
-        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
         AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCacheEncodedLruSizeLimit,
         AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCachePartialDecoderLruSizeLimit,
+        AsyncChunkCacheTraits,
     };
     use crate::array::{
         ArrayBuilder, ArrayBytesFixedDisjointView, ArraySubset, FillValue, data_type,
@@ -586,7 +587,7 @@ mod tests {
 
     async fn test_cache_async<C>(cache: Box<C>)
     where
-        C: AsyncChunkCache + ?Sized + 'static,
+        C: AsyncChunkCacheTraits + ?Sized + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -686,7 +687,7 @@ mod tests {
 
     async fn test_cache_sharded_async<C>(cache: C)
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
@@ -748,7 +749,7 @@ mod tests {
 
     async fn test_cache_into_async<C>(cache: C)
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
@@ -794,7 +795,7 @@ mod tests {
     /// Merge complete and partial variable-length chunks, including missing chunks.
     async fn test_cache_variable_async<C>(cache: C)
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![6, 6], vec![2, 2], data_type::string(), "")
@@ -840,7 +841,7 @@ mod tests {
     /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
     async fn test_cache_nested_optional_async<C>(cache: C)
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(
@@ -927,7 +928,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     async fn test_cache_spawn_async<C>(cache: C)
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -978,7 +979,7 @@ mod tests {
 
         let cached: ArrayCached<
             AsyncMemoryStore,
-            dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>,
+            dyn AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>,
         > = ArrayCached::new_boxed(
             array.clone(),
             Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(16)),
@@ -994,12 +995,12 @@ mod tests {
         cached.async_invalidate().await;
         assert!(cached.cache().is_empty().await);
 
-        test_cache_async::<dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>>(Box::new(
+        test_cache_async::<dyn AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>>(Box::new(
             AsyncChunkCacheDecodedLruChunkLimit::new(16),
         ))
         .await;
 
-        let dyn_subchunks: Box<dyn AsyncChunkCache<Value = ChunkCacheTypeDecoded>> =
+        let dyn_subchunks: Box<dyn AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>> =
             Box::new(AsyncChunkCacheDecodedLruChunkLimit::new(16));
         let dyn_chunks: Box<dyn AsyncArrayCache> =
             Box::new(AsyncChunkCachePartialDecoderLruChunkLimit::new(4));

@@ -4,7 +4,7 @@
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
-use zarrs::array::cache::{ChunkCache, ChunkCacheDecodedLruChunkLimit};
+use zarrs::array::cache::{ChunkCacheDecodedLruChunkLimit, SyncChunkCacheTraits};
 use zarrs::array::{ArrayBuilder, ArrayCached, Resources, data_type};
 use zarrs::storage::byte_range::ByteRangeIterator;
 use zarrs::storage::store::MemoryStore;
@@ -125,7 +125,7 @@ fn failed_writes_invalidate_the_chunks_they_may_have_changed() -> TestResult {
 #[cfg(feature = "async")]
 #[tokio::test]
 async fn async_failed_writes_invalidate_the_chunks_they_may_have_changed() -> TestResult {
-    use zarrs::array::cache::{AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit};
+    use zarrs::array::cache::{AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheTraits};
     use zarrs::storage::storage_adapter::sync_to_async::{
         SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
     };

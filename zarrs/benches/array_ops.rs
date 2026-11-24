@@ -373,11 +373,11 @@ fn partial_decoder(c: &mut Criterion) {
 fn chunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
     use zarrs::array::cache::{
-        ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-        ChunkCachePartialDecoderLruChunkLimit,
+        ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
+        ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheTraits,
     };
 
-    fn bench_cache<C: ChunkCache>(
+    fn bench_cache<C: SyncChunkCacheTraits>(
         group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
         array: &Arc<zarrs::array::Array<MemoryStore>>,
         label: &str,
@@ -505,14 +505,14 @@ fn subchunk_cache(c: &mut Criterion) {
 fn async_chunk_cache(c: &mut Criterion) {
     use zarrs::array::ArrayCached;
     use zarrs::array::cache::{
-        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit,
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheTraits,
     };
     use zarrs::storage::store::AsyncMemoryStore;
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    fn bench_cache<C: AsyncChunkCache>(
+    fn bench_cache<C: AsyncChunkCacheTraits>(
         group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
         rt: &tokio::runtime::Runtime,
         array: &Arc<zarrs::array::Array<AsyncMemoryStore>>,

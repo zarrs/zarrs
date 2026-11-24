@@ -504,17 +504,17 @@ mod tests {
 
     use super::*;
     use crate::array::cache::{
-        ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
+        ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
         ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
         ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruSizeLimit,
-        ChunkCacheType, ChunkCacheTypeDecoded,
+        ChunkCacheType, ChunkCacheTypeDecoded, SyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArrayError, ArrayIndices, ArraySubset, FillValue, data_type};
     use zarrs_storage::store::MemoryStore;
 
     fn test_cache<C>(cache: Box<C>)
     where
-        C: ChunkCache + ?Sized,
+        C: SyncChunkCacheTraits + ?Sized,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -609,7 +609,7 @@ mod tests {
 
     fn test_cache_sharded<C>(cache: C)
     where
-        C: ChunkCache,
+        C: SyncChunkCacheTraits,
     {
         let store = Arc::new(MemoryStore::default());
         let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
@@ -653,7 +653,7 @@ mod tests {
     /// Merge complete and partial variable-length chunks, including missing chunks.
     fn test_cache_variable<C>(cache: C)
     where
-        C: ChunkCache,
+        C: SyncChunkCacheTraits,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![6, 6], vec![2, 2], data_type::string(), "")
@@ -690,7 +690,7 @@ mod tests {
     /// Retrieving a subset spanning multiple chunks must handle nested optional data types.
     fn test_cache_nested_optional<C>(cache: C)
     where
-        C: ChunkCache,
+        C: SyncChunkCacheTraits,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(
@@ -767,7 +767,7 @@ mod tests {
         values: Mutex<HashMap<ArrayIndices, ChunkCacheTypeDecoded>>,
     }
 
-    impl ChunkCache for CustomDecodedCache {
+    impl SyncChunkCacheTraits for CustomDecodedCache {
         type Value = ChunkCacheTypeDecoded;
 
         fn try_get_or_insert_with(
@@ -829,12 +829,14 @@ mod tests {
             .store_array_subset(&array.subset_all(), data.as_slice(), &Resources::default())
             .unwrap();
 
-        // dyn ChunkCache<Value = ChunkCacheTypeDecoded>
-        let cached: ArrayCached<MemoryStore, dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
-            ArrayCached::new_boxed(
-                array.clone(),
-                Box::new(ChunkCacheDecodedLruChunkLimit::new(4)),
-            );
+        // dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>
+        let cached: ArrayCached<
+            MemoryStore,
+            dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>,
+        > = ArrayCached::new_boxed(
+            array.clone(),
+            Box::new(ChunkCacheDecodedLruChunkLimit::new(4)),
+        );
         assert_eq!(
             cached
                 .retrieve_array_subset::<Vec<u8>>(&array.subset_all(), &Resources::default())
@@ -845,12 +847,12 @@ mod tests {
         cached.invalidate();
         assert!(cached.cache().is_empty());
 
-        test_cache::<dyn ChunkCache<Value = ChunkCacheTypeDecoded>>(Box::new(
+        test_cache::<dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>>(Box::new(
             ChunkCacheDecodedLruChunkLimit::new(4),
         ));
 
-        // SubchunkCache over dyn ChunkCache and dyn SyncArrayCache
-        let dyn_subchunks: Box<dyn ChunkCache<Value = ChunkCacheTypeDecoded>> =
+        // SubchunkCache over dyn SyncChunkCacheTraits and dyn SyncArrayCache
+        let dyn_subchunks: Box<dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>> =
             Box::new(ChunkCacheDecodedLruChunkLimit::new(4));
         let dyn_chunks: Box<dyn SyncArrayCache> =
             Box::new(ChunkCachePartialDecoderLruChunkLimit::new(4));

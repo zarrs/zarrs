@@ -8,9 +8,10 @@ use super::{
 };
 use crate::array::array_ops::fill_value_bytes;
 #[cfg(feature = "async")]
-use crate::array::cache::{AsyncCachedArray, AsyncChunkCache, SealedAsync};
+use crate::array::cache::{AsyncCachedArray, AsyncChunkCacheTraits, SealedAsync};
 use crate::array::cache::{
-    CachedArrayMeta, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, SealedSync, SyncCachedArray,
+    CachedArrayMeta, ChunkCacheType, ChunkCacheTypeDecoded, SealedSync, SyncCachedArray,
+    SyncChunkCacheTraits,
 };
 use crate::array::{
     ArrayBytes, ArrayError, ChunkShape, ChunkShapeTraits, CodecOptions, DataType, FillValue,
@@ -192,7 +193,7 @@ fn retrieve_decoded<C>(
     resources: &Resources,
 ) -> Result<ChunkCacheTypeDecoded, ArrayError>
 where
-    C: ChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+    C: SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized,
 {
     cache
         .try_get_or_insert_with(chunk_indices.into(), &mut || {
@@ -215,7 +216,7 @@ async fn async_retrieve_decoded<C>(
     resources: &Resources,
 ) -> Result<ChunkCacheTypeDecoded, ArrayError>
 where
-    C: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+    C: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized,
 {
     cache
         .try_get_or_insert_with(
@@ -240,7 +241,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         let bytes = retrieve_decoded(cache, array, chunk_indices, options, resources)?;
@@ -255,7 +256,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
         retrieve_decoded(cache, array, chunk_indices, options, resources)
@@ -270,7 +271,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         let chunk = retrieve_decoded(cache, array, chunk_indices, options, resources)?;
@@ -286,7 +287,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<(), ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         validate_target_num_elements(output_target, chunk_shape.num_elements_u64())?;
@@ -304,7 +305,7 @@ impl SealedSync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<(), ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape =
             validate_partial_chunk_indexer(array, chunk_indices, indexer, output_target)?;
@@ -330,7 +331,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>
     where
-        C: AsyncChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         let bytes = async_retrieve_decoded(cache, array, chunk_indices, options, resources).await?;
@@ -347,7 +348,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
-        C: AsyncChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
         async_retrieve_decoded(cache, array, chunk_indices, options, resources).await
@@ -362,7 +363,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
-        C: AsyncChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         let chunk = async_retrieve_decoded(cache, array, chunk_indices, options, resources).await?;
@@ -378,7 +379,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<(), ArrayError>
     where
-        C: AsyncChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         validate_target_num_elements(output_target, chunk_shape.num_elements_u64())?;
@@ -396,7 +397,7 @@ impl SealedAsync for ChunkCacheTypeDecoded {
         resources: &Resources,
     ) -> Result<(), ArrayError>
     where
-        C: AsyncChunkCache<Value = Self> + ?Sized,
+        C: AsyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape =
             validate_partial_chunk_indexer(array, chunk_indices, indexer, output_target)?;

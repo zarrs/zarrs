@@ -5,7 +5,7 @@ use super::{
     validate_partial_chunk_indexer, validate_target_num_elements,
 };
 use crate::array::cache::{
-    ChunkCache, ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync, SyncCachedArray,
+    ChunkCacheType, ChunkCacheTypePartialDecoder, SealedSync, SyncCachedArray, SyncChunkCacheTraits,
 };
 use crate::array::{
     ArrayBytes, ArrayError, ArraySubset, ChunkShapeTraits, CodecOptions, Indexer, Resources,
@@ -30,7 +30,7 @@ fn retrieve_partial_decoder<C>(
     resources: &Resources,
 ) -> Result<ChunkCacheTypePartialDecoder, ArrayError>
 where
-    C: ChunkCache<Value = ChunkCacheTypePartialDecoder> + ?Sized,
+    C: SyncChunkCacheTraits<Value = ChunkCacheTypePartialDecoder> + ?Sized,
 {
     cache
         .try_get_or_insert_with(chunk_indices.into(), &mut || {
@@ -48,7 +48,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         resources: &Resources,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         validate_chunk_indices(array, chunk_indices)?;
         retrieve_partial_decoder(cache, array, chunk_indices, options, resources)
@@ -62,7 +62,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let shape = chunk_shape_to_array_shape(&validate_chunk_indices(array, chunk_indices)?);
         let decoder = retrieve_partial_decoder(cache, array, chunk_indices, options, resources)?;
@@ -87,7 +87,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         resources: &Resources,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         Ok(
             Self::partial_decoder(cache, array, chunk_indices, options, resources)?
@@ -106,7 +106,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         resources: &Resources,
     ) -> Result<(), ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
         validate_target_num_elements(output_target, chunk_shape.num_elements_u64())?;
@@ -135,7 +135,7 @@ impl SealedSync for ChunkCacheTypePartialDecoder {
         resources: &Resources,
     ) -> Result<(), ArrayError>
     where
-        C: ChunkCache<Value = Self> + ?Sized,
+        C: SyncChunkCacheTraits<Value = Self> + ?Sized,
     {
         validate_partial_chunk_indexer(array, chunk_indices, indexer, output_target)?;
         retrieve_partial_decoder(cache, array, chunk_indices, options, resources)?

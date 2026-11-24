@@ -6,8 +6,8 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use zarrs::array::cache::{
-    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-    ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheType,
+    ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
+    ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheTraits, SyncChunkCacheType,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, ArrayError, ArrayIndices, ArrayMetadata, ArraySubset,
@@ -603,7 +603,7 @@ fn check_cached_reads<T, C>(
     elements: &[T],
 ) where
     T: Element + ElementOwned + Clone + PartialEq + Debug,
-    C: ChunkCache,
+    C: SyncChunkCacheTraits,
     C::Value: SyncChunkCacheType,
 {
     let resources = Resources::default();
@@ -837,8 +837,8 @@ fn element_order_cached_reads() {
 mod async_reads {
     use super::*;
     use zarrs::array::cache::{
-        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheType,
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheTraits, AsyncChunkCacheType,
     };
     use zarrs_storage::store::AsyncMemoryStore;
 
@@ -1079,7 +1079,7 @@ mod async_reads {
         elements: &[T],
     ) where
         T: Element + ElementOwned + Clone + PartialEq + Debug + Send + Sync,
-        C: AsyncChunkCache,
+        C: AsyncChunkCacheTraits,
         C::Value: AsyncChunkCacheType,
     {
         let resources = Resources::default();
@@ -1161,7 +1161,7 @@ mod async_reads {
         resources: &Resources,
     ) where
         T: Element + ElementOwned + Clone + PartialEq + Debug + Send + Sync,
-        C: AsyncChunkCache,
+        C: AsyncChunkCacheTraits,
         C::Value: AsyncChunkCacheType,
     {
         cached.async_erase_chunk(&[1, 1]).await.unwrap();

@@ -6,9 +6,9 @@ use std::sync::Arc;
 use zarrs::array::Resources;
 
 use zarrs::array::cache::{
-    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-    ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, ChunkCacheTypeDecoded,
-    SubchunkCache,
+    ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
+    ChunkCachePartialDecoderLruChunkLimit, ChunkCacheTypeDecoded, SubchunkCache,
+    SyncChunkCacheTraits,
 };
 use zarrs::array::codec::array_to_array::reshape::ReshapeShape;
 use zarrs::array::codec::array_to_bytes::sharding::{
@@ -1141,7 +1141,7 @@ fn array_and_cached_support_optional_operation_suite() -> TestResult {
 /// Read subsets covering chunks partially along rows, columns or both through each type of chunk cache.
 #[test]
 fn cached_partial_chunk_reads_match_uncached() -> TestResult {
-    fn check<C: ChunkCache>(array: &Arc<Array<MemoryStore>>, cache: C) -> TestResult {
+    fn check<C: SyncChunkCacheTraits>(array: &Arc<Array<MemoryStore>>, cache: C) -> TestResult {
         let cached = ArrayCached::new(array.clone(), cache);
         for ranges in [
             [0..2, 0..6],
@@ -1193,7 +1193,7 @@ fn cached_partial_chunk_reads_match_uncached() -> TestResult {
 
 fn assert_cache_hits_and_invalidation<C>(cache: C, caches_full_chunk_reads: bool) -> TestResult
 where
-    C: ChunkCache + 'static,
+    C: SyncChunkCacheTraits + 'static,
     C::Value: zarrs::array::cache::SyncChunkCacheType,
 {
     let (array, store) = fixture();
@@ -1256,7 +1256,7 @@ fn array_cached_cache_hits_and_invalidation_cover_all_value_types() -> TestResul
 /// Check that the size of a decoded chunk `cache` is the size of its cached chunks.
 fn assert_decoded_cache_size<C>(cache: C) -> TestResult
 where
-    C: ChunkCache<Value = ChunkCacheTypeDecoded> + 'static,
+    C: SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + 'static,
 {
     let (array, _store) = fixture();
     array.store_chunk(&[0, 0], &[1u8; 9], &Resources::default())?;
@@ -1282,7 +1282,7 @@ fn array_cached_cache_size_sums_cached_chunks() -> TestResult {
 
 fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
 where
-    C: ChunkCache + 'static,
+    C: SyncChunkCacheTraits + 'static,
     C::Value: zarrs::array::cache::SyncChunkCacheType,
 {
     let (array, store) = fixture();
@@ -1527,9 +1527,9 @@ mod async_cached {
     use zarrs::array::Resources;
 
     use zarrs::array::cache::{
-        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
         AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
-        ChunkCacheTypeDecoded,
+        AsyncChunkCacheTraits, ChunkCacheTypeDecoded,
     };
     use zarrs::array::{
         Array, ArrayBuilder, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
@@ -1613,7 +1613,7 @@ mod async_cached {
         caches_full_chunk_reads: bool,
     ) -> TestResult
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let (array, store) = fixture();
         array
@@ -1685,7 +1685,7 @@ mod async_cached {
 
     async fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let (array, store) = fixture();
         populate(array.as_ref()).await?;
@@ -1744,7 +1744,7 @@ mod async_cached {
     /// The asynchronous counterpart of `assert_decoded_cache_size`.
     async fn assert_decoded_cache_size<C>(cache: C) -> TestResult
     where
-        C: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + 'static,
+        C: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + 'static,
     {
         let (array, _store) = fixture();
         array
@@ -1789,7 +1789,7 @@ mod async_cached {
     /// task would issue its own store reads, which is what this counts.
     async fn assert_concurrent_retrievals_are_coalesced<C>(cache: C) -> TestResult
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let (array, store) = fixture();
         array

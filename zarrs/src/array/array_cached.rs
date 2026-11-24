@@ -14,7 +14,7 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// invalidate cached chunks that may have changed.
 ///
 /// The cache is a [`SyncArrayCache`](super::cache::SyncArrayCache) for synchronous operations, such as any
-/// [`ChunkCache`](super::cache::ChunkCache). The cache determines how it serves each retrieval and what each
+/// [`SyncChunkCacheTraits`](super::cache::SyncChunkCacheTraits). The cache determines how it serves each retrieval and what each
 /// write invalidates; a chunk cache invalidates whole chunks.
 ///
 /// The cache belongs to this array. Clones and rebinds of an `ArrayCached` (e.g.
@@ -88,9 +88,9 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// ## Asynchronous Operations
 ///
 /// With the `async` feature, `ArrayCached` also supports the `async_` prefixed
-/// operations, which require an `AsyncArrayCache`, such as any `AsyncChunkCache` — one of the
+/// operations, which require an `AsyncArrayCache`, such as any `AsyncChunkCacheTraits` — one of the
 /// `AsyncChunkCache*Lru*` caches, or a custom implementation.
-/// A chunk cache implements either `ChunkCache` or `AsyncChunkCache`, so a given `ArrayCached`
+/// A chunk cache implements either `SyncChunkCacheTraits` or `AsyncChunkCacheTraits`, so a given `ArrayCached`
 /// supports one flavour of operation; a synchronous cache passed to an `async_` operation
 /// is rejected at compile time:
 ///

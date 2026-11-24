@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use subchunk_grid_cases::{Case, cases, plain_sharding};
 use zarrs::array::cache::{
-    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-    ChunkCachePartialDecoderLruChunkLimit,
+    ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
+    ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheTraits,
 };
 use zarrs::array::{
     Array, ArrayBuilder, ArrayCached, ArrayPartialEncoderTraits, CodecOptions, data_type,
@@ -96,7 +96,7 @@ fn local_subchunk_grid_exposed_by_partial_encoders() -> TestResult {
 }
 
 /// A cache only exposes subchunks if it caches something that can still resolve them.
-fn check_cache<C: ChunkCache + 'static>(
+fn check_cache<C: SyncChunkCacheTraits + 'static>(
     case: &Case,
     array: &Arc<Array<MemoryStore>>,
     cache: C,

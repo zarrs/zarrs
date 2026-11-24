@@ -21,9 +21,9 @@ use crate::array::array_bytes_internal::{
     FixedDecodeBuffers, merge_cached_chunks, optional_innermost, optional_innermost_with_depth,
 };
 #[cfg(feature = "async")]
-use crate::array::cache::{AsyncArrayCache, AsyncCachedArray, AsyncChunkCache};
+use crate::array::cache::{AsyncArrayCache, AsyncCachedArray, AsyncChunkCacheTraits};
 use crate::array::cache::{
-    CachedArrayMeta, ChunkCache, ChunkCacheTypeDecoded, SyncArrayCache, SyncCachedArray,
+    CachedArrayMeta, ChunkCacheTypeDecoded, SyncArrayCache, SyncCachedArray, SyncChunkCacheTraits,
 };
 use crate::array::concurrency::split_resources;
 use crate::array::{
@@ -377,6 +377,7 @@ impl<'a> ChunkSubchunks<'a> {
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncChunkCacheTraits => SyncChunkCacheTraits,
             Fut => Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>,
         )
     ),
@@ -395,7 +396,7 @@ impl ChunkSubchunks<'_> {
         resources: &Resources,
     ) -> Result<Option<RegionSubchunk>, ArrayError>
     where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized,
         F: Fn() -> Fut + MaybeSync,
         Fut: AsyncOpenedPartialDecoder,
     {
@@ -433,7 +434,7 @@ impl ChunkSubchunks<'_> {
         resources: &Resources,
     ) -> Result<Option<AssembledRegion>, ArrayError>
     where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized,
         F: Fn() -> Fut + MaybeSync,
         Fut: AsyncOpenedPartialDecoder,
     {
@@ -462,7 +463,7 @@ impl ChunkSubchunks<'_> {
         compose: impl FnOnce(&RegionPlan, &[RegionSubchunk]) -> Result<R, ArrayError> + MaybeSend,
     ) -> Result<Option<R>, ArrayError>
     where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized,
         F: Fn() -> Fut + MaybeSync,
         Fut: AsyncOpenedPartialDecoder,
     {
@@ -529,7 +530,7 @@ impl ChunkSubchunks<'_> {
         resources: &Resources,
     ) -> Result<bool, ArrayError>
     where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized,
         F: Fn() -> Fut + MaybeSync,
         Fut: AsyncOpenedPartialDecoder,
     {
@@ -579,7 +580,7 @@ impl ChunkSubchunks<'_> {
         resources: &Resources,
     ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
     where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized,
         F: Fn() -> Fut + MaybeSync,
         Fut: AsyncOpenedPartialDecoder,
     {
@@ -610,7 +611,7 @@ impl ChunkSubchunks<'_> {
         resources: &Resources,
     ) -> Result<bool, ArrayError>
     where
-        S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized,
+        S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized,
         F: Fn() -> Fut + MaybeSync,
         Fut: AsyncOpenedPartialDecoder,
     {
@@ -645,6 +646,7 @@ impl ChunkSubchunks<'_> {
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),
     async(
@@ -655,7 +657,7 @@ impl ChunkSubchunks<'_> {
 )]
 impl<S, C> AsyncArrayCacheOps for SubchunkCache<S, C>
 where
-    S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
+    S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
     C: AsyncArrayCache,
 {
     async fn async_cached_partial_decoder(
@@ -911,6 +913,7 @@ impl<S: ?Sized, D: ?Sized> SubchunkCachePartialDecoder<S, D> {
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),
     async(
@@ -922,7 +925,7 @@ impl<S: ?Sized, D: ?Sized> SubchunkCachePartialDecoder<S, D> {
 impl<S> AsyncArrayPartialDecoderSubchunkingTraits
     for SubchunkCachePartialDecoder<S, dyn AsyncArrayPartialDecoderTraits>
 where
-    S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
+    S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
 {
     async fn local_subchunk_grids(
         &self,
@@ -941,6 +944,7 @@ where
             AsyncArrayCache => SyncArrayCache,
             AsyncCachedArray => SyncCachedArray,
             AsyncArrayCacheOps => SyncArrayCacheOps,
+            AsyncChunkCacheTraits => SyncChunkCacheTraits,
         )
     ),
     async(
@@ -952,7 +956,7 @@ where
 impl<S> AsyncArrayPartialDecoderTraits
     for SubchunkCachePartialDecoder<S, dyn AsyncArrayPartialDecoderTraits>
 where
-    S: AsyncChunkCache<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
+    S: AsyncChunkCacheTraits<Value = ChunkCacheTypeDecoded> + ?Sized + 'static,
 {
     fn data_type(&self) -> &DataType {
         &self.data_type

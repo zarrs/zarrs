@@ -22,12 +22,12 @@
 //!  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
 //!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 //!
-//! `zarrs` consumers can create custom cache policies by implementing the [`ChunkCache`] trait.
+//! `zarrs` consumers can create custom cache policies by implementing the [`SyncChunkCacheTraits`] trait.
 //! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
-//! [`ArrayCached`](super::ArrayCached) accepts any [`SyncArrayCache`], which every [`ChunkCache`] is.
+//! [`ArrayCached`](super::ArrayCached) accepts any [`SyncArrayCache`], which every [`SyncChunkCacheTraits`] is.
 //!
 //! With the `async` feature, [`ArrayCached`](super::ArrayCached) also supports asynchronous array
-//! operations, which need an `AsyncChunkCache` rather than a [`ChunkCache`].
+//! operations, which need an `AsyncChunkCacheTraits` rather than a [`SyncChunkCacheTraits`].
 //! The `AsyncChunkCacheLru{ChunkLimit,SizeLimit}` caches are the asynchronous counterparts of the
 //! caches above, with an `AsyncChunkCache{Encoded,Decoded,PartialDecoder}Lru{ChunkLimit,SizeLimit}`
 //! alias per chunk type.
@@ -144,13 +144,13 @@ mod chunk_cache_type_sealed {
     use std::sync::Arc;
 
     use super::{
-        ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCache, ChunkCacheType,
-        ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, CodecOptions,
-        Indexer, Resources, SyncCachedArray,
+        ArrayBytes, ArrayError, ArrayPartialDecoderTraits, ChunkCacheType, ChunkCacheTypeDecoded,
+        ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, CodecOptions, Indexer, Resources,
+        SyncCachedArray, SyncChunkCacheTraits,
     };
     #[cfg(feature = "async")]
     use super::{
-        AsyncArrayPartialDecoderTraits, AsyncCachedArray, AsyncChunkCache,
+        AsyncArrayPartialDecoderTraits, AsyncCachedArray, AsyncChunkCacheTraits,
         ChunkCacheTypeAsyncPartialDecoder, MaybeSend,
     };
     use zarrs_codec::ArrayBytesTarget;
@@ -176,7 +176,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
         where
-            C: ChunkCache<Value = Self> + ?Sized;
+            C: SyncChunkCacheTraits<Value = Self> + ?Sized;
 
         fn retrieve_chunk_bytes_if_exists<C>(
             cache: &C,
@@ -186,7 +186,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
         where
-            C: ChunkCache<Value = Self> + ?Sized;
+            C: SyncChunkCacheTraits<Value = Self> + ?Sized;
 
         fn retrieve_partial_chunk_bytes<C>(
             cache: &C,
@@ -197,7 +197,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
         where
-            C: ChunkCache<Value = Self> + ?Sized;
+            C: SyncChunkCacheTraits<Value = Self> + ?Sized;
 
         fn retrieve_chunk_into<C>(
             cache: &C,
@@ -208,7 +208,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> Result<(), ArrayError>
         where
-            C: ChunkCache<Value = Self> + ?Sized;
+            C: SyncChunkCacheTraits<Value = Self> + ?Sized;
 
         fn retrieve_partial_chunk_into<C>(
             cache: &C,
@@ -220,7 +220,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> Result<(), ArrayError>
         where
-            C: ChunkCache<Value = Self> + ?Sized;
+            C: SyncChunkCacheTraits<Value = Self> + ?Sized;
     }
 
     /// The asynchronous retrieval operations of [`AsyncChunkCacheType`](super::AsyncChunkCacheType).
@@ -238,7 +238,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> impl Future<Output = Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError>> + MaybeSend
         where
-            C: AsyncChunkCache<Value = Self> + ?Sized;
+            C: AsyncChunkCacheTraits<Value = Self> + ?Sized;
 
         fn async_retrieve_chunk_bytes_if_exists<C>(
             cache: &C,
@@ -248,7 +248,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> impl Future<Output = Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>> + MaybeSend
         where
-            C: AsyncChunkCache<Value = Self> + ?Sized;
+            C: AsyncChunkCacheTraits<Value = Self> + ?Sized;
 
         fn async_retrieve_partial_chunk_bytes<C>(
             cache: &C,
@@ -259,7 +259,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> impl Future<Output = Result<Arc<ArrayBytes<'static>>, ArrayError>> + MaybeSend
         where
-            C: AsyncChunkCache<Value = Self> + ?Sized;
+            C: AsyncChunkCacheTraits<Value = Self> + ?Sized;
 
         fn async_retrieve_chunk_into<C>(
             cache: &C,
@@ -270,7 +270,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> impl Future<Output = Result<(), ArrayError>> + MaybeSend
         where
-            C: AsyncChunkCache<Value = Self> + ?Sized;
+            C: AsyncChunkCacheTraits<Value = Self> + ?Sized;
 
         fn async_retrieve_partial_chunk_into<C>(
             cache: &C,
@@ -282,7 +282,7 @@ mod chunk_cache_type_sealed {
             resources: &Resources,
         ) -> impl Future<Output = Result<(), ArrayError>> + MaybeSend
         where
-            C: AsyncChunkCache<Value = Self> + ?Sized;
+            C: AsyncChunkCacheTraits<Value = Self> + ?Sized;
     }
 }
 
@@ -295,7 +295,7 @@ pub(crate) use chunk_cache_type_sealed::SealedSync;
 /// A chunk cache stores values by chunk indices. It is intentionally unaware of
 /// arrays; [`ArrayCached`](super::ArrayCached) is the entry point for cached
 /// array operations.
-pub trait ChunkCache: MaybeSend + MaybeSync {
+pub trait SyncChunkCacheTraits: MaybeSend + MaybeSync {
     /// The value stored for each chunk.
     ///
     /// The [`SyncChunkCacheType`] bound is what confines this trait to chunk types that support
@@ -348,22 +348,22 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     }
 }
 
-/// A pinned, type-erased future used to initialise a missing entry in an [`AsyncChunkCache`].
+/// A pinned, type-erased future used to initialise a missing entry in an [`AsyncChunkCacheTraits`].
 #[cfg(all(feature = "async", not(target_arch = "wasm32")))]
 pub type AsyncChunkCacheInit<'a, V> =
     Pin<&'a mut (dyn Future<Output = Result<V, ArrayError>> + Send + 'a)>;
 
-/// A pinned, type-erased future used to initialise a missing entry in an [`AsyncChunkCache`].
+/// A pinned, type-erased future used to initialise a missing entry in an [`AsyncChunkCacheTraits`].
 #[cfg(all(feature = "async", target_arch = "wasm32"))]
 pub type AsyncChunkCacheInit<'a, V> =
     Pin<&'a mut (dyn Future<Output = Result<V, ArrayError>> + 'a)>;
 
 /// An asynchronous chunk cache.
 ///
-/// This is the asynchronous counterpart of [`ChunkCache`], and is what
+/// This is the asynchronous counterpart of [`SyncChunkCacheTraits`], and is what
 /// [`ArrayCached`](super::ArrayCached) asynchronous operations require. It is a separate trait
-/// rather than a [`ChunkCache`] extension because an asynchronous cache is backed by storage
-/// whose own operations are asynchronous, and so cannot implement the synchronous [`ChunkCache`]
+/// rather than a [`SyncChunkCacheTraits`] extension because an asynchronous cache is backed by storage
+/// whose own operations are asynchronous, and so cannot implement the synchronous [`SyncChunkCacheTraits`]
 /// methods.
 ///
 /// A chunk cache stores values by chunk indices. It is intentionally unaware of
@@ -372,7 +372,7 @@ pub type AsyncChunkCacheInit<'a, V> =
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait AsyncChunkCache: MaybeSend + MaybeSync {
+pub trait AsyncChunkCacheTraits: MaybeSend + MaybeSync {
     /// The value stored for each chunk.
     ///
     /// The [`AsyncChunkCacheType`] bound is what confines this trait to chunk types that support

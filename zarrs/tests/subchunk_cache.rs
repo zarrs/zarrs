@@ -12,14 +12,14 @@ use std::sync::Arc;
 use zarrs::array::AsyncArrayReadOps;
 #[cfg(feature = "async")]
 use zarrs::array::cache::{
-    AsyncArrayCache, AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit,
-    AsyncChunkCacheDecodedLruSizeLimit, AsyncChunkCacheEncodedLruChunkLimit,
-    AsyncChunkCachePartialDecoderLruChunkLimit,
+    AsyncArrayCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheDecodedLruSizeLimit,
+    AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCachePartialDecoderLruChunkLimit,
+    AsyncChunkCacheTraits,
 };
 use zarrs::array::cache::{
-    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-    ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache,
-    SyncArrayCache,
+    ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
+    ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache, SyncArrayCache,
+    SyncChunkCacheTraits,
 };
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
@@ -78,7 +78,11 @@ fn flat_target(
 #[ambisync::scope(
     sync(
         fns("async_{}"),
-        types("Async{}", AsyncArrayCache => SyncArrayCache)
+        types(
+            "Async{}",
+            AsyncArrayCache => SyncArrayCache,
+            AsyncChunkCacheTraits => SyncChunkCacheTraits,
+        )
     ),
     async(feature = "async")
 )]

@@ -1,18 +1,18 @@
 //! Caches usable by [`ArrayCached`](crate::array::ArrayCached).
 //!
 //! [`ArrayCached`](crate::array::ArrayCached) dispatches its retrievals and invalidations through the cache, rather
-//! than through the value type of a [`ChunkCache`]. This lets a cache that is not keyed by chunk (e.g. one composed of
+//! than through the value type of a [`SyncChunkCacheTraits`]. This lets a cache that is not keyed by chunk (e.g. one composed of
 //! several stores) define how it serves a chunk and what a write evicts.
 //!
-//! Every [`ChunkCache`] is a [`SyncArrayCache`], with the retrieval behaviour of its value type and chunk-level
-//! invalidation. With the `async` feature, every `AsyncChunkCache` is an `AsyncArrayCache`.
+//! Every [`SyncChunkCacheTraits`] is a [`SyncArrayCache`], with the retrieval behaviour of its value type and chunk-level
+//! invalidation. With the `async` feature, every `AsyncChunkCacheTraits` is an `AsyncArrayCache`.
 
 use std::sync::Arc;
 
 use super::chunk_cache_type::validate_chunk_indices;
 #[cfg(feature = "async")]
-use super::{AsyncChunkCache, SealedAsync};
-use super::{ChunkCache, SealedSync};
+use super::{AsyncChunkCacheTraits, SealedAsync};
+use super::{SealedSync, SyncChunkCacheTraits};
 use crate::array::array_ops::{fill_value_bytes, subchunk_grid_at_level};
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkShape,
@@ -245,8 +245,8 @@ fn fill_value_chunk_bytes(
 
 /// A cache usable by [`ArrayCached`](crate::array::ArrayCached) for synchronous operations.
 ///
-/// This is implemented for every [`ChunkCache`], [`SubchunkCache`](super::SubchunkCache), and
-/// [`NoCache`](super::NoCache). Implement [`ChunkCache`] for a custom cache policy.
+/// This is implemented for every [`SyncChunkCacheTraits`], [`SubchunkCache`](super::SubchunkCache), and
+/// [`NoCache`](super::NoCache). Implement [`SyncChunkCacheTraits`] for a custom cache policy.
 ///
 /// The operations themselves live on a sealed supertrait, and are internal to `zarrs`.
 pub trait SyncArrayCache: array_cache_sealed::SyncArrayCacheOps {}
@@ -255,8 +255,8 @@ impl<T: array_cache_sealed::SyncArrayCacheOps + ?Sized> SyncArrayCache for T {}
 
 /// A cache usable by [`ArrayCached`](crate::array::ArrayCached) for asynchronous operations.
 ///
-/// This is implemented for every [`AsyncChunkCache`], [`SubchunkCache`](super::SubchunkCache), and
-/// [`NoCache`](super::NoCache). Implement [`AsyncChunkCache`] for a custom cache policy.
+/// This is implemented for every [`AsyncChunkCacheTraits`], [`SubchunkCache`](super::SubchunkCache), and
+/// [`NoCache`](super::NoCache). Implement [`AsyncChunkCacheTraits`] for a custom cache policy.
 ///
 /// The operations themselves live on a sealed supertrait, and are internal to `zarrs`.
 #[cfg(feature = "async")]
@@ -271,8 +271,8 @@ pub(crate) mod array_cache_sealed {
 
     /// The operations of a [`SyncArrayCache`](super::SyncArrayCache).
     ///
-    /// The invalidation methods are named apart from those of [`ChunkCache`], so that
-    /// [`ArrayCached`](crate::array::ArrayCached), which is bounded by this trait rather than [`ChunkCache`], cannot
+    /// The invalidation methods are named apart from those of [`SyncChunkCacheTraits`], so that
+    /// [`ArrayCached`](crate::array::ArrayCached), which is bounded by this trait rather than [`SyncChunkCacheTraits`], cannot
     /// invalidate a cache by chunk without going through it.
     pub trait SyncArrayCacheOps: MaybeSend + MaybeSync {
         /// Return a partial decoder of the chunk at `chunk_indices`, through the cache.
@@ -371,7 +371,7 @@ pub(crate) mod array_cache_sealed {
         }
     }
 
-    impl<C: ChunkCache + ?Sized> SyncArrayCacheOps for C {
+    impl<C: SyncChunkCacheTraits + ?Sized> SyncArrayCacheOps for C {
         fn cached_partial_decoder(
             &self,
             array: &dyn SyncCachedArray,
@@ -687,7 +687,7 @@ pub(crate) mod array_cache_sealed {
     #[cfg(feature = "async")]
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
     #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-    impl<C: AsyncChunkCache + ?Sized> AsyncArrayCacheOps for C {
+    impl<C: AsyncChunkCacheTraits + ?Sized> AsyncArrayCacheOps for C {
         async fn async_cached_partial_decoder(
             &self,
             array: &dyn AsyncCachedArray,

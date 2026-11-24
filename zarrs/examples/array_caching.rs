@@ -24,9 +24,9 @@ use std::fmt::Write;
 use std::sync::Arc;
 
 use zarrs::array::cache::{
-    ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-    ChunkCacheEncodedLruChunkLimit, ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache,
-    SyncArrayCache,
+    ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
+    ChunkCachePartialDecoderLruChunkLimit, NoCache, SubchunkCache, SyncArrayCache,
+    SyncChunkCacheTraits,
 };
 use zarrs::array::codec::GzipCodec;
 use zarrs::array::{Array, ArrayBuilder, ArrayCached, ArraySubset, Resources, data_type};
@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 type Held = Vec<(usize, String)>;
 
 /// What the chunk cache `cache` holds, describing its chunks as `entries`.
-fn held(cache: &impl ChunkCache, entries: &str) -> (usize, String) {
+fn held(cache: &impl SyncChunkCacheTraits, entries: &str) -> (usize, String) {
     (cache.size(), format!("{} {entries}", cache.len()))
 }
 

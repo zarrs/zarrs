@@ -223,15 +223,15 @@ mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use super::*;
     use crate::array::cache::{
-        AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
-        AsyncChunkCachePartialDecoderLruChunkLimit,
+        AsyncChunkCacheDecodedLruChunkLimit, AsyncChunkCacheEncodedLruChunkLimit,
+        AsyncChunkCachePartialDecoderLruChunkLimit, AsyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use zarrs_storage::store::AsyncMemoryStore;
 
     async fn test_async_partial_encoder_invalidates<C>(cache: C)
     where
-        C: AsyncChunkCache + 'static,
+        C: AsyncChunkCacheTraits + 'static,
     {
         let store = Arc::new(AsyncMemoryStore::new());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)

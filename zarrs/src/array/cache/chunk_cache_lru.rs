@@ -4,11 +4,12 @@ use std::sync::Arc;
 
 #[cfg(feature = "async")]
 use super::{
-    AsyncChunkCache, AsyncChunkCacheInit, AsyncChunkCacheType, ChunkCacheTypeAsyncPartialDecoder,
+    AsyncChunkCacheInit, AsyncChunkCacheTraits, AsyncChunkCacheType,
+    ChunkCacheTypeAsyncPartialDecoder,
 };
 use super::{
-    ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
-    ChunkCacheTypePartialDecoder, SyncChunkCacheType,
+    ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
+    SyncChunkCacheTraits, SyncChunkCacheType,
 };
 use crate::array::{ArrayError, ArrayIndices, Indexer};
 
@@ -124,7 +125,7 @@ impl<CT: SyncChunkCacheType> ChunkCacheLruSizeLimit<CT> {
     }
 }
 
-/// The [`ChunkCache`] methods of an LRU cache.
+/// The [`SyncChunkCacheTraits`] methods of a chunk cache.
 macro_rules! impl_ChunkCacheLruCommon {
     () => {
         type Value = CT;
@@ -159,11 +160,11 @@ macro_rules! impl_ChunkCacheLruCommon {
     };
 }
 
-impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruChunkLimit<CT> {
+impl<CT: SyncChunkCacheType> SyncChunkCacheTraits for ChunkCacheLruChunkLimit<CT> {
     impl_ChunkCacheLruCommon!();
 }
 
-impl<CT: SyncChunkCacheType> ChunkCache for ChunkCacheLruSizeLimit<CT> {
+impl<CT: SyncChunkCacheType> SyncChunkCacheTraits for ChunkCacheLruSizeLimit<CT> {
     impl_ChunkCacheLruCommon!();
 }
 
@@ -200,12 +201,12 @@ impl<CT: AsyncChunkCacheType> AsyncChunkCacheLruSizeLimit<CT> {
 }
 
 #[cfg(feature = "async")]
-/// Implement [`AsyncChunkCache`] for an LRU cache type.
+/// Implement [`AsyncChunkCacheTraits`] for a chunk cache type.
 macro_rules! impl_AsyncChunkCacheLru {
     ($ty:ident) => {
         #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
         #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-        impl<CT: AsyncChunkCacheType> AsyncChunkCache for $ty<CT> {
+        impl<CT: AsyncChunkCacheType> AsyncChunkCacheTraits for $ty<CT> {
             type Value = CT;
 
             async fn try_get_or_insert_with(

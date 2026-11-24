@@ -196,15 +196,15 @@ mod tests {
     #![expect(clippy::single_range_in_vec_init)]
     use super::*;
     use crate::array::cache::{
-        ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
-        ChunkCachePartialDecoderLruChunkLimit,
+        ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
+        ChunkCachePartialDecoderLruChunkLimit, SyncChunkCacheTraits,
     };
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use zarrs_storage::store::MemoryStore;
 
     fn test_partial_encoder_invalidates<C>(cache: C)
     where
-        C: ChunkCache + 'static,
+        C: SyncChunkCacheTraits + 'static,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
@@ -254,7 +254,7 @@ mod tests {
 
     fn test_failed_partial_encode_invalidates<C>(cache: C)
     where
-        C: ChunkCache + 'static,
+        C: SyncChunkCacheTraits + 'static,
     {
         let store = Arc::new(MemoryStore::default());
         let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)

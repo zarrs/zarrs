@@ -8,8 +8,8 @@ use ambisync::ambisync;
 use super::array_cache::array_cache_sealed::AsyncArrayCacheOps;
 use super::array_cache::array_cache_sealed::SyncArrayCacheOps;
 #[cfg(feature = "async")]
-use super::{AsyncCachedArray, AsyncChunkCache};
-use super::{CachedArrayMeta, ChunkCache, SyncCachedArray};
+use super::{AsyncCachedArray, AsyncChunkCacheTraits};
+use super::{CachedArrayMeta, SyncCachedArray, SyncChunkCacheTraits};
 use crate::array::{ArrayBytes, ArrayError, ArraySubset, ArraySubsetTraits, CodecOptions, Indexer};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
@@ -73,7 +73,7 @@ impl<S, C> SubchunkCache<S, C> {
 
 impl<S: ?Sized, C> SubchunkCache<S, C> {
     /// Create a cache of the subchunks of the `level` subchunk grid in the boxed `subchunks`, such as a
-    /// `Box<dyn ChunkCache<Value = ChunkCacheTypeDecoded>>`, over the chunk cache `chunks`.
+    /// `Box<dyn SyncChunkCacheTraits<Value = ChunkCacheTypeDecoded>>`, over the chunk cache `chunks`.
     #[must_use]
     pub fn new_boxed(level: usize, subchunks: Box<S>, chunks: C) -> Self {
         Self::from_arc(level, Arc::from(subchunks), chunks)
@@ -131,10 +131,10 @@ impl<S: ?Sized, C> SubchunkCache<S, C> {
 }
 
 #[ambisync(
-    sync(fns("async_{}"), types(AsyncChunkCache => ChunkCache)),
+    sync(fns("async_{}"), types(AsyncChunkCacheTraits => SyncChunkCacheTraits)),
     async(feature = "async")
 )]
-impl<S: AsyncChunkCache + ?Sized, C> SubchunkCache<S, C> {
+impl<S: AsyncChunkCacheTraits + ?Sized, C> SubchunkCache<S, C> {
     /// Invalidate every cached subchunk.
     async fn async_invalidate_all_subchunks(&self) {
         self.subchunks.invalidate().await;
