@@ -984,6 +984,7 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Checked once per call: a call already reading when its chunk is invalidated can still refill the cache
         if !self.generation.is_current() {
             return self.inner.partial_decode(indexer, options, resources).await;
         }

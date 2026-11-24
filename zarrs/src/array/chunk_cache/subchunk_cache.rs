@@ -54,11 +54,11 @@ mod decoded;
 /// can change values outside the requested region. After writes that bypass it, invalidate through
 /// [`ArrayCached::invalidate_chunk`](crate::array::ArrayCached::invalidate_chunk) and related methods.
 ///
-/// A partial decoder opened through the cache before its chunk is invalidated stops reading and refilling the
-/// subchunk cache, and decodes through the partial decoder it opened from the chunk cache. As for any cache of an
-/// [`ArrayCached`](crate::array::ArrayCached), invalidation does not make concurrent reads and writes of the same
-/// chunk safe: a subchunk decoded while a write to its chunk invalidates the cache can be inserted after the
-/// invalidation, leaving a pre-write subchunk cached.
+/// The calls of a partial decoder opened through the cache that begin after its chunk is invalidated stop reading and
+/// refilling the subchunk cache, and decode through the partial decoder it opened from the chunk cache. A call
+/// already running is a concurrent read and write: as for any cache of an [`ArrayCached`](crate::array::ArrayCached),
+/// invalidation does not make concurrent reads and writes of the same chunk safe, as a subchunk decoded while a write
+/// to its chunk invalidates the cache can be inserted after the invalidation, leaving a pre-write subchunk cached.
 #[derive(Debug)]
 pub struct SubchunkCache<S: ?Sized, C> {
     level: usize,
