@@ -6,14 +6,14 @@
 
 use std::error::Error;
 use std::num::NonZeroU64;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[cfg(feature = "async")]
 use zarrs::array::AsyncArrayReadOps;
 #[cfg(feature = "async")]
 use zarrs::array::cache::{
     AsyncArrayCache, AsyncChunkCache, AsyncChunkCacheDecodedLruChunkLimit,
-    AsyncChunkCacheDecodedLruSizeLimit, AsyncChunkCacheEncodedLruChunkLimit, AsyncChunkCacheInit,
+    AsyncChunkCacheDecodedLruSizeLimit, AsyncChunkCacheEncodedLruChunkLimit,
     AsyncChunkCachePartialDecoderLruChunkLimit,
 };
 use zarrs::array::cache::{
@@ -24,8 +24,8 @@ use zarrs::array::cache::{
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::{
     Array, ArrayBuilder, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesTarget, ArrayCached,
-    ArrayError, ArrayIndices, ArrayReadOps, ArraySubset, CodecOptions, DataType, ElementOrder,
-    FillValue, Indexer, Resources, data_type,
+    ArrayError, ArrayReadOps, ArraySubset, CodecOptions, DataType, ElementOrder, FillValue,
+    Resources, data_type,
 };
 #[cfg(feature = "async")]
 use zarrs::storage::AsyncReadableWritableStorageTraits;
@@ -57,42 +57,6 @@ const DATA_TYPES: [TestDataType; 3] = [
     TestDataType::String,
 ];
 
-/// A hook run once by a [`HookedCache`].
-type Hook = Box<dyn FnOnce() + Send>;
-
-/// A chunk cache that runs a hook before its next chunk invalidation, and a hook after its next retrieval.
-struct HookedCache<C> {
-    cache: C,
-    before_invalidate: Mutex<Option<Hook>>,
-    after_retrieve: Mutex<Option<Hook>>,
-}
-
-impl<C> HookedCache<C> {
-    fn new(cache: C) -> Self {
-        Self {
-            cache,
-            before_invalidate: Mutex::new(None),
-            after_retrieve: Mutex::new(None),
-        }
-    }
-
-    fn before_invalidate(&self, hook: impl FnOnce() + Send + 'static) {
-        *self.before_invalidate.lock().unwrap() = Some(Box::new(hook));
-    }
-
-    fn after_retrieve(&self, hook: impl FnOnce() + Send + 'static) {
-        *self.after_retrieve.lock().unwrap() = Some(Box::new(hook));
-    }
-}
-
-/// Run and clear the hook in `hook`, if any.
-fn run_hook(hook: &Mutex<Option<Hook>>) {
-    let hook = hook.lock().unwrap().take();
-    if let Some(hook) = hook {
-        hook();
-    }
-}
-
 /// A fixed length target of one dimension over `output`.
 fn flat_target(
     output: &mut [u8],
@@ -120,48 +84,6 @@ fn flat_target(
 )]
 mod subchunk_cache {
     use super::*;
-
-    #[ambisync(async(flavor = async_trait, send = cfg(not(target_arch = "wasm32"))))]
-    impl<C: AsyncChunkCache> AsyncChunkCache for HookedCache<C> {
-        type Value = C::Value;
-
-        #[sync_signature(fn try_get_or_insert_with(
-            &self,
-            chunk_indices: ArrayIndices,
-            init: &mut dyn FnMut() -> Result<Self::Value, ArrayError>,
-        ) -> Result<Self::Value, Arc<ArrayError>>)]
-        async fn try_get_or_insert_with(
-            &self,
-            chunk_indices: ArrayIndices,
-            init: AsyncChunkCacheInit<'_, Self::Value>,
-        ) -> Result<Self::Value, Arc<ArrayError>> {
-            let value = self.cache.try_get_or_insert_with(chunk_indices, init).await;
-            run_hook(&self.after_retrieve);
-            value
-        }
-
-        async fn invalidate(&self) -> usize {
-            self.cache.invalidate().await
-        }
-
-        async fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool {
-            run_hook(&self.before_invalidate);
-            self.cache.invalidate_chunk(chunk_indices).await
-        }
-
-        async fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
-            run_hook(&self.before_invalidate);
-            self.cache.invalidate_chunks(chunks).await
-        }
-
-        async fn len(&self) -> usize {
-            self.cache.len().await
-        }
-
-        async fn size(&self) -> usize {
-            self.cache.size().await
-        }
-    }
 
     /// A 30x30 array of 16x16 shards with 4x4 subchunks, so the last shard of each dimension extends beyond the
     /// array.
@@ -656,59 +578,6 @@ mod subchunk_cache {
         Ok(())
     }
 
-    /// Check that partial decoders opened before writes through a subchunk cache over `chunks` decode the chunk as
-    /// it was, without refilling the subchunk cache.
-    #[ambisync]
-    async fn async_check_retained_partial_decoders<C: AsyncArrayCache>(chunks: C) -> TestResult {
-        let array = ArrayBuilder::new(vec![8], vec![8], data_type::uint8(), 0u8)
-            .subchunk_shape(vec![2])
-            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
-        let cached = ArrayCached::new(
-            array,
-            SubchunkCache::new(0, AsyncChunkCacheDecodedLruChunkLimit::new(8), chunks),
-        );
-        let resources = Resources::default();
-        cached
-            .async_store_chunk(&[0], &[1u8; 8], &resources)
-            .await?;
-        for value in [2u8, 3] {
-            let decoder = cached.async_partial_decoder(&[0], &resources).await?;
-            cached
-                .async_store_chunk(&[0], &[value; 8], &resources)
-                .await?;
-            assert_eq!(
-                decoder
-                    .partial_decode(&[0..8], &CodecOptions::default(), &resources)
-                    .await?,
-                ArrayBytes::new_flen(vec![value - 1; 8])
-            );
-            let mut output = [0u8; 8];
-            decoder
-                .partial_decode_into(
-                    &[0..8],
-                    &mut flat_target(&mut output, 1)?,
-                    &CodecOptions::default(),
-                    &resources,
-                )
-                .await?;
-            assert_eq!(output, [value - 1; 8]);
-            assert_eq!(
-                cached
-                    .async_retrieve_chunk::<Vec<u8>>(&[0], &resources)
-                    .await?,
-                vec![value; 8]
-            );
-        }
-        Ok(())
-    }
-
-    #[ambisync::test]
-    async fn async_retained_partial_decoders_do_not_repopulate_invalidated_subchunks() -> TestResult
-    {
-        async_check_retained_partial_decoders(AsyncChunkCacheDecodedLruChunkLimit::new(2)).await?;
-        async_check_retained_partial_decoders(AsyncChunkCacheEncodedLruChunkLimit::new(2)).await
-    }
-
     #[ambisync::test]
     async fn async_retained_partial_decoders_read_cached_subchunks_after_writes_to_other_chunks()
     -> TestResult {
@@ -731,51 +600,6 @@ mod subchunk_cache {
             .partial_decode(&[0..8], &CodecOptions::default(), &resources)
             .await?;
         assert_eq!(cached.cache().subchunks().len().await, 4);
-        Ok(())
-    }
-
-    #[ambisync::test]
-    async fn async_invalidation_after_writes_bypassing_the_cache_retires_partial_decoders()
-    -> TestResult {
-        let array = ArrayBuilder::new(vec![8], vec![8], data_type::uint8(), 0u8)
-            .subchunk_shape(vec![2])
-            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
-        let cached = ArrayCached::new(
-            array.clone(),
-            SubchunkCache::new(
-                0,
-                AsyncChunkCacheDecodedLruChunkLimit::new(8),
-                AsyncChunkCacheEncodedLruChunkLimit::new(2),
-            ),
-        );
-        let resources = Resources::default();
-        for value in [1u8, 2, 3] {
-            array
-                .async_store_chunk(&[0], &[value - 1; 8], &resources)
-                .await?;
-            let decoder = cached.async_partial_decoder(&[0], &resources).await?;
-            array
-                .async_store_chunk(&[0], &[value; 8], &resources)
-                .await?;
-            match value {
-                1 => cached.async_invalidate().await,
-                2 => cached.async_invalidate_chunk(&[0]).await,
-                _ => cached.async_invalidate_chunks(&[0..1]).await,
-            }
-            assert_eq!(
-                decoder
-                    .partial_decode(&[0..8], &CodecOptions::default(), &resources)
-                    .await?,
-                ArrayBytes::new_flen(vec![value - 1; 8])
-            );
-            assert!(cached.cache().subchunks().is_empty().await);
-            assert_eq!(
-                cached
-                    .async_retrieve_chunk::<Vec<u8>>(&[0], &resources)
-                    .await?,
-                vec![value; 8]
-            );
-        }
         Ok(())
     }
 
@@ -812,101 +636,6 @@ mod subchunk_cache {
             0
         );
         assert!(cached.cache().subchunks().is_empty().await);
-        Ok(())
-    }
-
-    #[ambisync::test]
-    async fn async_reads_during_invalidation_do_not_refill_subchunks_from_the_chunk_cache()
-    -> TestResult {
-        let array = ArrayBuilder::new(vec![8], vec![8], data_type::uint8(), 0u8)
-            .subchunk_shape(vec![2])
-            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
-        let cached = ArrayCached::new(
-            array,
-            SubchunkCache::new(
-                0,
-                AsyncChunkCacheDecodedLruChunkLimit::new(8),
-                HookedCache::new(AsyncChunkCacheEncodedLruChunkLimit::new(2)),
-            ),
-        );
-        let resources = Resources::default();
-        cached
-            .async_store_chunk(&[0], &[1u8; 8], &resources)
-            .await?;
-        assert_eq!(
-            cached
-                .async_retrieve_chunk::<Vec<u8>>(&[0], &resources)
-                .await?,
-            vec![1; 8]
-        );
-
-        // A read while the chunk cache still holds the stored chunk, after it is written
-        let reader = cached.clone();
-        // Hooks are synchronous, as the futures of array operations are not provably `Send`
-        cached.cache().chunks().before_invalidate(move || {
-            ambisync::alt!(
-                sync => reader.retrieve_chunk::<Vec<u8>>(&[0], &Resources::default()),
-                async => futures::executor::block_on(
-                    reader.async_retrieve_chunk::<Vec<u8>>(&[0], &Resources::default()),
-                ),
-            )
-            .unwrap();
-        });
-        cached
-            .async_store_chunk(&[0], &[2u8; 8], &resources)
-            .await?;
-        assert_eq!(
-            cached
-                .async_retrieve_chunk::<Vec<u8>>(&[0], &resources)
-                .await?,
-            vec![2; 8]
-        );
-        Ok(())
-    }
-
-    #[ambisync::test]
-    async fn async_partial_decoders_opened_during_invalidation_do_not_refill_subchunks()
-    -> TestResult {
-        let array = ArrayBuilder::new(vec![8], vec![8], data_type::uint8(), 0u8)
-            .subchunk_shape(vec![2])
-            .build_arc(Arc::new(AsyncMemoryStore::default()), "/array")?;
-        let cached = ArrayCached::new(
-            array,
-            SubchunkCache::new(
-                0,
-                AsyncChunkCacheDecodedLruChunkLimit::new(8),
-                HookedCache::new(AsyncChunkCacheEncodedLruChunkLimit::new(2)),
-            ),
-        );
-        let resources = Resources::default();
-        cached
-            .async_store_chunk(&[0], &[1u8; 8], &resources)
-            .await?;
-
-        // A write after a partial decoder retrieves the chunk it decodes
-        let writer = cached.clone();
-        cached.cache().chunks().after_retrieve(move || {
-            ambisync::alt!(
-                sync => writer.store_chunk(&[0], &[2u8; 8], &Resources::default()),
-                async => futures::executor::block_on(
-                    writer.async_store_chunk(&[0], &[2u8; 8], &Resources::default()),
-                ),
-            )
-            .unwrap();
-        });
-        let decoder = cached.async_partial_decoder(&[0], &resources).await?;
-        assert_eq!(
-            decoder
-                .partial_decode(&[0..8], &CodecOptions::default(), &resources)
-                .await?,
-            ArrayBytes::new_flen(vec![1u8; 8])
-        );
-        assert_eq!(
-            cached
-                .async_retrieve_chunk::<Vec<u8>>(&[0], &resources)
-                .await?,
-            vec![2; 8]
-        );
         Ok(())
     }
 }

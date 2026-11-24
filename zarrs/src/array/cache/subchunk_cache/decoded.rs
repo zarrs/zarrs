@@ -15,7 +15,7 @@ use rayon::iter::ParallelIterator;
 use super::super::array_cache::array_cache_sealed::AsyncArrayCacheOps;
 use super::super::array_cache::array_cache_sealed::SyncArrayCacheOps;
 use super::super::chunk_cache_type::{cache_error, validate_chunk_grid_indices};
-use super::{Generation, SubchunkCache};
+use super::SubchunkCache;
 use crate::IntoConcurrentLimitIterator;
 use crate::array::array_bytes_internal::{
     FixedDecodeBuffers, merge_cached_chunks, optional_innermost, optional_innermost_with_depth,
@@ -666,8 +666,6 @@ where
         resources: &Resources,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
         let chunk = ChunkSubchunks::new(array, self.level, chunk_indices)?;
-        // Before the chunk is opened, so that an invalidation while it opens retires the decoder
-        let generation = self.generations.snapshot(chunk_indices);
         let inner = self
             .chunks
             .async_cached_partial_decoder(array, chunk_indices, options, resources)
@@ -676,7 +674,6 @@ where
             self.subchunks.clone(),
             &chunk,
             inner,
-            generation,
         )))
     }
 
@@ -879,19 +876,11 @@ struct SubchunkCachePartialDecoder<S: ?Sized, D: ?Sized> {
     data_type: DataType,
     fill_value: FillValue,
     inner: Arc<D>,
-    /// The generation of the chunk when `inner` was opened.
-    generation: Generation,
 }
 
 impl<S: ?Sized, D: ?Sized> SubchunkCachePartialDecoder<S, D> {
-    /// Create a partial decoder of `chunk` over the partial decoder `inner` of the chunk cache, which was opened in
-    /// the `generation` of the chunk.
-    fn new(
-        subchunks: Arc<S>,
-        chunk: &ChunkSubchunks<'_>,
-        inner: Arc<D>,
-        generation: Generation,
-    ) -> Self {
+    /// Create a partial decoder of `chunk` over the partial decoder `inner` of the chunk cache.
+    fn new(subchunks: Arc<S>, chunk: &ChunkSubchunks<'_>, inner: Arc<D>) -> Self {
         Self {
             subchunks,
             grid: chunk.grid.clone(),
@@ -900,7 +889,6 @@ impl<S: ?Sized, D: ?Sized> SubchunkCachePartialDecoder<S, D> {
             data_type: chunk.data_type.clone(),
             fill_value: chunk.fill_value.clone(),
             inner,
-            generation,
         }
     }
 
@@ -984,10 +972,6 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        // Checked once per call: a call already reading when its chunk is invalidated can still refill the cache
-        if !self.generation.is_current() {
-            return self.inner.partial_decode(indexer, options, resources).await;
-        }
         let decoder = LazyDecoder::new(|| async { Ok(Arc::clone(&self.inner)) });
         match self
             .chunk()
@@ -1007,12 +991,6 @@ where
         options: &CodecOptions,
         resources: &Resources,
     ) -> Result<(), CodecError> {
-        if !self.generation.is_current() {
-            return self
-                .inner
-                .partial_decode_into(indexer, output_target, options, resources)
-                .await;
-        }
         let decoder = LazyDecoder::new(|| async { Ok(Arc::clone(&self.inner)) });
         match self
             .chunk()

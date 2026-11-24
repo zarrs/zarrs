@@ -80,11 +80,10 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 /// of a composed cache (e.g. a [`SubchunkCache`](super::cache::SubchunkCache)) is invalidated.
 ///
 /// Invalidation makes a cache coherent with writes that *precede* the retrievals of
-/// the chunks they invalidate. It does not make concurrent reads and writes of the same
-/// chunk safe, which [`Array`] does not support (see its *Parallel Writing* section). A
-/// retrieval that fetches a chunk while a write to that chunk invalidates the cache
-/// inserts its value after the invalidation, leaving a pre-write value cached for every
-/// later read.
+/// the chunks they invalidate. Concurrent reads and writes of the same chunk are not
+/// supported, as for [`Array`] (see its *Parallel Writing* section): a read concurrent with a
+/// write to its chunk, including through a partial decoder opened before the write, may
+/// return pre-write data and leave it cached for later reads.
 ///
 /// ## Asynchronous Operations
 ///

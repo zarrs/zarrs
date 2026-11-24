@@ -1,7 +1,6 @@
 //! Subchunk caches layered over chunk caches.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use ambisync::ambisync;
 
@@ -54,17 +53,14 @@ mod decoded;
 /// can change values outside the requested region. After writes that bypass it, invalidate through
 /// [`ArrayCached::invalidate_chunk`](crate::array::ArrayCached::invalidate_chunk) and related methods.
 ///
-/// The calls of a partial decoder opened through the cache that begin after its chunk is invalidated stop reading and
-/// refilling the subchunk cache, and decode through the partial decoder it opened from the chunk cache. A call
-/// already running is a concurrent read and write: as for any cache of an [`ArrayCached`](crate::array::ArrayCached),
-/// invalidation does not make concurrent reads and writes of the same chunk safe, as a subchunk decoded while a write
-/// to its chunk invalidates the cache can be inserted after the invalidation, leaving a pre-write subchunk cached.
+/// As for any cache of an [`ArrayCached`](crate::array::ArrayCached), reads of a chunk concurrent with a write to it
+/// are not supported, and may leave pre-write subchunks cached. This includes using a partial decoder opened through
+/// the cache before a write to its chunk.
 #[derive(Debug)]
 pub struct SubchunkCache<S: ?Sized, C> {
     level: usize,
     subchunks: Arc<S>,
     chunks: C,
-    generations: Arc<Generations>,
 }
 
 impl<S, C> SubchunkCache<S, C> {
@@ -83,13 +79,11 @@ impl<S: ?Sized, C> SubchunkCache<S, C> {
         Self::from_arc(level, Arc::from(subchunks), chunks)
     }
 
-    /// Create a cache over `subchunks`, which must not be shared, so that its generations cover every writer.
     fn from_arc(level: usize, subchunks: Arc<S>, chunks: C) -> Self {
         Self {
             level,
             subchunks,
             chunks,
-            generations: Arc::new(Generations::new()),
         }
     }
 
@@ -101,9 +95,9 @@ impl<S: ?Sized, C> SubchunkCache<S, C> {
 
     /// Return the subchunk cache.
     ///
-    /// Invalidating it directly does not retire the partial decoders opened through this cache, which can refill it
-    /// with chunks as they were when opened. Invalidate through [`ArrayCached`](crate::array::ArrayCached) instead
-    /// (e.g. [`ArrayCached::invalidate_chunk`](crate::array::ArrayCached::invalidate_chunk)).
+    /// Invalidating it directly leaves the chunk cache holding the chunks it was filled from. Invalidate through
+    /// [`ArrayCached`](crate::array::ArrayCached) instead (e.g.
+    /// [`ArrayCached::invalidate_chunk`](crate::array::ArrayCached::invalidate_chunk)).
     #[must_use]
     pub fn subchunks(&self) -> &S {
         &self.subchunks
@@ -142,24 +136,16 @@ impl<S: ?Sized, C> SubchunkCache<S, C> {
 )]
 impl<S: AsyncChunkCache + ?Sized, C> SubchunkCache<S, C> {
     /// Invalidate every cached subchunk.
-    ///
-    /// Call this after invalidating the chunk cache, so that a subchunk miss cannot refill the subchunk cache from a
-    /// chunk the chunk cache still holds. The generations advance before the subchunks are invalidated, so that a
-    /// partial decoder opened in an older generation cannot refill them afterwards.
     async fn async_invalidate_all_subchunks(&self) {
-        self.generations.advance_all();
         self.subchunks.invalidate().await;
     }
 
     /// Invalidate the cached subchunks of the chunk at `chunk_indices` of `array`.
-    ///
-    /// See [`SubchunkCache::async_invalidate_all_subchunks`].
     async fn async_invalidate_chunk_subchunks(
         &self,
         array: &dyn CachedArrayMeta,
         chunk_indices: &[u64],
     ) {
-        self.generations.advance(chunk_indices);
         self.async_invalidate_subchunks_in(array, array.chunk_subset(chunk_indices).ok().as_ref())
             .await;
     }
@@ -167,14 +153,11 @@ impl<S: AsyncChunkCache + ?Sized, C> SubchunkCache<S, C> {
     /// Invalidate the cached subchunks of the `chunks` of `array`.
     ///
     /// A region of chunks invalidates the subchunks of their region of the subchunk grid at once.
-    ///
-    /// See [`SubchunkCache::async_invalidate_all_subchunks`].
     async fn async_invalidate_chunks_subchunks(
         &self,
         array: &dyn CachedArrayMeta,
         chunks: &dyn Indexer,
     ) {
-        self.generations.advance_chunks(chunks);
         if let Some(chunks) = chunks.as_array_subset() {
             self.async_invalidate_subchunks_in(array, array.chunks_subset(chunks).ok().as_ref())
                 .await;
@@ -201,81 +184,6 @@ impl<S: AsyncChunkCache + ?Sized, C> SubchunkCache<S, C> {
         } else {
             self.subchunks.invalidate().await;
         }
-    }
-}
-
-/// The number of generations shared by the chunks of a [`SubchunkCache`].
-const GENERATIONS: usize = 64;
-
-/// The generations of the chunks of a [`SubchunkCache`], which advance as chunks are invalidated.
-///
-/// A partial decoder opened in an older generation of its chunk decodes its own snapshot of the chunk, rather than
-/// reading or refilling the shared subchunk cache. Chunks share a fixed number of generations by a hash of their
-/// indices, so invalidating a chunk also retires the partial decoders of the few chunks that share its generation.
-#[derive(Debug)]
-struct Generations([AtomicU64; GENERATIONS]);
-
-impl Generations {
-    fn new() -> Self {
-        Self(std::array::from_fn(|_| AtomicU64::new(0)))
-    }
-
-    /// Return the index of the generation of the chunk at `chunk_indices`.
-    fn index(chunk_indices: &[u64]) -> usize {
-        let hash = chunk_indices.iter().fold(0u64, |hash, &index| {
-            (hash.rotate_left(5) ^ index).wrapping_mul(0x517c_c1b7_2722_0a95)
-        });
-        // The high bits of a multiplicative hash are the best mixed
-        #[allow(clippy::cast_possible_truncation)]
-        let index = (hash >> (u64::BITS - GENERATIONS.ilog2())) as usize;
-        index
-    }
-
-    /// Return the current generation of the chunk at `chunk_indices`.
-    fn snapshot(self: &Arc<Self>, chunk_indices: &[u64]) -> Generation {
-        let index = Self::index(chunk_indices);
-        Generation {
-            generations: self.clone(),
-            index,
-            value: self.0[index].load(Ordering::Acquire),
-        }
-    }
-
-    /// Advance the generation of the chunk at `chunk_indices`.
-    fn advance(&self, chunk_indices: &[u64]) {
-        self.0[Self::index(chunk_indices)].fetch_add(1, Ordering::AcqRel);
-    }
-
-    /// Advance the generations of the `chunks`.
-    fn advance_chunks(&self, chunks: &dyn Indexer) {
-        if chunks.len() >= GENERATIONS as u64 {
-            self.advance_all();
-        } else {
-            for chunk_indices in chunks.iter_indices() {
-                self.advance(&chunk_indices);
-            }
-        }
-    }
-
-    /// Advance the generations of every chunk.
-    fn advance_all(&self) {
-        for generation in &self.0 {
-            generation.fetch_add(1, Ordering::AcqRel);
-        }
-    }
-}
-
-/// A generation of a chunk of a [`SubchunkCache`].
-struct Generation {
-    generations: Arc<Generations>,
-    index: usize,
-    value: u64,
-}
-
-impl Generation {
-    /// Return whether the chunk is still in this generation.
-    fn is_current(&self) -> bool {
-        self.generations.0[self.index].load(Ordering::Acquire) == self.value
     }
 }
 
