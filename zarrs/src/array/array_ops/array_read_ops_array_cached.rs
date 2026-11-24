@@ -882,7 +882,21 @@ mod tests {
                     .unwrap(),
                 vec![0, 1, 4, 5]
             );
+
+            // A write that bypasses the cache is read once its chunk is invalidated
+            array
+                .store_chunk(&[0, 0], &[9u8; 4], &Resources::default())
+                .unwrap();
             cached.invalidate_chunk(&[0, 0]);
+            assert_eq!(
+                cached
+                    .retrieve_chunk::<Vec<u8>>(&[0, 0], &Resources::default())
+                    .unwrap(),
+                vec![9; 4]
+            );
+            cached
+                .store_chunk(&[0, 0], &[0u8, 1, 4, 5], &Resources::default())
+                .unwrap();
         }
     }
 }
