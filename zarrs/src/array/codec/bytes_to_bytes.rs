@@ -23,8 +23,10 @@ pub mod zstd;
 #[cfg(test)]
 pub mod test_unbounded;
 
+#[cfg(any(feature = "adler32", feature = "crc32c"))]
 mod strip_prefix_partial_decoder;
 
+#[cfg(any(feature = "adler32", feature = "crc32c", feature = "fletcher32"))]
 mod strip_suffix_partial_decoder;
 
 /// Convert `bytes` into an owned [`Vec`] with at least `spare` bytes of spare capacity.

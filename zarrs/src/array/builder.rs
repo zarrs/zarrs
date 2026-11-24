@@ -684,7 +684,7 @@ mod tests {
     use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
     use crate::array::codec::ShardingCodecBound;
-    use crate::array::{CodecChainBound, Resources, data_type};
+    use crate::array::{CodecChainBound, data_type};
     use zarrs_chunk_grid::ChunkGridCreateError;
     use zarrs_metadata::FillValueMetadata;
     use zarrs_metadata::v3::MetadataV3;
@@ -1210,9 +1210,9 @@ mod tests {
     fn array_builder_codec_options_preserved_from_codec_object_impl(
         write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
     ) {
-        use crate::array::ArraySubset;
         use crate::array::codec::ZstdCodec;
         use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+        use crate::array::{ArraySubset, Resources};
 
         const SHAPE: [u64; 2] = [4, 4];
         const SHARD_SHAPE: [u64; 2] = [2, 2];

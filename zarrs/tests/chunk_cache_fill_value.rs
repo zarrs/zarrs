@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 #![cfg(feature = "bitround")]
 
 //! Missing chunks retain the array fill when a codec transforms its encoded fill.

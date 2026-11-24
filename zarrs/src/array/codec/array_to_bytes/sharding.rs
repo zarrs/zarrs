@@ -734,6 +734,7 @@ mod tests {
         }
     }
 
+    #[cfg(all(feature = "gzip", feature = "crc32c"))]
     const JSON_VALID2: &str = r#"{
     "chunk_shape": [1, 2, 2],
     "codecs": [

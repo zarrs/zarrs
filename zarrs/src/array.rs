@@ -95,7 +95,9 @@ pub use zarrs_metadata::v3::{
 pub use zarrs_metadata::{
     ArrayMetadata, ChunkKeySeparator, DataTypeSize, DimensionName, Endianness, FillValueMetadata,
 };
-use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName, ZarrVersion};
+#[cfg(feature = "blosc")]
+use zarrs_plugin::ExtensionAliasesV2;
+use zarrs_plugin::{ExtensionAliasesV3, ExtensionName, ZarrVersion};
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
@@ -1085,8 +1087,8 @@ pub fn bytes_to_ndarray<T: bytemuck::Pod>(
 #[allow(clippy::too_many_lines)]
 fn create_codec_chain_from_v2(
     order: zarrs_metadata::v2::ArrayMetadataV2Order,
-    dimensionality: usize,
-    data_type: &DataType,
+    #[cfg_attr(not(feature = "transpose"), allow(unused_variables))] dimensionality: usize,
+    #[cfg_attr(not(feature = "blosc"), allow(unused_variables))] data_type: &DataType,
     endianness: Option<zarrs_metadata::Endianness>,
     filters: Option<&Vec<zarrs_metadata::v2::MetadataV2>>,
     compressor: Option<&zarrs_metadata::v2::MetadataV2>,

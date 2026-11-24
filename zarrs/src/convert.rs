@@ -232,8 +232,6 @@ pub fn codec_metadata_v2_to_v3(
 
     // Compressor (bytes to bytes codec)
     if let Some(compressor) = compressor {
-        let id = compressor.id();
-
         // Check if already handled above as array to bytes
         let is_array_to_bytes_codec = array_to_bytes_count > 0;
 
@@ -241,7 +239,7 @@ pub fn codec_metadata_v2_to_v3(
         let mut handled = is_array_to_bytes_codec;
 
         #[cfg(feature = "blosc")]
-        if !handled && BloscCodec::matches_name_v2(id) {
+        if !handled && BloscCodec::matches_name_v2(compressor.id()) {
             let blosc = serde_json::from_value::<BloscCodecConfigurationNumcodecs>(
                 serde_json::to_value(compressor.configuration())?,
             )?;
@@ -467,11 +465,14 @@ pub fn fill_value_metadata_v2_to_v3(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(feature = "blosc", feature = "transpose"))]
     use std::num::NonZeroU64;
 
+    #[cfg(all(feature = "blosc", feature = "transpose"))]
     use zarrs_metadata::{ChunkKeySeparator, Endianness};
 
     use super::*;
+    #[cfg(all(feature = "blosc", feature = "transpose"))]
     use crate::array::ChunkShape;
 
     #[cfg(all(feature = "blosc", feature = "transpose"))]
