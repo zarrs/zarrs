@@ -117,6 +117,8 @@ features = ["bytemuck"]
 [dev-dependencies]
 chrono = "0.4.39"
 criterion = { version = "0.8.1", features = ["async_tokio"] }
+hdf5-reader = "0.13.0"
+hdf5-writer = "0.13.0"
 serial_test = "3.5.0"
 tempfile = "3"
 testing_logger = "0.1.1"
@@ -162,6 +164,11 @@ doc-scrape-examples = true
 [[example]]
 name = "sharded_array_write_read"
 required-features = ["filesystem", "ndarray"]
+
+[[example]]
+name = "hdf5_virtualisation"
+path = "examples/hdf5_virtualisation/main.rs"
+required-features = ["filesystem", "ndarray", "zlib", "fletcher32"]
 
 [[bench]]
 name = "array_subset"

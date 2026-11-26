@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zarr.dev/schemas/extensions/chunk-key-encodings/explicit/schema.json",
+  "title": "Explicit Chunk Key Encoding Metadata",
+  "description": "Configuration schema for the explicit coordinate-to-key chunk key encoding.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "const": "explicit"
+    },
+    "configuration": {
+      "type": "object",
+      "properties": {
+        "chunks": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "description": "Chunk grid coordinates."
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "Relative store key for this chunk."
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "description": "Explicit list of [chunk_grid_indices, relative_store_key] mappings."
+        }
+      },
+      "required": ["chunks"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["name", "configuration"],
+  "additionalProperties": false
+}

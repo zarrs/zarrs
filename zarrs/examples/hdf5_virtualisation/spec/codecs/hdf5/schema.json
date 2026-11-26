@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zarr.dev/schemas/extensions/codecs/hdf5/schema.json",
+  "title": "HDF5 Codec Metadata",
+  "description": "Configuration schema for the read-only HDF5 array-to-bytes virtualisation codec.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "const": "hdf5"
+    },
+    "configuration": {
+      "type": "object",
+      "properties": {
+        "dataset": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to the HDF5 dataset inside each HDF5 file (e.g. 'data' or '/group/data')."
+        },
+        "chunk_shape": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "Optional consistent internal HDF5 chunk shape across all outer chunks."
+        },
+        "codecs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "configuration": {
+                "type": "object"
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+          },
+          "description": "Optional Zarr V3 codec pipeline describing the per-subchunk encoding."
+        }
+      },
+      "required": ["dataset"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["name", "configuration"],
+  "additionalProperties": false
+}
